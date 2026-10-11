@@ -73,6 +73,10 @@ the latest http or trace logs).
 Locks: list_locks shows artifacts open for editing (an update fails while someone holds the
 lock). unlock_artifact (confirm; offered only when the server's --tools names it) discards the
 lock holder's unsaved changes: only on the user's explicit request.
+Value mappings: list_value_mappings, get_value_mapping (schemas with value pairs),
+set_value_mapping (confirm) adds or changes a pair; deploy with artifact_type ValueMapping to use it.
+Deleting: delete_artifact and delete_package (confirm; offered only when --tools names them)
+cannot be undone and refuse deployed artifacts unless undeploy_first: only on the user's request.
 Conventions: discover_tenant writes an inventory of existing flows (adapters, steps, error
 handling, scripts, naming); follow the conventions of the repository (e.g. .cpi/conventions.md).
 Graph: after discovery, graph_search, graph_neighbors and graph_path answer which flows call a
@@ -140,7 +144,7 @@ func Tools(cfg Config) []Tool {
 	}
 	reverter := cfg.LogLevels
 	cache := newReadCache(cfg.CacheTTL)
-	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), componentTools(cfg, readOnly), platformTools(cfg, readOnly), graphTools(cfg))
+	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), componentTools(cfg, readOnly), platformTools(cfg, readOnly), designTools(cfg, readOnly), graphTools(cfg))
 	for i := range tools {
 		inner := tools[i].Handler
 		changesTenant := toolEffects[tools[i].Name] == EffectTenant

@@ -121,18 +121,19 @@ restrictive wins:
 | `develop` | all tools; `pd_deploy` refuses `full_sync`, `undeploy` needs `confirm` |
 | `full` | all tools without restrictions, including `pd_deploy` with `full_sync` (same as no `--mode`) |
 
-`undeploy`, `delete_data_store_entry` and `unlock_artifact` always need `confirm: true`; that is
-part of the tool, not of a mode.
+`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`
+and `delete_package` always need `confirm: true`; that is part of the tool, not of a mode.
 
-`unlock_artifact` is **opt-in**: no mode offers it (not even `full`), only `--tools` naming it
-exactly (`--tools 'list_*,unlock_artifact'`; a pattern such as `unlock_*` or `*` does not count).
-Removing a lock discards the unsaved changes of whoever holds it.
+`unlock_artifact`, `delete_artifact` and `delete_package` are **opt-in**: no mode offers them (not
+even `full`), only `--tools` naming them exactly (`--tools 'list_*,unlock_artifact'`; a pattern
+such as `unlock_*`, `delete_*` or `*` does not count). Removing a lock discards the unsaved
+changes of whoever holds it; a deleted artifact or package cannot be restored.
 
 The mode is added to the server instructions.
 
 ### Toolsets
 
-The server has about 65 tools. An agent chooses better among the tools of its task than among all
+The server has about 70 tools. An agent chooses better among the tools of its task than among all
 of them, and every tool description costs context in every call. `--toolset` (or
 `CPICTL_TOOLSET`) offers only the tools of one or more tasks; it combines with `--tools`, and the
 mode still applies on top (the more restrictive wins). `doctor` and `help` are always there.
@@ -148,8 +149,10 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 | `partner-directory` | Partner Directory | `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff` |
 | `security` | security material (read) | `list_credentials`, `list_keystore` |
 
-`undeploy`, `delete_data_store_entry` and `unlock_artifact` are in no toolset: offer them explicitly
-with `--tools`. `list_locks` is in `inspect` and `build`; `list_components` in `build` and `improve`.
+`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `delete_artifact` and `delete_package`
+are in no toolset: offer them explicitly with `--tools`. `list_locks` is in `inspect` and `build`;
+`list_value_mappings` and `get_value_mapping` are in `inspect` and `build`, `set_value_mapping` in
+`build`; `list_components` in `build` and `improve`.
 
 ```json
 "cpi-dev":  { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"] },
@@ -166,7 +169,7 @@ toolsets enabled at the start. Toolsets are not disabled again during a session.
 
 - Only the tools the server offers after mode and filters can be enabled: on a `--read-only` server,
   enabling `build` adds `lint` but not `deploy`.
-- Tools in no toolset (`undeploy`, `delete_data_store_entry`, if the server offers them) are in the
+- Tools in no toolset (`undeploy`, `delete_data_store_entry`, the opt-in tools, if the server offers them) are in the
   toolset `other`.
 - A call to a tool the server offers but has not listed yet still works; the listing is guidance,
   the filters are the limit.
@@ -197,7 +200,7 @@ leaves a tool enabled by accident.
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact` | removed |
+| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package` | removed |
 
 ```json
 "cpi-qa":   { "command": "cpictl", "args": ["mcp", "--root", ".", "--read-only"] },
@@ -232,7 +235,7 @@ read roles.
 | `check_guidelines` | | Run the activated design guidelines and wait; violations with violated components |
 | `get_parameters` | | Externalised parameters of an integration flow; `artifact_ids` for several flows in one call (8 at a time) |
 | `set_parameters` | designtime | Change parameters; only changed values are written, unknown keys fail first; `dry_run` |
-| `deploy` | runtime | Deploy and wait; per artifact `DEPLOYED`, `SKIPPED`, `FAILED` (tenant error), `TIMEOUT`, with `designtimeVersion` / `runtimeVersion`. Refuses a designtime version older than the running one unless the designtime artifact was changed after that deployment or `allow_downgrade`; `rule` says which rule decided. `dry_run`: per artifact `deploy` true/false and the reason, nothing triggered |
+| `deploy` | runtime | Deploy and wait (`artifact_type`: Integration, MessageMapping, ScriptCollection, ValueMapping); per artifact `DEPLOYED`, `SKIPPED`, `FAILED` (tenant error), `TIMEOUT`, with `designtimeVersion` / `runtimeVersion`. Refuses a designtime version older than the running one unless the designtime artifact was changed after that deployment or `allow_downgrade`; `rule` says which rule decided. `dry_run`: per artifact `deploy` true/false and the reason, nothing triggered |
 | `send_test_message` | **triggers processing** | Send a message to the flow's endpoint (or via the test harness to a ProcessDirect address); HTTP status, response, message GUID; `wait_seconds` returns the final message log. See [testing.md](testing.md) |
 | `get_runtime_status` | | Runtime status, version, deployment time and error of given artifacts |
 | `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`) |
@@ -255,6 +258,11 @@ read roles.
 | `download_log_archive` | local file | Zip of the latest `http` or `trace` log files, below the server root |
 | `list_components` | | Adapter and step variants (cmdVariantUri, version) the tenant offers, from `.cpi/components.json` ([components.md](components.md)); filter by name, kind, direction |
 | `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--tools unlock_artifact` |
+| `list_value_mappings` | | Value mapping artifacts: ID, version, package |
+| `get_value_mapping` | | Schemas of a value mapping (source agency/identifier -> target agency/identifier) with value pairs and default values; filter by agency or identifier |
+| `set_value_mapping` | designtime | Add a value pair to an existing schema or change the target value of a source value (`added`, `changed` with `previous`, `unchanged`); deploy with `artifact_type: ValueMapping` to use it; requires `confirm: true` |
+| `delete_artifact` | designtime, **destructive**, opt-in | Delete a designtime artifact of any type (type found on the tenant unless `artifact_type`); a deployed one is refused unless `undeploy_first`; requires `confirm: true` and `--tools delete_artifact` |
+| `delete_package` | designtime, **destructive**, opt-in | Delete a package; refused while it has artifacts unless `with_artifacts`, and while they are deployed unless `undeploy_first`; requires `confirm: true` and `--tools delete_package` |
 | `list_variables`, `get_variable` | | Global and flow variables, and a value |
 | `list_jms_queues`, `get_jms_broker` | | Queues with message counts; broker capacity and usage |
 | `list_number_ranges` | | Number range objects and current values |
@@ -383,6 +391,8 @@ For autonomous build/test/fix loops the server enforces limits the model cannot 
 ## Safety
 
 - `undeploy` refuses to run without `confirm: true`.
+- `delete_artifact` and `delete_package` are offered only when `--tools` names them, need
+  `confirm: true`, and refuse deployed artifacts unless `undeploy_first`.
 - `pd_deploy` is a dry run unless `dry_run: false`; full sync never deletes the parameters
   of a partner whose local files could not be read.
 - Local paths cannot escape `--root`.

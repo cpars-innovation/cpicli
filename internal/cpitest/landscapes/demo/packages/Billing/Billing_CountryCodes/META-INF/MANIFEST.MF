@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Billing country codes
+Bundle-SymbolicName: Billing_CountryCodes; singleton:=true
+Bundle-Version: 1.0.0
+SAP-BundleType: ValueMapping
+SAP-NodeType: IFLMAP
+SAP-RuntimeProfile: iflmap
+Origin-Bundle-Name: Billing country codes
+Origin-Bundle-SymbolicName: Billing_CountryCodes
+

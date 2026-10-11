@@ -110,6 +110,8 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewComponentsCommand())
 	rootCmd.AddCommand(NewConnectionsCommand())
 	rootCmd.AddCommand(NewTenantSettingsCommand())
+	rootCmd.AddCommand(NewDeleteCommand())
+	rootCmd.AddCommand(NewValMapCommand())
 	rootCmd.AddCommand(NewVariablesCommand())
 	rootCmd.AddCommand(NewJMSCommand())
 	rootCmd.AddCommand(NewNumberRangesCommand())

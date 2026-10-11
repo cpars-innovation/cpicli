@@ -180,3 +180,17 @@ func TestOptInToolNeedsExplicitName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"list_locks"}, toolNames(kept), "read-only modes still drop it")
 }
+
+// delete_artifact and delete_package are opt-in like unlock_artifact.
+func TestDeleteToolsAreOptIn(t *testing.T) {
+	all := Tools(Config{})
+	for _, f := range []ToolFilter{{}, {Allow: []string{"*"}}, {Allow: []string{"delete_*"}}} {
+		kept, _, err := ApplyFilters(all, "full", f)
+		require.NoError(t, err)
+		assert.NotContains(t, toolNames(kept), "delete_artifact", "%v", f.Allow)
+		assert.NotContains(t, toolNames(kept), "delete_package", "%v", f.Allow)
+	}
+	kept, _, err := ApplyFilters(all, "develop", ToolFilter{Allow: []string{"delete_artifact", "delete_package"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"delete_artifact", "delete_package"}, toolNames(kept))
+}

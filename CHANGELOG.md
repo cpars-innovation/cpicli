@@ -28,6 +28,23 @@ All notable changes to cpictl. Coming from FlashPipe? See
   MCP `list_components` (`build`, `improve`), which the build skill uses for new steps and
   adapters. Lint: new rule `component-newer-than-tenant` (error: Check and deploy would fail),
   and `outdated-component` reports what the tenant offers.
+- `cpictl delete artifact --artifact-id X [--type ...] --confirm` and `cpictl delete package
+  --package-id X --confirm`: delete designtime content as the Web UI does. A deployed artifact is
+  refused unless `--undeploy-first` (undeploys, waits, then deletes); a package that still has
+  artifacts is refused unless `--with-artifacts`. Without `--type` the type is found on the tenant.
+  MCP: `delete_artifact`, `delete_package` (destructive, `confirm: true`, **opt-in**: offered only
+  when `--tools` names them exactly, in no toolset).
+- `cpictl valmap list|get|set`: value mappings (`ValueMappingDesigntimeArtifacts`, `ValMapSchema`,
+  `ValMaps`, `DefaultValMaps`); `set` adds a value pair to an existing schema or changes the target
+  value of a source value (function import `UpsertValMaps`), then deploy the value mapping. MCP:
+  `list_value_mappings`, `get_value_mapping` (`inspect`, `build`), `set_value_mapping` (`build`,
+  `confirm: true`). Reads verified on a real tenant; the `UpsertValMaps` call follows the API
+  metadata and is not yet verified on a tenant. Deleting single value pairs is not offered.
+- `deploy` accepts any 2xx answer of the deploy call and takes only a plain-text answer as the task
+  ID (the API metadata declares the designtime entity as the answer for message and value
+  mappings). Tests cover deploying all four designtime types against the mock tenant.
+- Mock tenant: deleting artifacts and packages, value mappings (demo: `Billing_CountryCodes`), and
+  a deploy with the wrong artifact type answers 404.
 
 - `cpictl locks list` / `locks unlock --artifact-id X --confirm`: edit locks of artifacts (who holds
   one, since when) and removing one, as Unlock in the Web UI (the holder's unsaved changes are
