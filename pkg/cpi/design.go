@@ -46,8 +46,9 @@ type DesigntimeInfo struct {
 }
 
 // SaveAsVersion sets the version of a designtime artifact
-// (POST <Type>DesigntimeArtifactSaveAsVersion). The public API offers it for
-// integration flows; other types answer 404, reported as unsupported.
+// (POST <Type>DesigntimeArtifactSaveAsVersion). The API metadata declares it
+// for every designtime type; a tenant that answers 404 for a type other than
+// an integration flow is reported as unsupported.
 func SaveAsVersion(exe *httpclnt.HTTPExecuter, artifactType, id, version string) error {
 	urlPath := fmt.Sprintf("/api/v1/%sDesigntimeArtifactSaveAsVersion?Id=%s&SaveAsVersion=%s", artifactType,
 		url.QueryEscape("'"+strings.ReplaceAll(id, "'", "''")+"'"), url.QueryEscape("'"+strings.ReplaceAll(version, "'", "''")+"'"))
