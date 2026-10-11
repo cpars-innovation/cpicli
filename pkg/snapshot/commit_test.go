@@ -97,3 +97,27 @@ func mustReal(t *testing.T, p string) string {
 	require.NoError(t, err)
 	return r
 }
+
+// Removed files (snapshot --prune) are committed as deletions.
+func TestCommitDeletions(t *testing.T) {
+	root := t.TempDir()
+	repo, err := git.PlainInit(root, false)
+	require.NoError(t, err)
+	dir := filepath.Join(root, "dev")
+	gone := filepath.Join(dir, "P", "Gone", "META-INF", "MANIFEST.MF")
+	require.NoError(t, os.MkdirAll(filepath.Dir(gone), 0o755))
+	require.NoError(t, os.WriteFile(gone, []byte("x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "keep.txt"), []byte("k\n"), 0o644))
+	first, err := Commit(dir, CommitOptions{})
+	require.NoError(t, err)
+	require.Contains(t, committedFiles(t, repo, first.Hash), "dev/P/Gone/META-INF/MANIFEST.MF")
+
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "P", "Gone")))
+	got, err := Commit(dir, CommitOptions{Paths: []string{"P/Gone"}})
+	require.NoError(t, err)
+	require.NotEmpty(t, got.Hash)
+	assert.Equal(t, 1, got.Files)
+	files := committedFiles(t, repo, got.Hash)
+	assert.NotContains(t, files, "dev/P/Gone/META-INF/MANIFEST.MF")
+	assert.Contains(t, files, "dev/keep.txt")
+}
