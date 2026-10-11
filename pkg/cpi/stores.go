@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -285,11 +286,12 @@ type LogFile struct {
 }
 
 // LogFiles lists log files, newest first, optionally of one type (http,
-// trace, ...).
+// trace, ...). The tenant refuses $orderby and $top on this collection
+// (HTTP 501 on Cloud Foundry), so the list is sorted here.
 func (s *Stores) LogFiles(logType string) ([]LogFile, error) {
-	path := "/api/v1/LogFiles?$orderby=" + queryEscape("LastModified desc")
+	path := "/api/v1/LogFiles"
 	if logType != "" {
-		path += "&$filter=" + queryEscape("LogFileType eq "+odataString(logType))
+		path += "?$filter=" + queryEscape("LogFileType eq "+odataString(logType))
 	}
 	var rows []struct {
 		Name, Application, LastModified, ContentType, LogFileType, NodeScope string
@@ -303,6 +305,10 @@ func (s *Stores) LogFiles(logType string) ([]LogFile, error) {
 		out = append(out, LogFile{Name: r.Name, Application: r.Application, LogFileType: r.LogFileType, NodeScope: r.NodeScope,
 			ContentType: r.ContentType, Size: int64(r.Size), LastModified: optTime(r.LastModified)})
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i].LastModified, out[j].LastModified
+		return a != nil && (b == nil || a.After(*b))
+	})
 	return out, nil
 }
 

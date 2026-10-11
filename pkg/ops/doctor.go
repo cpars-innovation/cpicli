@@ -60,7 +60,7 @@ var apiProbes = []apiProbe{
 	{"keystore", "/api/v1/KeystoreEntries?keystoreName=system", "keystore list, expiring certificates", false},
 	{"partner directory", "/api/v1/StringParameters?$top=1", "pd-snapshot, pd-deploy, pd_diff", false},
 	{"data stores", "/api/v1/DataStores", "datastore commands", false},
-	{"log files", "/api/v1/LogFiles?$orderby=LastModified%20desc", "log-files", false},
+	{"log files", "/api/v1/LogFiles", "log-files", false},
 }
 
 // Doctor checks the connection and which API areas the credentials can

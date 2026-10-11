@@ -189,7 +189,7 @@ func (l *Landscape) loadPackages(fsys fs.FS) error {
 		pkg := Package{ID: p.Name(), Name: p.Name(), Version: "1.0.0"}
 		if meta, err := fs.ReadFile(fsys, path.Join(dir, p.Name()+".json")); err == nil {
 			var m struct {
-				D struct{ Id, Name, Version string } `json:"d"`
+				D struct{ Id, Name, Version, ShortText, Description string } `json:"d"`
 			}
 			if err := json.Unmarshal(meta, &m); err != nil {
 				return fmt.Errorf("landscape: %s: %w", path.Join(dir, p.Name()+".json"), err)
@@ -197,6 +197,7 @@ func (l *Landscape) loadPackages(fsys fs.FS) error {
 			if m.D.Name != "" {
 				pkg.Name = m.D.Name
 			}
+			pkg.ShortText, pkg.Description = m.D.ShortText, m.D.Description
 			if m.D.Version != "" {
 				pkg.Version = m.D.Version
 			}

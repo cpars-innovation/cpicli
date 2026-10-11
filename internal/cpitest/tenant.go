@@ -139,6 +139,15 @@ type PDBinary struct {
 // Package is an integration package of the mock tenant.
 type Package struct {
 	ID, Name, Version string
+	// ShortText is required by a real tenant (create fails without it).
+	ShortText, Description string
+}
+
+// odataError writes an error the way the tenant's OData services do.
+func odataError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	writeJSON(w, map[string]any{"error": map[string]any{"code": code, "message": map[string]string{"lang": "en", "value": message}}})
 }
 
 // Resource is an iFlow resource of the mock tenant.
@@ -807,6 +816,24 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 	m.requests = append(m.requests, r.Method+" "+path)
 
+	if m.Live && r.Method == http.MethodGet && r.URL.Query().Has("$top") {
+		// collections that refuse $top on a real tenant, with its answers
+		switch path {
+		case "/api/v1/UserCredentials", "/api/v1/OAuth2ClientCredentials", "/api/v1/SecureParameters":
+			odataError(w, http.StatusNotImplemented, "Not Implemented", "$top is not supported.")
+			return
+		case "/api/v1/KeystoreEntries":
+			odataError(w, http.StatusBadRequest, "Bad Request", "Request uri contains the 'top' query option. The 'top' query option is not supported.")
+			return
+		case "/api/v1/DataStores":
+			odataError(w, http.StatusBadRequest, "Bad Request", "The query option $top is not supported")
+			return
+		}
+	}
+	if m.Live && r.Method == http.MethodGet && path == "/api/v1/LogFiles" && (r.URL.Query().Has("$top") || r.URL.Query().Has("$orderby")) {
+		odataError(w, http.StatusNotImplemented, "Not Implemented", "Not implemented")
+		return
+	}
 	if strings.HasPrefix(path, "/_mock/") {
 		m.handleAdmin(w, r)
 		return
@@ -1199,7 +1226,8 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		id := rePackage.FindStringSubmatch(path)[1]
 		for _, p := range m.Packages {
 			if p.ID == id {
-				writeJSON(w, map[string]any{"d": map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version}})
+				writeJSON(w, map[string]any{"d": map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version,
+					"ShortText": p.ShortText, "Description": p.Description}})
 				return
 			}
 		}
@@ -1207,10 +1235,14 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 
 	case r.Method == http.MethodPost && path == "/api/v1/IntegrationPackages":
 		var body struct {
-			D struct{ Id, Name string } `json:"d"`
+			D struct{ Id, Name, ShortText, Description string } `json:"d"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.D.Id == "" {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(body.D.ShortText) == "" { // as the tenant answers
+			odataError(w, http.StatusBadRequest, "Bad Request", "Property 'ShortText' cannot be empty. Enter a valid value.")
 			return
 		}
 		for _, p := range m.Packages {
@@ -1219,13 +1251,13 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		m.Packages = append(m.Packages, Package{ID: body.D.Id, Name: body.D.Name, Version: "1.0.0"})
+		m.Packages = append(m.Packages, Package{ID: body.D.Id, Name: body.D.Name, Version: "1.0.0", ShortText: body.D.ShortText, Description: body.D.Description})
 		w.WriteHeader(http.StatusCreated)
 
 	case r.Method == http.MethodGet && path == "/api/v1/IntegrationPackages":
 		results := []map[string]string{}
 		for _, p := range m.Packages {
-			results = append(results, map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version})
+			results = append(results, map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version, "ShortText": p.ShortText, "Description": p.Description})
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": results}})
 
@@ -1293,6 +1325,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		if msg := uploadProblem(zipData); msg != "" {
+			odataError(w, http.StatusInternalServerError, "Internal Server Error", msg)
+			return
+		}
 		if a := m.Artifacts[body.Id]; a != nil && a.DesignVersion != "" {
 			w.WriteHeader(http.StatusConflict)
 			return
@@ -1328,6 +1364,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		zipData, err := base64.StdEncoding.DecodeString(body.ArtifactContent)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if msg := uploadProblem(zipData); msg != "" {
+			odataError(w, http.StatusInternalServerError, "Internal Server Error", msg)
 			return
 		}
 		a.applyContent(zipData)

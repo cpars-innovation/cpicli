@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Fix: `log-files` sent `$orderby`, which the tenant refuses on that collection (HTTP 501 on Cloud
+  Foundry); it now lists without it and sorts newest first itself. Verified on a real tenant.
+- Packages created without `ShortText` get the package name as short text (with a warning): the
+  tenant refuses a package without one (HTTP 400).
+- Mock tenant, closer to a real tenant (findings of CPI Studio, verified on a real tenant):
+  packages carry `ShortText` and `Description` and creating one without `ShortText` fails with the
+  tenant's 400; an upload whose `parameters.propdef` lacks `<constraint/>` fails with the tenant's
+  500; the demo propdefs have the shape the Web UI writes; credentials, keystore, data stores and
+  log files refuse `$top` (and log files `$orderby`) with the tenant's answers.
+
 - Fix: `doctor` probed some API areas with requests the commands never send (`$top=1` on
   credentials, data stores and log files; the keystore without `keystoreName`), so tenants that
   reject those options showed HTTP 400 / 501 for areas that work. The probes now send the

@@ -316,3 +316,33 @@ func (m *Tenant) unregisterEndpoints(id string, a *Artifact) {
 	}
 	a.EndpointURL, a.ErrorInfo = "", ""
 }
+
+// rePropdefParameter finds the parameters of a parameters.propdef.
+var rePropdefParameter = regexp.MustCompile(`(?s)<parameter>(.*?)</parameter>`)
+
+// uploadProblem returns the error a real tenant answers for content it
+// cannot import (HTTP 500), or "". A parameters.propdef parameter without
+// <constraint> makes the tenant fail with a NullPointerException.
+func uploadProblem(zipData []byte) string {
+	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return ""
+	}
+	for _, f := range zr.File {
+		if !strings.HasSuffix(f.Name, "parameters.propdef") {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return ""
+		}
+		data, _ := io.ReadAll(io.LimitReader(rc, 1<<20))
+		_ = rc.Close()
+		for _, p := range rePropdefParameter.FindAllSubmatch(data, -1) {
+			if !bytes.Contains(p[1], []byte("<constraint")) {
+				return `Cannot invoke "org.w3c.dom.Node.getFirstChild()" because "constraint" is null`
+			}
+		}
+	}
+	return ""
+}

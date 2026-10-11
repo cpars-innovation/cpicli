@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -236,6 +237,11 @@ func (ip *IntegrationPackage) Create(packageData *PackageSingleData) error {
 	packageId := packageData.Root.Id
 	log.Info().Msgf("Creating integration package %v", packageId)
 	urlPath := "/api/v1/IntegrationPackages"
+	if strings.TrimSpace(packageData.Root.ShortText) == "" {
+		// the tenant refuses a package without short text (HTTP 400)
+		packageData.Root.ShortText = cmp.Or(strings.TrimSpace(packageData.Root.Name), packageId)
+		log.Warn().Msgf("Package %v has no ShortText: using %q (the tenant requires one)", packageId, packageData.Root.ShortText)
+	}
 
 	requestBody, err := ip.constructBody(packageData)
 	if err != nil {
