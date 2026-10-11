@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
@@ -97,4 +98,39 @@ func TestMatrixCommand(t *testing.T) {
 
 	r = runMain(t, "matrix", "git:main")
 	assert.Equal(t, 2, r.code)
+}
+
+func TestCompareModelText(t *testing.T) {
+	model, err := os.ReadFile(filepath.Join("..", "cpitest", "landscapes", "demo", "packages", "Orders", "Orders_Route",
+		"src", "main", "resources", "scenarioflows", "integrationflow", "Orders_Route.iflw"))
+	require.NoError(t, err)
+	write := func(dir, address string) {
+		for name, content := range map[string]string{
+			"META-INF/MANIFEST.MF": "Manifest-Version: 1.0\nBundle-SymbolicName: Flow; singleton:=true\nBundle-Name: Flow\nBundle-Version: 1.0.0\nSAP-BundleType: IntegrationFlow\n",
+			"src/main/resources/scenarioflows/integrationflow/Flow.iflw": strings.Replace(string(model), "<value>/orders/route</value>", "<value>"+address+"</value>", 1),
+		} {
+			p := filepath.Join(dir, "P", "Flow", filepath.FromSlash(name))
+			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+			require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+		}
+	}
+	a, b := t.TempDir(), t.TempDir()
+	write(a, "/orders/route")
+	write(b, "/orders/v2")
+	r := runMain(t, "compare", a, b, "--model")
+	require.Equal(t, 0, r.code, r.stderr)
+	assert.Contains(t, r.stderr, "~ adapter MessageFlow_Sender (ProcessDirect): address: /orders/route -> /orders/v2")
+
+	r = runMain(t, "compare", a, b, "--model", "--output", "json")
+	require.Equal(t, 0, r.code, r.stderr)
+	var env struct {
+		Result ops.CompareResult `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env), r.stdout)
+	require.Len(t, env.Result.Items, 1)
+	require.Len(t, env.Result.Items[0].Files, 1)
+	md := env.Result.Items[0].Files[0].Model
+	require.NotNil(t, md)
+	require.Len(t, md.Elements, 1)
+	assert.Equal(t, "MessageFlow_Sender", md.Elements[0].ID)
 }

@@ -4,9 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
+	"github.com/cpars-innovation/cpicli/pkg/iflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -133,4 +135,43 @@ func TestGitTree(t *testing.T) {
 
 	err = GitTree(context.Background(), repo, "no-such-ref", "", t.TempDir())
 	assert.Error(t, err)
+}
+
+func TestCompareModel(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "internal", "cpitest", "landscapes", "demo", "packages", "Orders", "Orders_Route",
+		"src", "main", "resources", "scenarioflows", "integrationflow", "Orders_Route.iflw"))
+	require.NoError(t, err)
+	model := string(data)
+	const iflw = "src/main/resources/scenarioflows/integrationflow/Flow.iflw"
+	a, b := t.TempDir(), t.TempDir()
+	filesA := cmpFlowFiles("Flow", "1.0.0", "v1\n", "")
+	filesA[iflw] = model
+	filesB := cmpFlowFiles("Flow", "1.0.0", "v2\n", "")
+	filesB[iflw] = strings.Replace(model, "<value>/orders/route</value>", "<value>/orders/route/v2</value>", 1)
+	writeTree(t, a, "P", "Flow", filesA)
+	writeTree(t, b, "P", "Flow", filesB)
+	writeTree(t, a, "P", "Broken", cmpFlowFiles("Broken", "1.0.0", "v1\n", ""))
+	brokenB := cmpFlowFiles("Broken", "1.0.0", "v1\n", "")
+	brokenB["src/main/resources/scenarioflows/integrationflow/Broken.iflw"] = "not xml <"
+	writeTree(t, b, "P", "Broken", brokenB)
+
+	res, err := Compare(context.Background(), CompareSide{Label: "a", Dir: a}, CompareSide{Label: "b", Dir: b}, CompareOptions{Model: true})
+	require.NoError(t, err)
+	f := itemOf(res, "Flow")
+	require.Len(t, f.Files, 2)
+	assert.Equal(t, FileChange{Path: iflw, Change: "changed", Model: &iflow.ModelDiff{Elements: []iflow.ElementChange{
+		{ID: "MessageFlow_Sender", Type: "messageFlow", Kind: "ProcessDirect", Name: "ProcessDirect", Change: iflow.ChangeChanged,
+			Properties: []iflow.PropertyChange{{Key: "address", Change: iflow.ChangeChanged, A: "/orders/route", B: "/orders/route/v2"}}},
+	}}}, f.Files[0], "the model diff instead of a line diff")
+	assert.Equal(t, FileChange{Path: "src/main/resources/script/s.groovy", Change: "changed"}, f.Files[1], "no model for other files")
+	broken := itemOf(res, "Broken")
+	require.Len(t, broken.Files, 1)
+	assert.Nil(t, broken.Files[0].Model)
+	assert.NotEmpty(t, broken.Files[0].ModelError)
+
+	// default: no model diff
+	res, err = Compare(context.Background(), CompareSide{Label: "a", Dir: a}, CompareSide{Label: "b", Dir: b}, CompareOptions{Diff: true})
+	require.NoError(t, err)
+	assert.Nil(t, itemOf(res, "Flow").Files[0].Model)
+	assert.Contains(t, itemOf(res, "Flow").Files[0].Diff, "/orders/route/v2")
 }

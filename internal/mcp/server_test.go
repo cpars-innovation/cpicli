@@ -523,6 +523,8 @@ func TestCompareTool(t *testing.T) {
 	files := map[string]string{
 		"META-INF/MANIFEST.MF":               "Manifest-Version: 1.0\nBundle-SymbolicName: A\nBundle-Version: 1.0.1\nSAP-BundleType: IntegrationFlow\n",
 		"src/main/resources/script/s.groovy": "local\n",
+		"src/main/resources/scenarioflows/integrationflow/A.iflw": `<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL">` +
+			`<bpmn2:process id="Process_1"><bpmn2:callActivity id="CallActivity_1" name="local"/></bpmn2:process></bpmn2:definitions>`,
 	}
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -534,6 +536,7 @@ func TestCompareTool(t *testing.T) {
 		if name == "src/main/resources/script/s.groovy" {
 			content = "tenant\n"
 		}
+		content = strings.Replace(content, `name="local"`, `name="tenant"`, 1)
 		_, _ = w.Write([]byte(content))
 	}
 	require.NoError(t, zw.Close())
@@ -542,10 +545,14 @@ func TestCompareTool(t *testing.T) {
 	resp := session(t, mock, root,
 		call(1, "compare", map[string]any{"a": "packages", "b": "tenant", "diff": true}),
 		call(2, "compare", map[string]any{"a": "../outside", "b": "tenant"}),
+		call(3, "compare", map[string]any{"a": "packages", "b": "tenant", "model": true}),
 	)
 	res := toolResult(t, resp["1"])
 	require.False(t, res.IsError, res.Content[0].Text)
 	assert.Contains(t, res.Content[0].Text, `"status":"content_differs"`)
 	assert.Contains(t, res.Content[0].Text, `+tenant`)
 	assert.Equal(t, "usage", toolResult(t, resp["2"]).StructuredContent.ErrorCategory)
+	res = toolResult(t, resp["3"])
+	require.False(t, res.IsError, res.Content[0].Text)
+	assert.Contains(t, res.Content[0].Text, `"model":{"elements":[{"id":"CallActivity_1","type":"callActivity","kind":"callActivity","name":"tenant","change":"changed","renamed":["local","tenant"]}]}`)
 }

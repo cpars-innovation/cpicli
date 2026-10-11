@@ -1498,7 +1498,8 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			Name: "compare", Title: "Compare two sides per artifact",
 			Description: "Compare two sides per artifact: content (as an upload compares it), version, parameters.prop keys and files. A side is \"tenant\" (this server's tenant, downloaded and normalized as snapshot writes it), " +
 				"a content tree inside the server root, or \"git:<ref>[:<path>]\" of the repository at the root. Status per artifact: same, only_a, only_b, content_differs, version_differs, parameters_differ; " +
-				"for the tenant the designtime and running version, draft flag and who changed it last. diff adds unified diffs, show_values parameter values. Read-only; downloads the tenant's artifacts (limit with packages / artifacts).",
+				"for the tenant the designtime and running version, draft flag and who changed it last. diff adds unified diffs, show_values parameter values, " +
+				"model a per element and per property diff of each changed .iflw (files[].model: steps, adapters, sequence flows, flow properties; moved shapes; sensitive values masked) instead of unreadable line diffs. Read-only; downloads the tenant's artifacts (limit with packages / artifacts).",
 			InputSchema: object(props{
 				"a":           str(`Side A: "tenant", a directory relative to the root, or "git:<ref>[:<path>]"`),
 				"b":           str("Side B, same forms"),
@@ -1506,6 +1507,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"artifacts":   strArray("Only these artifacts (IDs or patterns)"),
 				"diff":        boolean("Unified diffs of changed text files"),
 				"show_values": boolean("Parameter values (default: only which keys differ)"),
+				"model":       boolean("Per element and per property diff of changed .iflw models (files[].model)"),
 			}, "a", "b"),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -1516,6 +1518,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					Artifacts  []string `json:"artifacts"`
 					Diff       bool     `json:"diff"`
 					ShowValues bool     `json:"show_values"`
+					Model      bool     `json:"model"`
 				}
 				if err := decode(raw, &a); err != nil {
 					return nil, err
@@ -1552,7 +1555,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					}
 				}
 				return ops.Compare(ctx, sides[0], sides[1], ops.CompareOptions{Packages: a.Packages, Artifacts: a.Artifacts,
-					Diff: a.Diff, Values: a.ShowValues, WorkDir: filepath.Join(work, "tenant")})
+					Diff: a.Diff, Values: a.ShowValues, Model: a.Model, WorkDir: filepath.Join(work, "tenant")})
 			},
 		},
 		{

@@ -13,6 +13,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/iflow"
 )
 
 // LogLevels are the message processing log levels of a deployed flow.
@@ -158,12 +159,10 @@ const missingRoleHint = "the tenant refused trace content (HTTP 403): the servic
 
 var traceIDPattern = regexp.MustCompile(`^[0-9]+$`)
 
-var sensitiveName = regexp.MustCompile(`(?i)authorization|cookie|password|passwd|secret|token|credential|apikey|api-key`)
-
 // SensitiveName reports whether the value of a header or property with this
 // name is masked in results: authorization, cookies, tokens, passwords,
 // secrets, credentials and API keys.
-func SensitiveName(name string) bool { return sensitiveName.MatchString(name) }
+func SensitiveName(name string) bool { return iflow.SensitiveName(name) }
 
 // GetTraceMessage returns the payload (truncated to max bytes), headers and
 // exchange properties of a trace message. Values of headers and properties

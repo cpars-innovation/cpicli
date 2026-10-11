@@ -33,11 +33,16 @@ writes them, so only real differences show. Per artifact the status is same,
 only_a, only_b, content_differs (as an upload compares: without Bundle-Version and
 parameters.prop), version_differs (same content) or parameters_differ (same content
 and version); per file added / removed / changed (--diff: unified diffs); per
-parameters.prop key differs / only_a / only_b (--show-values: the values). For a
-tenant side the designtime and running versions, the draft flag and, where the
-tenant reports it, who changed the artifact last.`,
+parameters.prop key differs / only_a / only_b (--show-values: the values). --model
+compares changed .iflw models per element and per property instead of per line:
+steps, events, gateways, adapters (address, authentication, versions, ...),
+sequence flows (source, target, condition) and the flow's own properties; a shape
+that only moved is marked moved; sensitive values are masked. For a tenant side
+the designtime and running versions, the draft flag and, where the tenant reports
+it, who changed the artifact last.`,
 		Example: `  cpictl compare tenant:test tenant:prod --package Orders
   cpictl compare packages tenant --diff                 # repository vs tenant (drift)
+  cpictl compare tenant:test tenant:prod --artifact Orders_Route --model
   cpictl compare git:release/2026-10:packages git:main:packages
   cpictl compare tenant:dev tenant:test --fail-on-diff --output json`,
 		Args:         cobra.ExactArgs(2),
@@ -57,10 +62,11 @@ tenant reports it, who changed the artifact last.`,
 			}
 			diff, _ := cmd.Flags().GetBool("diff")
 			values, _ := cmd.Flags().GetBool("show-values")
+			model, _ := cmd.Flags().GetBool("model")
 			o := ops.CompareOptions{
 				Packages:  str.TrimSlice(config.GetStringSlice(cmd, "package")),
 				Artifacts: str.TrimSlice(config.GetStringSlice(cmd, "artifact")),
-				Diff:      diff, Values: values,
+				Diff:      diff, Values: values, Model: model,
 				Parallel: config.GetIntWithFallback(cmd, "parallel", "compare.parallel"),
 				WorkDir:  filepath.Join(work, "tenants"),
 			}
@@ -84,6 +90,7 @@ tenant reports it, who changed the artifact last.`,
 	c.Flags().StringSlice("package", nil, "Only these packages (IDs or patterns)")
 	c.Flags().StringSlice("artifact", nil, "Only these artifacts (IDs or patterns)")
 	c.Flags().Bool("diff", false, "Unified diffs of changed text files")
+	c.Flags().Bool("model", false, "Per element and per property diff of changed .iflw models (steps, adapters, sequence flows, flow properties)")
 	c.Flags().Bool("show-values", false, "Parameter values (default: only which keys differ)")
 	c.Flags().Bool("all", false, "Also list artifacts that are the same (text output)")
 	c.Flags().Bool("fail-on-diff", false, "Exit with code 5 when any artifact differs")
@@ -188,6 +195,18 @@ func logCompare(res *ops.CompareResult, all bool) {
 		ev.Str("status", it.Status).Msgf("%-17s %s/%s%s%s", it.Status, it.Package, it.Artifact, versions, extra)
 		for _, f := range it.Files {
 			log.Info().Msgf("    %-8s %s", f.Change, f.Path)
+			if f.ModelError != "" {
+				log.Warn().Msgf("      model: %s", f.ModelError)
+			}
+			if f.Model != nil {
+				lines := f.Model.Summary()
+				if len(lines) == 0 {
+					lines = []string{"(model unchanged: formatting only)"}
+				}
+				for _, line := range lines {
+					log.Info().Msg("      " + line)
+				}
+			}
 			if f.Diff != "" {
 				for _, line := range strings.Split(strings.TrimSuffix(f.Diff, "\n"), "\n") {
 					log.Info().Msg("      " + line)

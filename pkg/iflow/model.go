@@ -19,6 +19,12 @@ type Model struct {
 	Flows []*SequenceFlow
 	// Adapters are the sender and receiver channels (message flows).
 	Adapters []*Element
+	// Participants are the pools of the collaboration: the integration
+	// processes and the sender and receiver systems.
+	Participants []*Element
+	// Collaboration is the integration flow itself (its ifl:property
+	// values: log level, namespace mapping, ...); nil without one.
+	Collaboration *Element
 	// Order is the document order of the element IDs.
 	Order []string
 }
@@ -36,6 +42,8 @@ type Element struct {
 	// Source and Target are the sourceRef and targetRef of a message flow
 	// (adapter): the participant or the step / event it connects.
 	Source, Target string
+	// ProcessRef is the process of a participant (pool), if any.
+	ProcessRef string
 }
 
 // SequenceFlow connects two elements.
@@ -131,11 +139,17 @@ func Parse(data []byte) (*Model, error) {
 			case f.tag == "sequenceFlow":
 				f.flow = &SequenceFlow{ID: id, Source: attr("sourceRef"), Target: attr("targetRef"), Container: container, Name: attr("name"), Props: map[string]string{}}
 				m.Flows = append(m.Flows, f.flow)
+			case f.tag == "collaboration" && m.Collaboration == nil:
+				f.el = &Element{ID: id, Tag: f.tag, Name: attr("name"), Props: map[string]string{}}
+				m.Collaboration = f.el
 			case f.tag == "participant" || f.tag == "messageFlow":
 				f.el = &Element{ID: id, Tag: f.tag, Name: attr("name"), Props: map[string]string{}}
 				if f.tag == "messageFlow" {
 					f.el.Source, f.el.Target = attr("sourceRef"), attr("targetRef")
 					m.Adapters = append(m.Adapters, f.el)
+				} else {
+					f.el.ProcessRef = attr("processRef")
+					m.Participants = append(m.Participants, f.el)
 				}
 			// flow elements are the direct children of a process or subprocess;
 			// nested parts with an id (conditionExpression, loop

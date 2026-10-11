@@ -331,9 +331,13 @@ writes them, so only real differences show. Per artifact the status is same,
 only_a, only_b, content_differs (as an upload compares: without Bundle-Version and
 parameters.prop), version_differs (same content) or parameters_differ (same content
 and version); per file added / removed / changed (--diff: unified diffs); per
-parameters.prop key differs / only_a / only_b (--show-values: the values). For a
-tenant side the designtime and running versions, the draft flag and, where the
-tenant reports it, who changed the artifact last.
+parameters.prop key differs / only_a / only_b (--show-values: the values). --model
+compares changed .iflw models per element and per property instead of per line:
+steps, events, gateways, adapters (address, authentication, versions, ...),
+sequence flows (source, target, condition) and the flow's own properties; a shape
+that only moved is marked moved; sensitive values are masked. For a tenant side
+the designtime and running versions, the draft flag and, where the tenant reports
+it, who changed the artifact last.
 ```
 
 **Usage:** `cpictl compare <side A> <side B> [flags]`
@@ -345,6 +349,7 @@ tenant reports it, who changed the artifact last.
       --artifact strings   Only these artifacts (IDs or patterns)
       --diff               Unified diffs of changed text files
       --fail-on-diff       Exit with code 5 when any artifact differs
+      --model              Per element and per property diff of changed .iflw models (steps, adapters, sequence flows, flow properties)
       --package strings    Only these packages (IDs or patterns)
       --parallel int       Downloads at the same time per tenant (config: compare.parallel) (default 8)
       --repo string        Git repository for git: sides (default ".")
@@ -356,6 +361,7 @@ tenant reports it, who changed the artifact last.
 ```
   cpictl compare tenant:test tenant:prod --package Orders
   cpictl compare packages tenant --diff                 # repository vs tenant (drift)
+  cpictl compare tenant:test tenant:prod --artifact Orders_Route --model
   cpictl compare git:release/2026-10:packages git:main:packages
   cpictl compare tenant:dev tenant:test --fail-on-diff --output json
 ```

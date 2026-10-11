@@ -251,3 +251,41 @@ for _, n := range d.Nodes {        // flow nodes in document order (subprocess f
 
 All types have camelCase JSON tags; `cpictl iflow diagram <file|artifact dir> --output json`
 prints the same structure.
+
+## Model diff (`pkg/iflow`)
+
+`iflow.DiffModels(a, b)` compares two .iflw models per element and per property instead of per
+line (`cpictl compare --model` and the MCP `compare` tool with `model: true` use it):
+
+```go
+d, err := iflow.DiffModels(a, b) // error for invalid XML or a non-BPMN document
+for _, e := range d.Elements {   // steps, events, gateways, processes, participants, adapters
+	fmt.Println(e.Change, e.Type, e.ID, e.Kind, e.Name, e.Renamed, e.Moved)
+	for _, p := range e.Properties { // ifl:property values and @attributes
+		fmt.Println(p.Key, p.Change, p.A, p.B)
+	}
+}
+_ = d.Flows         // []iflow.FlowChange: sequence flows (@sourceRef, @targetRef, @condition)
+_ = d.Collaboration // []iflow.PropertyChange: the integration flow's own properties
+for _, line := range d.Summary() {
+	fmt.Println(line) // "~ adapter MessageFlow_Sender (ProcessDirect): address: /a -> /b"
+}
+
+// without geometry: moved shapes are no change, the diagram is not read
+d, err = iflow.DiffModelsWith(a, b, iflow.DiffOptions{IgnoreGeometry: true})
+```
+
+- `Change` is `iflow.ChangeAdded`, `ChangeRemoved` or `ChangeChanged`. Added and removed elements
+  list all their values; changed ones only what differs. A name change is `Renamed` (`[A, B]`),
+  not a property.
+- Attributes are properties with an `@` key: `@container` (the process or subprocess),
+  `@sourceRef` / `@targetRef` (message and sequence flows), `@processRef` (pools), `@type` (the
+  BPMN tag changed), `@triggeredByEvent`, `@condition` (sequence flows), `@name` (collaboration).
+- `Moved` marks a changed shape bounds or line waypoints (BPMN DI); geometry is never a property.
+- Values of keys for which `iflow.SensitiveName` is true are `iflow.MaskedValue` (`***`).
+  `ops.SensitiveName` is the same check.
+- Sorted by ID, then key; `d.Empty()` is true for models that differ only in formatting.
+- `ops.CompareOptions.Model` adds it to each changed `.iflw` of `ops.Compare`
+  (`FileChange.Model`, `FileChange.ModelError`).
+- `iflow.Parse` now also returns `Model.Participants` (with `Element.ProcessRef`) and
+  `Model.Collaboration` (the collaboration's properties).

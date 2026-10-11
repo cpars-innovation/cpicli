@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `compare --model` (MCP `compare` with `model: true`, Go `ops.CompareOptions.Model`): a semantic
+  diff of each changed .iflw per element and per property instead of an unreadable line diff of
+  one-line XML (`files[].model`): steps, events, gateways, participants and adapters (address,
+  authentication, versions, ...) added / removed / changed with their properties, renames,
+  sequence flows (source, target, condition), the flow's own properties; shapes that only moved
+  are marked `moved`; sensitive values are masked. The text output prints one line per change,
+  e.g. `~ adapter MessageFlow_Sender (ProcessDirect): address: /a -> /b`. Go:
+  `iflow.DiffModels`, `iflow.DiffModelsWith` (`IgnoreGeometry`), `ModelDiff.Summary`;
+  `iflow.Parse` also returns the participants and the collaboration's properties.
+
 - Progress events (`--events <file>` or `--events -`): JSON lines `start`, one `item` per artifact
   (`snapshot`, `orchestrator`, `deploy`, `undeploy`, `configure`) and `end` with exit code and
   category, for progress displays without parsing log lines. Go: `ops.OrchestratorOptions.Progress`

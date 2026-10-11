@@ -19,6 +19,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/iflow"
 )
 
 // Compare statuses of an artifact.
@@ -51,6 +52,9 @@ type CompareOptions struct {
 	Diff bool
 	// Values adds parameter values (default: keys only).
 	Values bool
+	// Model adds a semantic diff (iflow.DiffModels: per element and per
+	// property) of each changed .iflw model, in addition to Diff.
+	Model bool
 	// Parallel downloads per tenant (0: 8).
 	Parallel int
 	// WorkDir holds the downloaded tenant trees (default: a temporary
@@ -76,6 +80,10 @@ type FileChange struct {
 	Diff   string `json:"diff,omitempty"`
 	// Binary or too large for a diff.
 	NoDiff string `json:"noDiff,omitempty"`
+	// Model is the semantic diff of a changed .iflw model (Model option).
+	Model *iflow.ModelDiff `json:"model,omitempty"`
+	// ModelError is why a model could not be compared (not a BPMN model).
+	ModelError string `json:"modelError,omitempty"`
 }
 
 // ParameterChange is one differing parameters.prop key.
@@ -300,6 +308,13 @@ func compareArtifact(a, b LocalArtifact, labelA, labelB string, o CompareOptions
 				fc.Diff = d
 			} else {
 				fc.NoDiff = "too large"
+			}
+		}
+		if o.Model && fc.Change == "changed" && strings.HasSuffix(rel, ".iflw") {
+			if md, err := iflow.DiffModels(da, db); err != nil {
+				fc.ModelError = err.Error()
+			} else {
+				fc.Model = md
 			}
 		}
 		it.Files = append(it.Files, fc)
