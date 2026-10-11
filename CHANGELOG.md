@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.9.1
+
 - Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with
   `find_messages_by_header`, JMS queues: inspect, retry, move; locks, certificates, connections,
   tenant settings, log archives). `cpi-build` checks edit locks before changing a flow, takes new
