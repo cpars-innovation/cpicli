@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.10.0
+
+- Plugin (0.2.1): the reviewer reads .iflw changes with `compare` `model: true` instead of the
+  line diff.
+
 - `compare --model` (MCP `compare` with `model: true`, Go `ops.CompareOptions.Model`): a semantic
   diff of each changed .iflw per element and per property instead of an unreadable line diff of
   one-line XML (`files[].model`): steps, events, gateways, participants and adapters (address,
