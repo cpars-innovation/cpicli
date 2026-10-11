@@ -183,9 +183,16 @@ executed: the payload passes through unchanged.
   each system's `match` pattern. The system's `latencyMs` adds to the run; with `failRate` the call
   fails with `error` (`{host}`, `{key}`, `{status}` replaced). A host no system matches answers in
   100 ms without failing.
-- A receiver whose `credentialName` does not exist on the tenant fails with
+- A receiver whose `credentialName` (SFTP: `credential_name`) does not exist on the tenant fails with
   `credential <name> not found on this tenant` (so a missing credential shows in the logs, not only
   in `transport check`).
+- **Check** (`validate`) runs a structural check of the flow and answers like a tenant:
+  `Check execution result: Passed`, or `Failed` followed by the findings as SAP's JSON array
+  (`severity`, `message`, `sourceObject`, `resourcePath`, `resourceName`). It reports required
+  channel attributes left empty (ProcessDirect / HTTPS / HTTP / JMS / SFTP / Mail), JMS sender
+  values that are not whole numbers, invalid mail addresses and Groovy steps whose script file is
+  missing. It is not SAP's full Check: a flow the mock passes can still fail on a tenant. The demo
+  flows pass both (verified on a real tenant).
 - A failed step has the error and one **trace** (payload, headers, `CamelExceptionCaught`), so
   `logs steps` and `logs trace` show something.
 - **Business key**: a run gets the landscape's key headers as custom header properties when the

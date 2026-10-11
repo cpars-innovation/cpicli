@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Mock tenant: the demo flows now pass a real tenant's Check (adapter and step versions and
+  properties as SAP's own content has them; `Billing_Post` uses a version 2 Groovy script;
+  `Partner_Notify` sends to SFTP from its end event). The mock's `validate` runs a structural check
+  and answers in SAP's format (`Check execution result: Failed` plus the JSON findings).
+- SFTP receivers name their credential in `credential_name`: discover, the graph, `transport check`
+  and the mock now read it (before only `credentialName`).
+
 - Fix: `tenant:<profile>` sides (`compare`, `matrix`, `transport check --target/--source`) with
   OAuth sent the token request to the token host's root instead of `/oauth/token`
   ("oauth2: cannot parse json"). Found on a real tenant.

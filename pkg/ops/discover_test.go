@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -38,7 +39,6 @@ const testIFlow = `<?xml version="1.0" encoding="UTF-8"?>
       <bpmn2:extensionElements>
         <ifl:property><key>ComponentType</key><value>SFTP</value></ifl:property>
         <ifl:property><key>direction</key><value>Receiver</value></ifl:property>
-        <ifl:property><key>credential_name</key><value>ignored</value></ifl:property>
         <ifl:property><key>credentialName</key><value>SFTP_Orders</value></ifl:property>
         <ifl:property><key>cmdVariantUri</key><value>ctype::AdapterVariant/cname::sap:SFTP/direction::Receiver</value></ifl:property>
       </bpmn2:extensionElements>
@@ -120,6 +120,15 @@ func TestAnalyzeIFlow(t *testing.T) {
 	assert.Equal(t, "All events", f.LogLevel)
 	assert.Equal(t, "true", f.ReturnExceptionToSender)
 	assert.Equal(t, []string{"Directory", "Receiver Host"}, f.Parameters)
+	assert.Equal(t, []string{"SFTP_Orders"}, f.CredentialRefs)
+
+	// SAP's SFTP receiver names the credential in credential_name.
+	files := testIFlowFiles("Orders_In")
+	for name, content := range files {
+		fsys[name] = &fstest.MapFile{Data: []byte(strings.ReplaceAll(content, "<key>credentialName</key>", "<key>credential_name</key>"))}
+	}
+	f, err = AnalyzeIFlow(fsys)
+	require.NoError(t, err)
 	assert.Equal(t, []string{"SFTP_Orders"}, f.CredentialRefs)
 	assert.Equal(t, []string{"SAP_ApplicationID"}, f.HeadersSet)
 	assert.Equal(t, []string{"orderId"}, f.PropertiesSet)

@@ -1,6 +1,7 @@
 package cpitest
 
 import (
+	"cmp"
 	"fmt"
 	mrand "math/rand/v2"
 	"net/url"
@@ -254,7 +255,7 @@ func (x *executor) call(ch channel, a *Artifact, msg message, t time.Time, guid 
 		}
 		return t.Add(15 * time.Millisecond), ""
 	}
-	if name := ch.Props["credentialName"]; name != "" && x.m.Credentials != nil && !x.m.hasCredential(name) {
+	if name := cmp.Or(ch.Props["credentialName"], ch.Props["credential_name"]); name != "" && x.m.Credentials != nil && !x.m.hasCredential(name) {
 		return t.Add(20 * time.Millisecond), fmt.Sprintf("com.sap.it.nm.security.SecurityException: credential %s not found on this tenant", name)
 	}
 	host := receiverHost(ch, address)

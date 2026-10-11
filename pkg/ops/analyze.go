@@ -94,7 +94,7 @@ const ResourcesDir = "src/main/resources"
 var (
 	reCustomHeader  = regexp.MustCompile(`addCustomHeaderProperty\s*\(\s*["']([^"']+)["']`)
 	reTableName     = regexp.MustCompile(`<cell id=['"]Name['"]>([^<]*)</cell>`)
-	reCredentialKey = regexp.MustCompile(`(?i)(credential(name)?|alias)$`)
+	reCredentialKey = regexp.MustCompile(`(?i)(credential_?(name)?|alias)$`)
 	reParameterRef  = regexp.MustCompile(`\{\{([^{}]+)\}\}`)
 	// propertyUnescaper resolves the escapes CPI writes in parameters.prop
 	// values (https\://host).

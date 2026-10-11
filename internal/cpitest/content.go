@@ -24,6 +24,7 @@ type artifactContent struct {
 	// ParameterOrder keeps the keys in file order.
 	ParameterOrder []string
 	Model          []byte // the .iflw, nil for other artifact types
+	ModelPath      string // archive path of the .iflw
 	Files          map[string][]byte
 }
 
@@ -70,7 +71,7 @@ func (c *artifactContent) addFile(name string, content []byte) {
 		}
 		c.Resources[base] = Resource{Type: ext, Content: content}
 		if ext == "iflw" {
-			c.Model = content
+			c.Model, c.ModelPath = content, name
 		}
 	}
 }

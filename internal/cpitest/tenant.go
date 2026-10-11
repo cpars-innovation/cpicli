@@ -80,7 +80,7 @@ type Artifact struct {
 	ConfigUpdateStatus int
 
 	// ValidationResult is the body of ValidateIntegrationDesigntimeArtifact
-	// (default "Check execution result: Passed").
+	// (default: the structural check of the flow, see checkFlow).
 	ValidationResult string
 	// GuidelineStatuses are returned by the execution list after an execute
 	// call, one per GET (last repeats); Guidelines are the results.
@@ -1111,7 +1111,11 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 		result := a.ValidationResult
 		if result == "" {
-			result = "Check execution result: Passed"
+			var issues []checkIssue
+			if c, err := readArtifactZip(a.Zip); err == nil && a.Type == "Integration" {
+				issues = checkFlow(c)
+			}
+			result = checkResult(issues)
 		}
 		_, _ = w.Write([]byte(result))
 
