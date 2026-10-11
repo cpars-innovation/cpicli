@@ -222,3 +222,32 @@ changed := h != state.Artifacts["Orders/Orders_In"].UploadHash
 
 The hashes are stable across cpictl versions (a test pins them): states written by one version
 are read by the next.
+
+## Diagram geometry (`pkg/iflow`)
+
+`iflow.ReadDiagram(data)` reads the diagram (BPMN DI) of an .iflw for a flow viewer, with the
+same reader as `iflow.Layout` and `iflow.CheckLayout`:
+
+```go
+d, err := iflow.ReadDiagram(data) // error for invalid XML or a non-BPMN document
+r := d.Shapes["CallActivity_1"]   // iflow.Rect{X, Y, Width, Height} by bpmnElement
+pts := d.Edges["SequenceFlow_1"]  // []iflow.Point, sequence and message flows
+for _, n := range d.Nodes {        // flow nodes in document order (subprocess first)
+	fmt.Println(n.ID, n.Type, n.Name, n.Kind, n.Container, n.Drawn)
+}
+```
+
+- `Pools` are all participants: integration processes (`ProcessRef`, `Type`
+  `IntegrationProcess`) and senders/receivers (`EndpointSender`, `EndpointRecevier`), with
+  `Bounds`. `Lanes` (if any) have their process, `FlowNodes` and `Bounds`.
+- `Nodes` have the BPMN `Type` (`callActivity`, `startEvent`, `exclusiveGateway`, ...),
+  `Kind` (`Element.Kind`: the component of `cmdVariantUri`, else `activityType`),
+  `ActivityType`, `CmdVariantURI` and `EventSubProcess`.
+- `SequenceFlows` and `MessageFlows` have source and target; message flows have the `Adapter`
+  (`ComponentType`: HTTP, SOAP, ProcessDirect, ...) and `Direction`.
+- Elements without a shape or line have `Drawn: false` and are listed in `Undrawn`; a model
+  without a diagram has everything undrawn.
+- `d.Model` is the `iflow.Model` (`Parse`) the diagram was read with (not in the JSON).
+
+All types have camelCase JSON tags; `cpictl iflow diagram <file|artifact dir> --output json`
+prints the same structure.

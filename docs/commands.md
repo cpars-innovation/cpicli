@@ -54,6 +54,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`idempotent`](#idempotent) | List idempotent repository entries (messages or files skipped as duplicates) |
 | [`iflow`](#iflow) | Work with integration flow files (copy a template under a new ID, lay out the diagram) |
 | [`iflow copy`](#iflow-copy) | Copy an integration flow under a new ID, name and sender address |
+| [`iflow diagram`](#iflow-diagram) | Read the diagram geometry of an integration flow: shape bounds, line waypoints, pools, steps and adapters (local file) |
 | [`iflow layout`](#iflow-layout) | Lay out the diagram of integration flows: steps in flow order, no overlaps, right-angled lines (local files) |
 | [`jms`](#jms) | JMS queues, their messages (retry, move, delete) and broker capacity |
 | [`jms activate`](#jms-activate) | Activate a queue: its consumer flow receives messages again |
@@ -1264,6 +1265,29 @@ error the target directory is left as it was.
   # then
   cpictl update artifact --artifact-id SD_Orders_S4_Sync --package-id SDOrders \
     --dir-artifact content/SDOrders/SD_Orders_S4_Sync
+```
+
+## iflow diagram
+
+Read the diagram geometry of an integration flow: shape bounds, line waypoints, pools, steps and adapters (local file)
+
+```
+Read the diagram (BPMNDiagram) of an .iflw file as a viewer needs it: the bounds
+of each shape and the waypoints of each line by BPMN element ID, the pools
+(participants) and lanes, the steps, events and gateways with their type, name
+and component, the sequence flows and the message flows with their adapter.
+Elements without a shape or line are listed under undrawn.
+
+The path is an .iflw file or a directory with exactly one (an artifact folder).
+Use --output json for the result; the text output is a summary.
+```
+
+**Usage:** `cpictl iflow diagram <path>`
+
+**Examples:**
+
+```
+  cpictl iflow diagram packages/Orders/OrderIntake --output json
 ```
 
 ## iflow layout

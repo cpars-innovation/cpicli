@@ -12,6 +12,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
   `present: false`); `tiers` stays as the map. `compare`: every item has `differences`, all
   differing aspects (`content`, `version`, `parameters`), not only the one `status` names.
 
+- Diagram geometry for flow viewers: `iflow.ReadDiagram(data)` returns the shape bounds and line
+  waypoints of an .iflw by BPMN element ID, the pools (participants) and lanes, the flow nodes
+  with type, name and component, the sequence flows and the message flows with their adapter;
+  elements without a shape or line are listed as undrawn. New command
+  `cpictl iflow diagram <path> --output json`.
+
 - Component catalogue: `sourceDates` records when the editor metadata was imported and when
   versions were last learned (`generatedAt` changes with every write); `components list` prints
   the editor metadata's age.
