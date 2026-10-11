@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -140,7 +141,7 @@ func (ip *IntegrationPackage) Get(id string) (packageData *PackageSingleData, re
 	callType := "Get IntegrationPackages by ID"
 	resp, err := readOnlyCall(urlPath, callType, ip.exe)
 	if err != nil {
-		if err.Error() == fmt.Sprintf("%v call failed with response code = 404", callType) {
+		if httpclnt.StatusCode(err) == http.StatusNotFound {
 			return nil, false, false, nil
 		} else {
 			return nil, false, false, err

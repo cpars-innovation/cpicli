@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 )
@@ -54,8 +55,9 @@ type BatchRequest struct {
 	changesetBoundary string
 }
 
-// boundaryCounter is used to generate unique boundary strings
-var boundaryCounter = 0
+// boundaryCounter makes boundary strings unique; batches may be built
+// concurrently.
+var boundaryCounter atomic.Int64
 
 // NewBatchRequest creates a new batch request builder
 func (e *HTTPExecuter) NewBatchRequest() *BatchRequest {
@@ -417,8 +419,7 @@ func (br *BatchRequest) parseOperationResponseFromPart(part *multipart.Part) (Ba
 
 // generateBoundary generates a unique boundary string
 func generateBoundary(prefix string) string {
-	boundaryCounter++
-	return fmt.Sprintf("%s%d", prefix, boundaryCounter)
+	return fmt.Sprintf("%s%d", prefix, boundaryCounter.Add(1))
 }
 
 // Helper functions for building batch operations

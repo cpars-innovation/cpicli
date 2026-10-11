@@ -100,3 +100,13 @@ func TestConfigGenerate_Filters(t *testing.T) {
 	assert.Equal(t, 1, g.Stats.PackagesFiltered)
 	assert.Equal(t, 1, g.Stats.PackagesAdded)
 }
+
+// The output's parent directory is created (it used to fail with exit 4).
+func TestConfigGenerate_CreatesOutputDir(t *testing.T) {
+	dir := setupPackagesDir(t)
+	out := filepath.Join(dir, "configs", "dev", "deploy-config.yml")
+	require.NoError(t, NewConfigGenerator(filepath.Join(dir, "packages"), out, nil, nil).Generate())
+	data, err := os.ReadFile(out)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "Pkg1")
+}

@@ -482,6 +482,9 @@ func (g *ConfigGenerator) writeConfigFile(outputPath string, cfg *models.DeployC
 
 `
 
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return err
+	}
 	return os.WriteFile(outputPath, []byte(header+string(data)), 0644)
 }
 

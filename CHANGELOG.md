@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Fix: `MessagePathFor` (`logs tree --message`, `get_trace_tree message_guid`) panicked for an
+  unknown message GUID; it is a usage error now.
+- Fix: data race on the batch boundary counter when batches were built concurrently.
+- Fix: "does not exist" checks for packages, designtime artifacts, API proxies and products
+  compared error texts; they use the HTTP status now.
+- Fix: `config-generate` creates the output file's directory.
+
 ## 0.9.1
 
 - Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with

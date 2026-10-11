@@ -292,6 +292,9 @@ func MessagePathFor(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessagePa
 	if err != nil {
 		return nil, err
 	}
+	if l == nil {
+		return nil, output.Usagef("message %s not found", guid)
+	}
 	tree := &TraceTree{CorrelationID: l.CorrelationId, Source: "correlation_id", Roots: []*TraceNode{}}
 	logs := []MessageLog{toMessageLog(*l)}
 	if l.CorrelationId != "" {
