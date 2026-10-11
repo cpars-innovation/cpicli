@@ -2,8 +2,9 @@ package cmd
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
-	"github.com/cpars-innovation/cpicli/pkg/lint"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,9 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/deploy"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/str"
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
+	"github.com/cpars-innovation/cpicli/pkg/lint"
+	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -95,6 +99,7 @@ removes content modifiers that do nothing). Review the diff, raise the versions
 	c.Flags().Bool("dry-run", false, "With --fix: only list the changes")
 	c.Flags().String("deploy-config", "", "Deploy config for the deployment-copies rule (default: orchestrator.deployConfig)")
 	c.Flags().Bool("list-rules", false, "List the rules")
+	c.Flags().String("components", ops.ComponentsFile, "Component catalogue of the target tenant, used when it exists (config: lint.components)")
 	return c
 }
 
@@ -120,6 +125,9 @@ func lintOptions(cmd *cobra.Command) (lint.Options, error) {
 		MinSeverity: config.GetString(cmd, "min-severity"),
 	}
 	o.Changed, _ = cmd.Flags().GetBool("changed")
+	if o.Components, err = loadComponents(config.GetStringWithFallback(cmd, "components", "lint.components")); err != nil {
+		return o, err
+	}
 	if o.DeploymentCopies, err = deploymentCopies(cmd, dir); err != nil {
 		return o, err
 	}
@@ -251,4 +259,16 @@ func logLint(res *lint.Result) {
 	log.Info().Msgf("%d artifact(s), %d checked: %d error(s), %d warning(s), %d info; new: %d error(s), %d warning(s), %d info",
 		res.Artifacts, res.Checked, res.Counts[lint.SevError], res.Counts[lint.SevWarning], res.Counts[lint.SevInfo],
 		res.New[lint.SevError], res.New[lint.SevWarning], res.New[lint.SevInfo])
+}
+
+// loadComponents reads a component catalogue; a missing file is no catalogue.
+func loadComponents(file string) (*catalog.Catalog, error) {
+	if file == "" {
+		return nil, nil
+	}
+	c, err := catalog.Load(file)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return c, err
 }

@@ -55,12 +55,15 @@ type IFlowFacts struct {
 	// Parameters are the externalised parameter keys (values are not read).
 	Parameters []string `json:"parameters"`
 	// CredentialRefs are names of credentials and key aliases the flow refers to.
-	CredentialRefs []string       `json:"credentialRefs"`
-	HeadersSet     []string       `json:"headersSet"`
-	PropertiesSet  []string       `json:"propertiesSet"`
-	Scripts        []ScriptFacts  `json:"scripts"`
-	Resources      map[string]int `json:"resources"`
-	Error          string         `json:"error,omitempty"`
+	CredentialRefs []string `json:"credentialRefs"`
+	// Components are the cmdVariantUri of the flow's adapters and steps
+	// (versions the tenant accepted; see the component catalogue).
+	Components    []string       `json:"components,omitempty"`
+	HeadersSet    []string       `json:"headersSet"`
+	PropertiesSet []string       `json:"propertiesSet"`
+	Scripts       []ScriptFacts  `json:"scripts"`
+	Resources     map[string]int `json:"resources"`
+	Error         string         `json:"error,omitempty"`
 }
 
 // Trigger is one way a flow is started.
@@ -167,7 +170,7 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 		}
 		return nil
 	})
-	for _, l := range []*[]string{&f.ProcessDirectCalls, &f.PDReferences, &f.SenderAdapters, &f.ReceiverAdapters, &f.CredentialRefs, &f.HeadersSet, &f.PropertiesSet} {
+	for _, l := range []*[]string{&f.ProcessDirectCalls, &f.PDReferences, &f.SenderAdapters, &f.ReceiverAdapters, &f.CredentialRefs, &f.HeadersSet, &f.PropertiesSet, &f.Components} {
 		*l = sortedUnique(*l)
 	}
 	return f, nil
@@ -254,6 +257,9 @@ func (f *IFlowFacts) addModel(data []byte) error {
 
 func (f *IFlowFacts) addElement(el *modelElement) {
 	p := el.props
+	if uri := p["cmdVariantUri"]; uri != "" {
+		f.Components = append(f.Components, uri)
+	}
 	ctype, cname := variant(p["cmdVariantUri"])
 	switch {
 	case el.name == "participant":

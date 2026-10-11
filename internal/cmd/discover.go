@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
@@ -57,6 +60,22 @@ and which systems they call. --graph=false skips it.`,
 				res["graphFile"], res["graph"] = ops.GraphFile(file), g.Stats
 				log.Info().Msgf("Graph with %d nodes and %d edges written to %s", g.Stats.Nodes, g.Stats.Edges, ops.GraphFile(file))
 			}
+			components := config.GetString(cmd, "components")
+			if components == "" {
+				components = filepath.Join(filepath.Dir(file), "components.json")
+			}
+			if components != "-" {
+				tenant := ""
+				if config.GetString(cmd, "dir") == "" {
+					tenant = config.GetString(cmd, "tmn-host")
+				}
+				cat, err := ops.LearnComponents(d, components, tenant)
+				if err != nil {
+					return err
+				}
+				res["componentsFile"] = components
+				log.Info().Msgf("Component catalogue %s: %d adapter and %d step variants (%s)", components, len(cat.Adapters), len(cat.Steps), strings.Join(cat.Sources, ", "))
+			}
 			output.SetResult(cmd.Context(), res)
 			log.Info().Msgf("Discovered %d package(s) and %d integration flow(s), written to %s", d.Summary.Packages, d.Summary.IFlows, file)
 			for _, e := range d.Errors {
@@ -70,5 +89,6 @@ and which systems they call. --graph=false skips it.`,
 	c.Flags().Int("max-iflows", 0, "Stop after this many integration flows (0: all)")
 	c.Flags().String("dir", "", "Analyse this local directory instead of the tenant")
 	c.Flags().Bool("graph", true, "Also write graph.json next to the output file")
+	c.Flags().String("components", "", "Add the variants the flows use to this component catalogue (default: components.json next to the output file; -: skip; see 'cpictl components')")
 	return c
 }

@@ -5,6 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Component catalogue (`.cpi/components.json`, [docs/components.md](docs/components.md)): the
+  adapter and step variants (`cmdVariantUri`) and versions the tenant offers.
+  `cpictl components import <editor metadata>` reads the Web UI's editor metadata (what the
+  browser loads from `/api/1.0/metadata`; it needs the browser login); `cpictl components learn`
+  and every `cpictl discover` add the versions existing flows use. `cpictl components list`;
+  MCP `list_components` (`build`, `improve`), which the build skill uses for new steps and
+  adapters. Lint: new rule `component-newer-than-tenant` (error: Check and deploy would fail),
+  and `outdated-component` reports what the tenant offers.
+
 - `cpictl locks list` / `locks unlock --artifact-id X --confirm`: edit locks of artifacts (who holds
   one, since when) and removing one, as Unlock in the Web UI (the holder's unsaved changes are
   lost). Uses `/api/v1/IntegrationDesigntimeLocks`; verified on a real tenant. MCP: `list_locks`

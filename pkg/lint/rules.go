@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -88,7 +89,8 @@ var lintRules = []lintRule{
 	{id: "hardcoded-secret", group: GroupConfiguration, severity: SevError, title: "A script or parameter holds a password, token or key", artifact: ruleSecrets},
 	// hygiene
 	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},
-	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than other flows", cross: ruleOutdatedComponents},
+	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than the tenant offers or other flows use", cross: ruleOutdatedComponents},
+	{id: "component-newer-than-tenant", group: GroupRobustness, severity: SevError, title: "A step or adapter version is newer than the tenant offers (Check and deploy fail)", artifact: ruleComponentNewerThanTenant},
 	{id: "default-step-name", group: GroupHygiene, severity: SevInfo, title: "A step has its default name", artifact: ruleDefaultNames},
 	{id: "layout", group: GroupHygiene, severity: SevInfo, title: "The diagram has overlapping or undrawn shapes, or lines through steps", artifact: ruleLayout},
 	{id: "naming", group: GroupHygiene, severity: SevWarning, title: "The flow ID does not follow the naming rule of .cpi/lint.yaml", artifact: ruleNaming},
@@ -1108,6 +1110,18 @@ func ruleOutdatedComponents(lc *lintContext) []Finding {
 	})
 	var out []Finding
 	visit(func(a *lintArtifact, file string, el *iflow.Element) {
+		uri := el.Props["cmdVariantUri"]
+		if offered, ok := tenantVersion(lc, uri); ok {
+			// the catalogue knows what the tenant offers: compare with that
+			v := catalog.Version(uri)
+			if v == "" || catalog.CompareVersions(v, offered) >= 0 || (el.Kind() == "GroovyScript" && majorOf(v) < 2 && majorOf(offered) >= 2) {
+				return
+			}
+			out = append(out, a.finding("outdated-component", file, el.ID, el.Name, el.ID,
+				fmt.Sprintf("%s %q has version %s; the tenant offers %s", kindOf(el), el.Name, v, offered),
+				"update the step in the Web UI editor (newer versions fix bugs and add options)"))
+			return
+		}
 		v := el.Version()
 		k := kindOf(el)
 		if v == "" || compareVersionStrings(v, latest[k]) >= 0 {
@@ -1120,6 +1134,41 @@ func ruleOutdatedComponents(lc *lintContext) []Finding {
 			fmt.Sprintf("%s %q has version %s; other flows use %s", k, el.Name, v, latest[k]),
 			"update the step in the Web UI editor (newer versions fix bugs and add options)"))
 	})
+	return out
+}
+
+// tenantVersion is the version of a variant in the component catalogue's
+// editor metadata (what the tenant's editor offers).
+func tenantVersion(lc *lintContext, uri string) (string, bool) {
+	if lc.opts.Components == nil || uri == "" {
+		return "", false
+	}
+	return lc.opts.Components.Offered(uri)
+}
+
+func ruleComponentNewerThanTenant(lc *lintContext, a *lintArtifact) []Finding {
+	var out []Finding
+	for _, file := range sortedModelFiles(a) {
+		m := a.Models[file]
+		els := make([]*iflow.Element, 0, len(m.Order)+len(m.Adapters))
+		for _, id := range m.Order {
+			els = append(els, m.Elements[id])
+		}
+		els = append(els, m.Adapters...)
+		for _, el := range els {
+			uri := el.Props["cmdVariantUri"]
+			if lc.opts.Components == nil || uri == "" {
+				continue
+			}
+			offered, offeredURI, ok := lc.opts.Components.OfferedURI(uri)
+			if v := catalog.Version(uri); !ok || v == "" || offered == "" || catalog.CompareVersions(v, offered) <= 0 {
+				continue
+			}
+			out = append(out, a.finding("component-newer-than-tenant", file, el.ID, el.Name, el.ID,
+				fmt.Sprintf("%s %q uses version %s; the tenant offers %s", el.Kind(), el.Name, catalog.Version(uri), offered),
+				fmt.Sprintf("use %s (cpictl components list), or update the component catalogue if the tenant was upgraded", offeredURI)))
+		}
+	}
 	return out
 }
 

@@ -8,6 +8,10 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 |---------|-------------|
 | [`artifacts`](#artifacts) | List designtime artifacts of a package |
 | [`compare`](#compare) | Compare two tiers, Git refs or content trees per artifact (content, version, parameters, files) |
+| [`components`](#components) | Component catalogue: the adapter and step versions the tenant offers |
+| [`components import`](#components-import) | Build the catalogue from the Web UI's editor metadata |
+| [`components learn`](#components-learn) | Add the variants existing flows use (tenant, or --dir offline) |
+| [`components list`](#components-list) | List the catalogue (filter by name, kind, direction) |
 | [`config-generate`](#config-generate) | Generate or refresh the orchestrator deployment config from a packages directory |
 | [`configure`](#configure) | Set artifact parameters from YAML files and optionally deploy |
 | [`configure pull`](#configure-pull) | Write current tenant parameter values into configure YAML files |
@@ -185,6 +189,74 @@ tenant reports it, who changed the artifact last.
   cpictl compare packages tenant --diff                 # repository vs tenant (drift)
   cpictl compare git:release/2026-10:packages git:main:packages
   cpictl compare tenant:dev tenant:test --fail-on-diff --output json
+```
+
+## components
+
+Component catalogue: the adapter and step versions the tenant offers
+
+```
+The component catalogue (.cpi/components.json) lists the adapter and step
+variants (cmdVariantUri) and versions the tenant's integration flow editor
+offers. Flows built with them pass the tenant's Check; a version newer than the
+tenant offers fails there (lint rule component-newer-than-tenant).
+
+It is built from two sources:
+  import  the editor metadata of the Web UI: in the browser's developer tools,
+          open an integration flow and save the response of
+          /api/1.0/metadata?profileID=... (it needs the browser login, so
+          cpictl cannot fetch it). Authoritative: what the tenant offers today.
+  learn   the variants existing flows use (versions the tenant accepted); also
+          done by 'cpictl discover'. Automatic, but only knows what is in use.
+Entries from the editor metadata win over learned ones.
+```
+
+**Examples:**
+
+```
+  cpictl components import metadata.json
+  cpictl components learn                 # all flows of the tenant
+  cpictl components learn --dir ./content # local flows, offline
+  cpictl components list --name HTTP
+```
+
+## components import
+
+Build the catalogue from the Web UI's editor metadata
+
+**Usage:** `cpictl components import <editor-metadata.json|-> [flags]`
+
+**Flags:**
+
+```
+      --tenant string   Name of the tenant the metadata is from (e.g. the profile or tier)
+```
+
+## components learn
+
+Add the variants existing flows use (tenant, or --dir offline)
+
+**Usage:** `cpictl components learn [flags]`
+
+**Flags:**
+
+```
+      --dir string            Learn from this local content tree instead of the tenant
+      --package-ids strings   Only these packages (default: all)
+```
+
+## components list
+
+List the catalogue (filter by name, kind, direction)
+
+**Usage:** `cpictl components list [flags]`
+
+**Flags:**
+
+```
+      --direction string   Sender or Receiver (adapters)
+      --kind string        adapter or step
+      --name string        Only variants whose name contains this (case-insensitive)
 ```
 
 ## config-generate
@@ -599,6 +671,7 @@ and which systems they call. --graph=false skips it.
 **Flags:**
 
 ```
+      --components string     Add the variants the flows use to this component catalogue (default: components.json next to the output file; -: skip; see 'cpictl components')
       --dir string            Analyse this local directory instead of the tenant
       --graph                 Also write graph.json next to the output file (default true)
       --max-iflows int        Stop after this many integration flows (0: all)
@@ -1108,6 +1181,7 @@ removes content modifiers that do nothing). Review the diff, raise the versions
       --artifact strings       Only report these artifacts (names or patterns)
       --baseline string        Known findings; --fail-on counts only new ones (config: lint.baseline) (default ".cpi/lint-baseline.json")
       --changed                Only report artifacts changed in Git since --since (committed, uncommitted, untracked)
+      --components string      Component catalogue of the target tenant, used when it exists (config: lint.components) (default ".cpi/components.json")
       --deploy-config string   Deploy config for the deployment-copies rule (default: orchestrator.deployConfig)
       --dir string             Content tree (default: packages if it exists, else the current directory) (config: lint.dir)
       --dry-run                With --fix: only list the changes

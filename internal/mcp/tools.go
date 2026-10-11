@@ -5,9 +5,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/cpars-innovation/cpicli/pkg/iflow"
-	"github.com/cpars-innovation/cpicli/pkg/lint"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,8 +19,11 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/internal/versioning"
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/iflow"
+	"github.com/cpars-innovation/cpicli/pkg/lint"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 )
 
@@ -61,6 +64,9 @@ list_service_endpoints; runtime data: list_data_stores, list_data_store_entries,
 get_data_store_entry, delete_data_store_entry (confirm), list_variables, get_variable,
 list_jms_queues, get_jms_broker, list_number_ranges, list_log_files / get_log_file (adapter errors
 without a message log), list_idempotent_entries (skipped duplicates), list_id_mappings.
+Components: list_components gives the adapter and step variants (cmdVariantUri) and versions the
+tenant offers (.cpi/components.json); use them when writing flow XML, a newer version fails the
+tenant's Check (lint rule component-newer-than-tenant).
 Locks: list_locks shows artifacts open for editing (an update fails while someone holds the
 lock). unlock_artifact (confirm; offered only when the server's --tools names it) discards the
 lock holder's unsaved changes: only on the user's explicit request.
@@ -131,7 +137,7 @@ func Tools(cfg Config) []Tool {
 	}
 	reverter := cfg.LogLevels
 	cache := newReadCache(cfg.CacheTTL)
-	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), graphTools(cfg))
+	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), componentTools(cfg, readOnly), graphTools(cfg))
 	for i := range tools {
 		inner := tools[i].Handler
 		changesTenant := toolEffects[tools[i].Name] == EffectTenant
@@ -1890,6 +1896,12 @@ func mcpLintOptions(root, dir string, packages, artifacts []string) (lint.Option
 	if err != nil {
 		return lint.Options{}, err
 	}
-	return lint.Options{Dir: abs, Packages: packages, Artifacts: artifacts, Config: cfg,
-		Baseline: filepath.Join(base, ".cpi", "lint-baseline.json")}, nil
+	o := lint.Options{Dir: abs, Packages: packages, Artifacts: artifacts, Config: cfg,
+		Baseline: filepath.Join(base, ".cpi", "lint-baseline.json")}
+	if c, err := catalog.Load(filepath.Join(base, filepath.FromSlash(ops.ComponentsFile))); err == nil {
+		o.Components = c
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return o, err
+	}
+	return o, nil
 }

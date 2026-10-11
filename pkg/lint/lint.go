@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"io/fs"
@@ -179,6 +180,9 @@ type Options struct {
 	DeploymentCopies map[string][]DeploymentCopy
 	// MinSeverity drops findings below it (default info).
 	MinSeverity string
+	// Components is the target tenant's component catalogue (nil: rules
+	// compare the flows with each other only).
+	Components *catalog.Catalog
 }
 
 // DeploymentCopy is one ID an artifact folder is deployed as.

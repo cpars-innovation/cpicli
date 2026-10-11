@@ -149,7 +149,7 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 | `security` | security material (read) | `list_credentials`, `list_keystore` |
 
 `undeploy`, `delete_data_store_entry` and `unlock_artifact` are in no toolset: offer them explicitly
-with `--tools`. `list_locks` is in `inspect` and `build`.
+with `--tools`. `list_locks` is in `inspect` and `build`; `list_components` in `build` and `improve`.
 
 ```json
 "cpi-dev":  { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"] },
@@ -250,6 +250,7 @@ read roles.
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
 | `delete_data_store_entry` | tenant, **destructive** | Delete one entry; requires `confirm: true` |
 | `list_locks` | | Artifacts open for editing in the Web UI: artifact, package, who holds the lock, since when |
+| `list_components` | | Adapter and step variants (cmdVariantUri, version) the tenant offers, from `.cpi/components.json` ([components.md](components.md)); filter by name, kind, direction |
 | `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--tools unlock_artifact` |
 | `list_variables`, `get_variable` | | Global and flow variables, and a value |
 | `list_jms_queues`, `get_jms_broker` | | Queues with message counts; broker capacity and usage |

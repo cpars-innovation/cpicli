@@ -53,8 +53,10 @@ What `download_artifact` extracts and `upload_artifact` expects:
   `incoming`, `outgoing`, `processRef`, diagram `bpmnElement`) consistent.
 - To add a step, copy a complete element of the same type from a flow of this tenant, including
   its diagram shape, give it a new unique id and rewire the sequence flows; then `layout_iflow`.
-- Keep component versions (`componentVersion`, `cmdVariantUri`) as copied; the tenant's
-  check (`validate_artifact`) reports unsupported combinations.
+- Keep component versions (`componentVersion`, `cmdVariantUri`) as copied. For a new step or
+  adapter take the `cmdVariantUri` and version from `list_components` (what the tenant offers;
+  `componentVersion` is its major.minor, e.g. `1.22` for `.../version::1.22.0`); never a newer
+  version than listed. The tenant's check (`validate_artifact`) reports unsupported combinations.
 - Contents of table properties (headers and properties of a Content Modifier) are escaped XML
   inside the value (`&lt;row&gt;…`): keep the escaping.
 
