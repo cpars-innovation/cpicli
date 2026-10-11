@@ -329,19 +329,23 @@ func firstCredentialError(results []CredentialResult) error {
 type SecurityOverview struct {
 	UserCredentials   []cpi.UserCredential   `json:"userCredentials"`
 	OAuth2Credentials []cpi.OAuth2Credential `json:"oauth2Credentials"`
-	SecureParameters  []cpi.SecureParameter  `json:"secureParameters"`
-	Warnings          []string               `json:"warnings,omitempty"`
+	// OAuth2AuthorizationCodes are OAuth2 authorization code credentials
+	// (without client secret and refresh token).
+	OAuth2AuthorizationCodes []cpi.OAuth2AuthorizationCode `json:"oauth2AuthorizationCodes"`
+	SecureParameters         []cpi.SecureParameter         `json:"secureParameters"`
+	Warnings                 []string                      `json:"warnings,omitempty"`
 }
 
 // ListCredentials returns all credentials (kind "" = all kinds). Secure
 // parameters only exist in the Neo environment; elsewhere their lookup is
 // reported as a warning.
 func ListCredentials(exe *httpclnt.HTTPExecuter, kind string) (*SecurityOverview, error) {
-	if kind != "" && !slices.Contains(cpi.CredentialKinds, kind) {
-		return nil, output.Usagef("invalid kind %q (valid: %s)", kind, strings.Join(cpi.CredentialKinds, ", "))
+	if kind != "" && !slices.Contains(cpi.ListCredentialKinds, kind) {
+		return nil, output.Usagef("invalid kind %q (valid: %s)", kind, strings.Join(cpi.ListCredentialKinds, ", "))
 	}
 	sec := cpi.NewSecurity(exe)
-	o := &SecurityOverview{UserCredentials: []cpi.UserCredential{}, OAuth2Credentials: []cpi.OAuth2Credential{}, SecureParameters: []cpi.SecureParameter{}}
+	o := &SecurityOverview{UserCredentials: []cpi.UserCredential{}, OAuth2Credentials: []cpi.OAuth2Credential{},
+		OAuth2AuthorizationCodes: []cpi.OAuth2AuthorizationCode{}, SecureParameters: []cpi.SecureParameter{}}
 	var err error
 	if kind == "" || kind == cpi.KindUser {
 		if o.UserCredentials, err = sec.UserCredentials(); err != nil {
@@ -351,6 +355,17 @@ func ListCredentials(exe *httpclnt.HTTPExecuter, kind string) (*SecurityOverview
 	if kind == "" || kind == cpi.KindOAuth2 {
 		if o.OAuth2Credentials, err = sec.OAuth2Credentials(); err != nil {
 			return nil, err
+		}
+	}
+	if kind == "" || kind == cpi.KindOAuth2AuthCode {
+		codes, err := sec.OAuth2AuthorizationCodes()
+		switch {
+		case err == nil:
+			o.OAuth2AuthorizationCodes = codes
+		case kind == cpi.KindOAuth2AuthCode || httpclnt.IsAuthError(err):
+			return nil, err
+		default:
+			o.Warnings = append(o.Warnings, fmt.Sprintf("OAuth2 authorization code credentials not available: %v", err))
 		}
 	}
 	if kind == "" || kind == cpi.KindSecureParam {

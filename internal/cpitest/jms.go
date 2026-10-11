@@ -94,7 +94,6 @@ var (
 	reHeaderFilter     = regexp.MustCompile(`^(Name|Value) eq '((?:[^']|'')*)'(?: and (Name|Value) eq '((?:[^']|'')*)')?$`)
 )
 
-
 // handleJMS serves the JMS endpoints; false if path is not one of them.
 func (m *Tenant) handleJMS(w http.ResponseWriter, r *http.Request, path string) bool {
 	switch {

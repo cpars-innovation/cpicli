@@ -45,12 +45,19 @@ var toolEffects = map[string]Effect{
 	"drift": EffectRead, "doctor": EffectRead, "lint": EffectRead, "compare": EffectRead, "message_summary": EffectRead, "transport_check": EffectRead,
 	"graph_search": EffectRead, "help": EffectRead, "list_toolsets": EffectRead, "enable_toolset": EffectRead, "graph_neighbors": EffectRead, "graph_path": EffectRead,
 	"loop_status": EffectRead, "loop_start": EffectLocal, "loop_end": EffectLocal,
+	"list_keystore_history": EffectRead, "get_certificate_chain": EffectRead, "get_csr": EffectRead, "get_ssh_public_key": EffectRead,
+	"list_pgp_keys": EffectRead, "list_access_policies": EffectRead, "list_audit_logs": EffectRead, "list_pd_partners": EffectRead,
+	"list_alternative_partners": EffectRead, "list_authorized_users": EffectRead,
 
 	"download_artifact": EffectLocal, "discover_tenant": EffectLocal, "copy_iflow": EffectLocal, "bump_versions": EffectLocal, "lint_fix": EffectLocal, "layout_iflow": EffectLocal,
 
 	"create_package": EffectTenant, "upload_artifact": EffectTenant, "upload_artifacts": EffectTenant, "set_parameters": EffectTenant,
 	"deploy": EffectTenant, "undeploy": EffectTenant, "pd_deploy": EffectTenant,
 	"send_test_message": EffectTenant, "set_log_level": EffectTenant,
+	"generate_key_pair": EffectTenant, "upload_certificate_chain": EffectTenant, "delete_keystore_entry": EffectTenant,
+	"create_access_policy": EffectTenant, "add_artifact_reference": EffectTenant, "delete_access_policy": EffectTenant,
+	"delete_artifact_reference": EffectTenant, "create_alternative_partner": EffectTenant, "delete_alternative_partner": EffectTenant,
+	"create_authorized_user": EffectTenant, "delete_authorized_user": EffectTenant,
 }
 
 // operateTenantTools are the tenant tools of mode operate: operations as in
@@ -60,7 +67,8 @@ var operateTenantTools = []string{"set_log_level", "retry_jms_messages", "move_j
 // optInTools are offered only when the user's --tools names them exactly
 // (not by a pattern), whatever the mode: they can destroy someone else's work
 // or content that cannot be restored.
-var optInTools = []string{"unlock_artifact", "delete_artifact", "delete_package", "delete_jms_messages"}
+var optInTools = []string{"unlock_artifact", "delete_artifact", "delete_package", "delete_jms_messages",
+	"delete_keystore_entry", "delete_access_policy", "delete_artifact_reference", "delete_alternative_partner", "delete_authorized_user"}
 
 // ToolFilter limits the tools a server offers.
 type ToolFilter struct {
@@ -209,7 +217,7 @@ func ModeInstructions(mode string) string {
 	case "develop":
 		return "\n\nMode: develop. Build loop on a development tenant; pd_deploy full_sync is refused, undeploy needs confirm. Open a loop with loop_start before changing anything."
 	case "full":
-		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy and delete_data_store_entry still need confirm; unlock_artifact, delete_artifact, delete_package and delete_jms_messages only when --tools names them."
+		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy, delete_data_store_entry and the other delete tools still need confirm; unlock_artifact and the delete tools of content, JMS messages, security material and partners only when --tools names them."
 	}
 	return ""
 }
@@ -233,14 +241,17 @@ var Toolsets = map[string][]string{
 		"get_message_store_entry", "get_trace_tree", "get_message_trace", "get_trace_message", "set_log_level",
 		"list_runtime_artifacts", "get_runtime_status", "list_log_files", "get_log_file", "list_data_stores",
 		"list_data_store_entries", "get_data_store_entry", "list_variables", "get_variable", "list_jms_queues", "get_jms_broker",
-		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state", "list_number_ranges", "list_idempotent_entries", "list_id_mappings", "list_keystore", "graph_neighbors",
+		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state", "list_number_ranges", "list_idempotent_entries", "list_id_mappings", "list_keystore", "list_audit_logs", "graph_neighbors",
 		"list_integration_connections", "get_tenant_settings", "download_log_archive"},
 	"promote": {"compare", "transport_check", "drift", "list_artifacts", "get_parameters", "config_diff", "list_credentials",
 		"list_keystore", "pd_dependencies", "pd_diff", "get_runtime_status", "list_runtime_artifacts", "graph_neighbors"},
 	"improve": {"list_components", "lint", "lint_fix", "layout_iflow", "graph_search", "graph_neighbors", "graph_path", "drift", "compare",
 		"bump_versions", "list_artifacts", "get_resource"},
-	"partner-directory": {"get_pd_parameters", "pd_diff", "pd_dependencies", "pd_deploy", "config_diff", "graph_search"},
-	"security":          {"list_credentials", "list_keystore"},
+	"partner-directory": {"list_pd_partners", "get_pd_parameters", "pd_diff", "pd_dependencies", "pd_deploy", "config_diff", "graph_search",
+		"list_alternative_partners", "create_alternative_partner", "list_authorized_users", "create_authorized_user"},
+	"security": {"list_credentials", "list_keystore", "list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key",
+		"generate_key_pair", "upload_certificate_chain", "list_pgp_keys", "list_access_policies", "create_access_policy",
+		"add_artifact_reference", "list_audit_logs"},
 }
 
 // ToolsetDescriptions say what each toolset is for.
@@ -251,8 +262,8 @@ var ToolsetDescriptions = map[string]string{
 	"monitor":           "operations: message summary, message logs and traces, header search, runtime status, log files, data stores, variables, JMS queues and messages (retry, move), number ranges, keystore",
 	"promote":           "move content between tiers: compare, transport_check, drift, config_diff, credentials, keystore, Partner Directory dependencies",
 	"improve":           "quality: lint, lint_fix, layout_iflow, graph, drift, compare, bump_versions",
-	"partner-directory": "Partner Directory parameters: read, diff, dependencies, deploy",
-	"security":          "security material (read): credentials and keystore entries",
+	"partner-directory": "Partner Directory: partners, parameters (read, diff, dependencies, deploy), alternative partners, authorized users",
+	"security":          "security material: credentials, keystore (history, chains, CSRs, key pair generation), PGP keys, access policies, audit log",
 }
 
 // ToolsetNames lists the toolsets, sorted.

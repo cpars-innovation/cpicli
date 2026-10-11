@@ -17,8 +17,21 @@ partner-directory/                 # --resources-path (default ./partner-directo
 
 - `String.properties`: `key=value` lines; `#` comments and empty lines are ignored; values are
   escaped/unescaped like Java properties.
-- Binary content types supported by CPI: `xml`, `xsl`, `xsd`, `json`, `txt`, `zip`, `gz`,
-  `zlib`, `crt`. The type is taken from the file extension.
+- Binary content types supported by CPI (`ops.PDContentTypes`):
+
+  | Type | Extensions | MIME type |
+  |------|------------|-----------|
+  | `xml` | `.xml` | `application/xml` |
+  | `xsl` | `.xsl`, `.xslt` | `application/xslt+xml` |
+  | `xsd` | `.xsd` | `application/xml` |
+  | `json` | `.json` | `application/json` |
+  | `txt` | `.txt` | `text/plain` |
+  | `zip` | `.zip` | `application/zip` |
+  | `gz` | `.gz` | `application/gzip` |
+  | `zlib` | `.zlib` | `application/zlib` |
+  | `crt` | `.crt` | `application/pkix-cert` |
+
+  The type is taken from the file extension.
 - `_metadata.json` is only needed for content types with parameters, e.g.
   `{"Mapping.xsl": "xsl; encoding=UTF-8"}` (key = file name). `pd-snapshot` writes it when needed.
 
@@ -76,8 +89,8 @@ cpictl pd-deploy --keys ONE_OMS:now_email --dry-run  # then without --dry-run
   "empty".
 - `pd-deploy --keys PID:ID,...` creates or updates only those parameters and deletes nothing
   (not combinable with `--full-sync` or `--pids`). The content type of a binary comes from
-  `_metadata.json`, else from the extension (`.xsl`/`.xslt` → `xsl`, `.xml`, `.json`, `.xsd`);
-  other extensions need a `_metadata.json` entry. The result lists `CREATED`, `UPDATED` or
+  `_metadata.json`, else from the extension (table above; `.xslt` → `xsl`); other extensions
+  need a `_metadata.json` entry. The result lists `CREATED`, `UPDATED` or
   `UNCHANGED` per key.
 
 Before changing a parameter, check which flows read it (local content, no tenant calls):
@@ -92,6 +105,25 @@ dynamic `pd:${...}` references, `getParameter(id, pid, ...)` calls in Groovy scr
 `ONE_OMS`).
 
 MCP: `pd_dependencies`, `get_pd_parameters`, `pd_diff`, `pd_deploy` with `keys`.
+
+## Partners, alternative partners, authorized users
+
+```bash
+cpictl pd list                                       # partner IDs: string/binary counts, content types
+cpictl pd list --pid ACME --sizes                    # --sizes reads the binaries for their total size
+cpictl pd alternative-partners list --pid ACME
+cpictl pd alternative-partners create --agency EDI --scheme GLN --id 4000001000002 --pid ACME
+cpictl pd alternative-partners delete --agency EDI --scheme GLN --id 4000001000002 --confirm
+cpictl pd authorized-users list
+cpictl pd authorized-users create --user CN=acme-client --pid ACME
+cpictl pd authorized-users delete --user CN=acme-client --confirm
+```
+
+`pd list` reads `Partners` and the parameter keys with `$select` (no values; the API has no size
+field, so `--sizes` downloads the binaries). Partners that only have alternative partners or
+authorized users are listed too. MCP: `list_pd_partners`, `list_alternative_partners`,
+`create_alternative_partner`, `list_authorized_users`, `create_authorized_user`;
+`delete_alternative_partner` and `delete_authorized_user` (confirm, opt-in).
 
 ## Config file
 

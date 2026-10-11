@@ -121,21 +121,24 @@ restrictive wins:
 | `develop` | all tools; `pd_deploy` refuses `full_sync`, `undeploy` needs `confirm` |
 | `full` | all tools without restrictions, including `pd_deploy` with `full_sync` (same as no `--mode`) |
 
-`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`,
-`delete_package`, `retry_jms_messages`, `move_jms_messages` and `delete_jms_messages` always need
-`confirm: true`; that is part of the tool, not of a mode.
+`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `retry_jms_messages`,
+`move_jms_messages` and every delete tool (`delete_artifact`, `delete_package`,
+`delete_jms_messages`, `delete_keystore_entry`, `delete_access_policy`, `delete_artifact_reference`,
+`delete_alternative_partner`, `delete_authorized_user`) always need `confirm: true`; that is part
+of the tool, not of a mode.
 
-`unlock_artifact`, `delete_artifact`, `delete_package` and `delete_jms_messages` are **opt-in**: no
-mode offers them (not even `full`), only `--tools` naming them exactly (`--tools
+`unlock_artifact` and these delete tools (all but `delete_data_store_entry`) are **opt-in**: no mode
+offers them (not even `full`), only `--tools` naming them exactly (`--tools
 'list_*,unlock_artifact'`; a pattern such as `unlock_*`, `delete_*` or `*` does not count).
 Removing a lock discards the unsaved changes of whoever holds it; a deleted artifact or package
-cannot be restored; deleted JMS messages are never processed.
+cannot be restored; deleted JMS messages are never processed; deleting a keystore entry breaks the
+flows that use it; deleting an access policy lifts its restriction.
 
 The mode is added to the server instructions.
 
 ### Toolsets
 
-The server has about 90 tools. An agent chooses better among the tools of its task than among all
+The server has about 110 tools. An agent chooses better among the tools of its task than among all
 of them, and every tool description costs context in every call. `--toolset` (or
 `CPICTL_TOOLSET`) offers only the tools of one or more tasks; it combines with `--tools`, and the
 mode still applies on top (the more restrictive wins). `doctor` and `help` are always there.
@@ -145,15 +148,15 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 | `inspect` | understanding content | list and read packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare |
 | `build` | changing flows on DEV | read tools, `download_artifact`, `copy_iflow`, `layout_iflow`, `create_package`, `upload_artifact(s)`, `validate_artifact`, `check_guidelines`, `set_parameters`, `deploy`, `bump_versions`, `lint`, loop tools |
 | `test` | testing and diagnosing | `send_test_message`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
-| `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore |
+| `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore, `list_audit_logs` |
 | `promote` | moving between tiers | `compare`, `transport_check`, `drift`, `config_diff`, parameters, credentials, keystore, Partner Directory dependencies and diff, runtime status |
 | `improve` | quality | `lint`, `lint_fix`, `layout_iflow`, graph, `drift`, `compare`, `bump_versions` |
-| `partner-directory` | Partner Directory | `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff` |
-| `security` | security material (read) | `list_credentials`, `list_keystore` |
+| `partner-directory` | Partner Directory | `list_pd_partners`, `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff`, alternative partners and authorized users (list, create) |
+| `security` | security material | `list_credentials`, `list_keystore`, `list_keystore_history`, `get_certificate_chain`, `get_csr`, `get_ssh_public_key`, `generate_key_pair`, `upload_certificate_chain`, `list_pgp_keys`, access policies (list, create, add reference), `list_audit_logs` |
 
-`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `delete_artifact`, `delete_package` and
-`delete_jms_messages` are in no toolset: offer them explicitly with `--tools`. `list_locks` is in
-`inspect` and `build`; `list_value_mappings` and `get_value_mapping` are in `inspect` and `build`,
+`undeploy`, `delete_data_store_entry` and the opt-in tools (`unlock_artifact`, the delete tools
+above) are in no toolset: offer them explicitly with `--tools`. `list_locks` is in `inspect` and
+`build`; `list_value_mappings` and `get_value_mapping` are in `inspect` and `build`,
 `set_value_mapping` in `build`; `list_components` in `build` and `improve`.
 
 ```json
@@ -202,7 +205,7 @@ leaves a tool enabled by accident.
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state` | removed |
+| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
 
 ```json
 "cpi-qa":   { "command": "cpictl", "args": ["mcp", "--root", ".", "--read-only"] },
@@ -276,8 +279,20 @@ read roles.
 | `list_number_ranges` | | Number range objects and current values |
 | `list_log_files`, `get_log_file` | | System / HTTP log files and the end of one (adapter errors without a message log) |
 | `list_idempotent_entries`, `list_id_mappings` | | Entries ignored as duplicates; ID mapper entries |
-| `list_credentials` | | User credentials, OAuth2 client credentials, secure parameters: names and metadata, never secrets |
+| `list_credentials` | | User credentials, OAuth2 client credentials, OAuth2 authorization code credentials, secure parameters: names and metadata, never secrets or refresh tokens |
 | `list_keystore` | | Keystore entries with validity and days left; `expiring_within_days` flags soon-expiring ones |
+| `list_keystore_history` | | Former versions of keystore entries (replaced by renewals or updates) |
+| `get_certificate_chain` | | Certificate chain of a key pair (self-signed or CA-signed?) |
+| `get_csr` | | Certificate signing request (PKCS#10, PEM) of a key pair, for a CA |
+| `get_ssh_public_key` | | Public key of an entry in OpenSSH format (for an SFTP server's `authorized_keys`) |
+| `generate_key_pair` | keystore | The tenant generates a key pair (self-signed; RSA 2048, one year by default); `update` replaces an alias |
+| `upload_certificate_chain` | keystore | Replace a key pair's certificate with the CA-signed chain (PEM; private keys refused) |
+| `delete_keystore_entry` | keystore, **destructive**, opt-in | Delete an entry of the system keystore (not SAP-owned ones); requires `confirm: true` and `--tools delete_keystore_entry` |
+| `list_pgp_keys` | | PGP public and secret keys: key ID, user IDs, sub keys, validity (never key material) |
+| `list_access_policies` | | Access policies (role) with their artifact references |
+| `create_access_policy`, `add_artifact_reference` | access policies | Create a policy for a role (optionally with references); add a reference (type, attribute, `EXACT_MATCH` / `REGULAR_EXPRESSION`) |
+| `delete_access_policy`, `delete_artifact_reference` | access policies, **destructive**, opt-in | Delete a policy (with its references) or one reference; requires `confirm: true` and `--tools` naming the tool |
+| `list_audit_logs` | | Audit log, newest first (`since`, `top`, `user`, `object`); `status: "missing_role"` (ok) when the key may not read it (HTTP 403) |
 | `lint` | | Local flows: findings per rule (reuse, Partner Directory candidates, dead weight, simplify, robustness, performance, configuration, hygiene) with suggestions; `.cpi/lint.yaml`, baseline. See [lint.md](lint.md) |
 | `lint_fix` | local files | Apply the mechanical fixes: scripts into script collections, unused scripts deleted, unconnected steps removed; `dry_run` |
 | `layout_iflow` | local files | Lay out the diagram of `.iflw` files: flow order left to right, branches one below the other, no overlaps, right-angled lines; only the diagram changes. `mode` tidy / full, `check`, `dry_run`. See [lint.md](lint.md#diagram-layout) |
@@ -289,6 +304,10 @@ read roles.
 | `graph_neighbors` | | What a node is connected to: callers and callees of a flow (`sends_to`), users of a credential, script, header or PD parameter; `direction`, `edge_types`, `depth` |
 | `graph_path` | | Shortest connection between two nodes (default: how messages move, through ProcessDirect/JMS addresses) |
 | `undeploy` | runtime, **destructive** | Remove from runtime and wait; requires `confirm: true` |
+| `list_pd_partners` | | Partner IDs with the number of string and binary parameters, binary content types, alternative partners, authorized users; values are not read (`sizes: true` reads the binaries for their total size) |
+| `list_alternative_partners`, `list_authorized_users` | | Alternative partners (agency / scheme / ID -> PID) and authorized users (user -> PID) |
+| `create_alternative_partner`, `create_authorized_user` | Partner Directory | Add an alternative partner or an authorized user |
+| `delete_alternative_partner`, `delete_authorized_user` | Partner Directory, **destructive**, opt-in | Remove one; requires `confirm: true` and `--tools` naming the tool |
 | `get_pd_parameters` | | Partner Directory parameters of one PID (binaries: content type, size, sha256; content with `include_content`) |
 | `pd_diff` | | Local Partner Directory files vs tenant: create / update / unchanged / remote_only per parameter |
 | `pd_dependencies` | | Which local flows reference which Partner Directory parameters; dynamic references; unknown PIDs |
@@ -405,6 +424,8 @@ For autonomous build/test/fix loops the server enforces limits the model cannot 
   of a partner whose local files could not be read.
 - Local paths cannot escape `--root`.
 - Long-running calls are cancelled on `notifications/cancelled` and when the server stops.
-- Credentials are never part of tool results or logs. Security material is read-only: there
-  is no tool that creates or changes credentials or keys, so secrets never pass through the
-  model. Deploy them with `cpictl credentials` ([security.md](security.md)).
+- Credentials are never part of tool results or logs. No tool takes or returns a secret or a
+  private key: credentials, SSH key import and PGP keyrings are CLI commands (`cpictl
+  credentials`, `keystore generate-ssh-key`, `pgp import-public`, see [security.md](security.md)).
+  `generate_key_pair` has the tenant create the key; only certificates, CSRs and public keys pass
+  through the model.

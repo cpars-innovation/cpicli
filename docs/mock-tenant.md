@@ -173,6 +173,13 @@ The built-in demo is a landscape of this format (`internal/cpitest/landscapes/de
   Default values are always empty.
 - Deleting a designtime artifact keeps a deployed one running; deleting a package deletes its
   designtime artifacts. Deploying with a type the artifact does not have answers 404.
+- Security material: key pairs and SSH keys can be generated (the mock creates a real key, so
+  `keystore csr` returns a valid PKCS#10 and `upload-chain` accepts the signed chain), entries
+  deleted (SAP-owned ones refuse), and the keystore history, PGP keyrings and keys, OAuth2
+  authorization code credentials, access policies with artifact references and the audit log are
+  served (empty unless set in Go tests: `Tenant.SecurityMaterial`). `Partners`, alternative
+  partners and authorized users of the Partner Directory work the same way; parameter listings
+  honour `$select` (no values without `Value`).
 - Data stores and log files answer with empty lists; APIs the mock does not know answer 404.
 
 ## Execution

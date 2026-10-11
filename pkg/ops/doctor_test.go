@@ -23,6 +23,9 @@ func TestDoctorProbesAndErrorText(t *testing.T) {
 		case "/api/v1/DataStores":
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":{"code":"Bad Request","message":{"lang":"en","value":"Data store service not enabled"}}}`))
+		case "/api/v1/AuditLogs":
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"error":{"code":"Forbidden","message":{"lang":"en","value":null}}}`))
 		case "/api/v1/LogFiles":
 			w.WriteHeader(http.StatusNotImplemented)
 			_, _ = w.Write([]byte("Not supported\n"))
@@ -47,6 +50,7 @@ func TestDoctorProbesAndErrorText(t *testing.T) {
 	assert.Equal(t, CheckMissing, byName["log files"].Status)
 	assert.Contains(t, byName["log files"].Detail, "501")
 	assert.Contains(t, byName["log files"].Detail, ": Not supported")
+	assert.Equal(t, CheckForbidden, byName["audit log"].Status, "as on a trial tenant")
 }
 
 func TestAPIErrorMessage(t *testing.T) {

@@ -67,6 +67,34 @@ All notable changes to cpictl. Coming from FlashPipe? See
   `lastErrorModelStepId`, the `.iflw` element where the message failed) and print adapter
   attributes; `logs steps --properties` / `get_message_steps properties` add each step's
   properties (`RunSteps?$expand=RunStepProperties`, the only way the tenant serves them).
+- Security material beyond credentials and certificates (verified read-only on a real tenant
+  where it had data; write payloads follow the API's metadata and are not yet verified on a tenant):
+  - `cpictl keystore generate-key-pair`, `generate-ssh-key` (generated, or `--ssh-file` import with
+    the password from env/file/stdin), `csr` (PKCS#10 PEM of a key pair), `upload-chain` (the CA's
+    answer), `chain`, `ssh-public-key` (OpenSSH format), `history` (`HistoryKeystoreEntries`) and
+    `delete --confirm` (SAP-owned entries refused). The API offers no restore of history or backup
+    entries.
+  - `cpictl pgp list` (public and secret keys with user IDs and sub keys, never key material),
+    `pgp export-public`, `pgp import-public --confirm` (replaces the public keyring).
+  - `credentials list` includes OAuth2 authorization code credentials (`--kind oauth2-authcode`;
+    no client secret or refresh token).
+  - `cpictl access-policies list|create|delete|add-reference|delete-reference`.
+  - `cpictl audit-log --since 24h [--user] [--object]`; a 403 (no role, as on trial tenants) is a
+    `missing_role` result, and `cpictl doctor` probes the audit log.
+- Partner Directory: `cpictl pd list` / `ops.ListPDPartners` (per partner: string and binary
+  counts, content types, alternative partners, authorized users; values are not downloaded,
+  `--sizes` adds the binary bytes), `pd alternative-partners list|create|delete` and
+  `pd authorized-users list|create|delete`. `ops.PDContentTypes` lists SAP's binary content types
+  with extensions and MIME types; `pd-deploy --keys` now maps `.txt`, `.zip`, `.gz`, `.zlib` and
+  `.crt` files too.
+- MCP: `list_keystore_history`, `get_certificate_chain`, `get_csr`, `get_ssh_public_key`,
+  `generate_key_pair`, `upload_certificate_chain`, `list_pgp_keys`, `list_access_policies`,
+  `create_access_policy`, `add_artifact_reference`, `list_audit_logs`, `list_pd_partners`,
+  `list_alternative_partners`, `create_alternative_partner`, `list_authorized_users`,
+  `create_authorized_user`. The delete tools (`delete_keystore_entry`, `delete_access_policy`,
+  `delete_artifact_reference`, `delete_alternative_partner`, `delete_authorized_user`) need
+  `confirm: true` and are **opt-in** like `unlock_artifact`. The `security` and
+  `partner-directory` toolsets include the new tools. The mock tenant serves all of them.
 
 - `cpictl locks list` / `locks unlock --artifact-id X --confirm`: edit locks of artifacts (who holds
   one, since when) and removing one, as Unlock in the Web UI (the holder's unsaved changes are
