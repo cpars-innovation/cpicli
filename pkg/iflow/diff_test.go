@@ -63,7 +63,7 @@ func TestDiffModels(t *testing.T) {
 			}},
 			{ID: "EndEvent_1", Type: "endEvent", Kind: "MessageEndEvent", Name: "End", Change: ChangeChanged, Moved: true},
 			{ID: "MessageFlow_R0", Type: "messageFlow", Kind: "HTTP", Name: "HTTP", Change: ChangeChanged, Properties: []PropertyChange{
-				{Key: "credentialName", Change: ChangeChanged, A: MaskedValue, B: MaskedValue},
+				{Key: "credentialName", Change: ChangeChanged, A: "ERP_User", B: "ERP_User_2"},
 			}},
 			{ID: "MessageFlow_Sender", Type: "messageFlow", Kind: "ProcessDirect", Name: "ProcessDirect", Change: ChangeChanged, Properties: []PropertyChange{
 				{Key: "address", Change: ChangeChanged, A: "/orders/route", B: "/orders/route/v2"},
@@ -166,7 +166,7 @@ func TestModelDiffSummary(t *testing.T) {
 		"~ integration flow: log: All events -> Errors only",
 		"+ step CallActivity_1 (GroovyScript 'Map')",
 		"~ event EndEvent_1 (MessageEndEvent 'End'): moved",
-		"~ adapter MessageFlow_R0 (HTTP): credentialName: *** -> ***",
+		"~ adapter MessageFlow_R0 (HTTP): credentialName: ERP_User -> ERP_User_2",
 		"~ adapter MessageFlow_Sender (ProcessDirect): address: /orders/route -> /orders/route/v2",
 		"~ step ServiceTask_0 (ExternalCall 'Call S/4HANA'): renamed 'Call ERP' -> 'Call S/4HANA'",
 		"- flow SequenceFlow_1 (ServiceTask_0 -> EndEvent_1)",

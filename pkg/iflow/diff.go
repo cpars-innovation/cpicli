@@ -322,12 +322,20 @@ func propertyChanges(a, b map[string]string) []PropertyChange {
 		default:
 			continue
 		}
-		if SensitiveName(k) {
+		if SensitiveName(k) && !referenceName(k) {
 			c.A, c.B = mask(c.A), mask(c.B)
 		}
 		out = append(out, c)
 	}
 	return out
+}
+
+// referenceName tells whether a property names a deployed artifact (a
+// credential or key alias such as credentialName, privateKeyAlias) rather
+// than holding a secret: its value is shown.
+func referenceName(key string) bool {
+	k := strings.ToLower(key)
+	return strings.HasSuffix(k, "name") || strings.HasSuffix(k, "alias")
 }
 
 func mask(v string) string {

@@ -282,7 +282,7 @@ d, err = iflow.DiffModelsWith(a, b, iflow.DiffOptions{IgnoreGeometry: true})
   `@sourceRef` / `@targetRef` (message and sequence flows), `@processRef` (pools), `@type` (the
   BPMN tag changed), `@triggeredByEvent`, `@condition` (sequence flows), `@name` (collaboration).
 - `Moved` marks a changed shape bounds or line waypoints (BPMN DI); geometry is never a property.
-- Values of keys for which `iflow.SensitiveName` is true are `iflow.MaskedValue` (`***`).
+- Values of keys for which `iflow.SensitiveName` is true are `iflow.MaskedValue` (`***`), except keys ending in `Name` or `Alias` (artifact references such as `credentialName`).
   `ops.SensitiveName` is the same check.
 - Sorted by ID, then key; `d.Empty()` is true for models that differ only in formatting.
 - `ops.CompareOptions.Model` adds it to each changed `.iflw` of `ops.Compare`

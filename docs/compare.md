@@ -53,7 +53,7 @@ content_differs   Orders/Orders_Route (test: 1.0.6, prod: 1.0.5)
       ~ integration flow: log: All events -> Errors only
       + step CallActivity_1 (GroovyScript 'Map')
       ~ event EndEvent_1 (MessageEndEvent 'End'): moved
-      ~ adapter MessageFlow_R0 (HTTP): credentialName: *** -> ***
+      ~ adapter MessageFlow_R0 (HTTP): credentialName: ERP_User -> ERP_User_2
       ~ adapter MessageFlow_Sender (ProcessDirect): address: /orders/route -> /orders/route/v2
       ~ step ServiceTask_0 (ExternalCall 'Call S/4HANA'): renamed 'Call ERP' -> 'Call S/4HANA'
       - flow SequenceFlow_1 (ServiceTask_0 -> EndEvent_1)
@@ -74,7 +74,7 @@ content_differs   Orders/Orders_Route (test: 1.0.6, prod: 1.0.5)
 - **Geometry**: a shape or line that only moved (BPMN DI bounds or waypoints) sets `moved` and is
   no property change; a file that differs only in formatting has an empty model diff.
 - **Sensitive values**: values of properties whose keys look sensitive (password, secret, token,
-  credential, API key, authorization, cookie) are `***`.
+  credential, API key, authorization, cookie) are `***`; names of deployed artifacts (keys ending in `Name` or `Alias`, such as `credentialName`) are shown.
 - Everything is sorted by ID, then key. A file that is not a BPMN model has `modelError`.
 
 `--package` / `--artifact` (IDs or patterns) limit the comparison and the downloads; `--parallel`
