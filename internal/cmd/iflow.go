@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/cpars-innovation/cpicli/internal/config"
@@ -108,7 +109,7 @@ error the target directory is left as it was.`,
 	cp.Flags().StringArray("address", nil, "New sender address: NEW (one sender) or OLD=NEW (repeatable)")
 	cp.Flags().Bool("keep-addresses", false, "Allow sender addresses that stay the same as in the source")
 	_ = cp.MarkFlagRequired("id")
-	c.AddCommand(cp, newIFlowLayoutCommand())
+	c.AddCommand(cp, newIFlowLayoutCommand(), newIFlowDiagramCommand())
 	return c
 }
 
@@ -181,6 +182,46 @@ Review the result in the Web UI before deploying.`,
 	c.Flags().Bool("dry-run", false, "Compute the layout but write nothing")
 	c.Flags().String("rules", ".cpi/lint.yaml", "Lint config with the layout settings (config: lint.rules)")
 	return c
+}
+
+func newIFlowDiagramCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "diagram <path>",
+		Short: "Read the diagram geometry of an integration flow: shape bounds, line waypoints, pools, steps and adapters (local file)",
+		Long: `Read the diagram (BPMNDiagram) of an .iflw file as a viewer needs it: the bounds
+of each shape and the waypoints of each line by BPMN element ID, the pools
+(participants) and lanes, the steps, events and gateways with their type, name
+and component, the sequence flows and the message flows with their adapter.
+Elements without a shape or line are listed under undrawn.
+
+The path is an .iflw file or a directory with exactly one (an artifact folder).
+Use --output json for the result; the text output is a summary.`,
+		Example:      `  cpictl iflow diagram packages/Orders/OrderIntake --output json`,
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		Annotations:  map[string]string{annotationOffline: "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			files, err := iflow.ModelFiles(args)
+			if err != nil {
+				return output.Usage(err)
+			}
+			if len(files) != 1 {
+				return output.Usage(fmt.Errorf("%s: %d .iflw files, want exactly one", args[0], len(files)))
+			}
+			data, err := os.ReadFile(files[0])
+			if err != nil {
+				return output.Usage(err)
+			}
+			d, err := iflow.ReadDiagram(data)
+			if err != nil {
+				return output.Usage(fmt.Errorf("%s: %w", files[0], err))
+			}
+			output.SetResult(cmd.Context(), d)
+			log.Info().Msgf("%s: %d shape(s), %d line(s), %d pool(s), %d node(s), %d sequence flow(s), %d message flow(s), %d not drawn",
+				files[0], len(d.Shapes), len(d.Edges), len(d.Pools), len(d.Nodes), len(d.SequenceFlows), len(d.MessageFlows), len(d.Undrawn))
+			return nil
+		},
+	}
 }
 
 func logLayout(rep *iflow.LayoutReport) {
