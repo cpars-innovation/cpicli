@@ -107,3 +107,57 @@ func TestToolsDocumented(t *testing.T) {
 		assert.Contains(t, string(doc), "`"+name+"`", "docs/mcp.md does not mention %s", name)
 	}
 }
+
+func TestHelpInstructionsPerToolset(t *testing.T) {
+	for _, f := range instructionFragments {
+		for _, set := range f.toolsets {
+			_, ok := Toolsets[set]
+			assert.True(t, ok || set == OtherToolset, "fragment keyed by unknown toolset %q", set)
+		}
+	}
+	all := Tools(Config{})
+	kept, _, err := ApplyFilters(all, "", ToolFilter{Allow: []string{"doctor", "list_jms_messages", "message_summary"}})
+	require.NoError(t, err)
+	help := HelpTool(HelpInfo{Tools: kept, ServerInstructions: ModeInstructions("operate")})
+	call := func(args map[string]any) (map[string]any, error) {
+		raw, _ := json.Marshal(args)
+		res, err := help.Handler(context.Background(), raw)
+		if err != nil {
+			return nil, err
+		}
+		return res.(map[string]any), nil
+	}
+
+	// explicit toolsets
+	res, err := call(map[string]any{"topic": "instructions", "toolsets": []string{"build"}})
+	require.NoError(t, err)
+	text := res["instructions"].(string)
+	assert.Contains(t, text, "Call help", "general part")
+	assert.Contains(t, text, "errorCategory", "general part")
+	assert.Contains(t, text, "Build loop")
+	assert.Contains(t, text, "check_guidelines")
+	assert.NotContains(t, text, "JMS:")
+	assert.NotContains(t, text, "Security material")
+	assert.Contains(t, text, "Mode: operate", "server-specific part")
+	assert.Less(t, len(text), len(Instructions))
+
+	// default: the toolsets of the available tools
+	res, err = call(map[string]any{"topic": "instructions"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"monitor"}, res["toolsets"])
+	assert.Equal(t, "active", res["toolsetsSource"])
+	text = res["instructions"].(string)
+	assert.Contains(t, text, "JMS:")
+	assert.NotContains(t, text, "Build loop")
+
+	// dynamic: the enabled toolsets
+	help = HelpTool(HelpInfo{Tools: all, ActiveToolsets: func() []string { return []string{"security"} }})
+	res, err = call(map[string]any{"topic": "instructions"})
+	require.NoError(t, err)
+	assert.Contains(t, res["instructions"], "Security material")
+	assert.NotContains(t, res["instructions"], "JMS:")
+
+	_, err = call(map[string]any{"topic": "instructions", "toolsets": []string{"bogus"}})
+	assert.ErrorContains(t, err, "invalid toolset")
+	assert.Equal(t, Instructions, ToolsetInstructions(append(ToolsetNames(), OtherToolset)), "all toolsets give the full instructions")
+}

@@ -249,7 +249,7 @@ read roles.
 
 | Tool | Changes | Purpose |
 |------|---------|---------|
-| `help` | | What this server offers: tools after mode and filters, the cpi skills (with their instructions), the CLI commands, and which tools and skill fit common tasks. `topic` for one tool, skill, skill file or command. Always available. See [Finding your way](#finding-your-way) |
+| `help` | | What this server offers: tools after mode and filters, the cpi skills (with their instructions), the CLI commands, and which tools and skill fit common tasks. `topic` for one tool, skill, skill file or command; `topic: "instructions"` with `toolsets` for the server instructions of those toolsets. Always available. See [Finding your way](#finding-your-way) |
 | `doctor` | | Connection and roles: per API area ok / forbidden (403, missing role) / missing (404), and which tools need it. Same as `cpictl doctor` |
 | `list_packages` | | All integration packages (cached for `--cache-ttl`; `refresh: true` re-reads) |
 | `create_package` | designtime | Create a package if it does not exist (`CREATED` / `EXISTS`, never changes one) |
@@ -364,10 +364,49 @@ the mode and tool filters, so it reports what is really available on this server
 | `help {"topic": "cpi-plan/brief-template.md"}` | One reference file of a skill |
 | `help {"topic": "iflow copy"}` | Usage, description and flags of a CLI command |
 | `help {"topic": "workflows"}` | Only the task overview (also `tools`, `skills`, `cli`) |
+| `help {"topic": "instructions", "toolsets": ["build", "test"]}` | The server instructions for these toolsets only: the general part (help, result format, mode, loop policy) plus the sections of the tools in these toolsets (`other`: tools in no toolset, such as `undeploy`). Without `toolsets`: the active ones (the toolsets with tools after mode and filters; with `--dynamic-toolsets` the enabled ones). `toolsetsSource` says which (`requested`, `active`) |
 
 Typical questions it answers: "what can you do on this tenant?", "which tool finds the flows that
 call X?", "how do I test a ProcessDirect flow?". On the command line the same information is in
 `cpictl --help`, `cpictl <command> --help`, [commands.md](commands.md) and `cpictl skills list`.
+
+A client that enables only some toolsets (its own tool selection, or `--dynamic-toolsets`) can
+replace the server instructions from `initialize`, which describe all tools, with
+`help {"topic": "instructions", "toolsets": [...]}` for the enabled toolsets.
+
+### Resources
+
+The server also offers MCP resources (`resources/list`, `resources/read`; the `resources`
+capability in `initialize`), for clients that attach documents to the context instead of calling
+`help`:
+
+| URI | mimeType | Content |
+|-----|----------|---------|
+| `cpictl://skills/<name>` | `text/markdown` | A skill's `SKILL.md` (as `help {"topic": "<name>"}`) |
+| `cpictl://skills/<name>/<file>` | by extension | A reference file of a skill |
+| `cpictl://workflows` | `application/json` | The workflows (task -> skill, tools, docs), as `help {"topic": "workflows"}` |
+| `cpictl://loops/<loop id>` | `text/markdown` | The journal `loop_end` wrote to `.cpi/loops/<loop id>.md` under `--root` |
+
+Loop journals are listed as they exist under `--root` when `resources/list` is called. Reads stay
+inside `--root`: a loop URI must be a plain loop ID (no `/`, `..` or encoded separators) and is
+an invalid-params error otherwise. Unknown URIs are a JSON-RPC error (`-32002`, resource not
+found). There are no prompts (`prompts/list` is not implemented) and no resource subscriptions.
+
+### Progress and cancellation
+
+When `tools/call` carries `_meta.progressToken`, long tools send `notifications/progress`
+(`progressToken`, `progress`, `total` when known, `message`) while they run, and none after the
+result:
+
+| Tool | Progress |
+|------|----------|
+| `deploy`, `undeploy` | every status check: `artifact Orders: STARTING, check 3/30`; `total` is `max_checks` times the number of artifacts (an upper bound: an artifact that is done early stops counting) |
+| `discover_tenant` | each phase (packages, runtime artifacts, artifacts per package) and each analysed flow (`analysed integration flow X (4/20)`); `total` once the flows are known |
+| `check_guidelines` | every poll of the execution status; `total` is the highest number of polls within `timeout_seconds` |
+| `send_test_message` with `wait_seconds` | every poll for the message processing log |
+
+Without a token nothing is sent. `notifications/cancelled` with the request's ID cancels the
+running call (tenant requests and waits end); the call then returns an error result.
 
 ## Result format
 

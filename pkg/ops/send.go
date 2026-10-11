@@ -43,6 +43,8 @@ type TestMessage struct {
 	// (unless Headers already has one) and its trace ID returned, so the
 	// message can be followed with TraceTreeFor.
 	NoTrace bool
+	// Progress, when set, receives every poll while waiting (Wait).
+	Progress ProgressFunc
 }
 
 // DefaultHarnessID is the test harness flow: an HTTPS sender that forwards
@@ -194,10 +196,11 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 		sent.HarnessMessageGuid, sent.MessageGuid = sent.MessageGuid, ""
 	}
 	if m.Wait > 0 && !authFailed {
+		prog := newProgress(m.Progress)
 		if sent.Harness != "" {
-			sent.Log, err = waitForHarnessTarget(ctx, exe, sent, m.Wait, m.PollInterval)
+			sent.Log, err = waitForHarnessTarget(ctx, exe, sent, m.Wait, m.PollInterval, prog)
 		} else {
-			sent.Log, err = waitForMessage(ctx, exe, sent, m.Wait, m.PollInterval)
+			sent.Log, err = waitForMessage(ctx, exe, sent, m.Wait, m.PollInterval, prog)
 		}
 		if err != nil {
 			return sent, err
@@ -228,7 +231,7 @@ func messageHint(s *SentMessage) string {
 // waitForMessage waits until the message log of s is final. Without a message
 // GUID (e.g. no processing log created synchronously) the newest log of the
 // artifact since the send time is used.
-func waitForMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMessage, timeout, interval time.Duration) (*MessageLogDetail, error) {
+func waitForMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMessage, timeout, interval time.Duration, prog *progress) (*MessageLogDetail, error) {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -236,7 +239,7 @@ func waitForMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMess
 	if guid == "" {
 		// Tolerate clock skew between this machine and the tenant
 		q := MessageLogQuery{ArtifactID: s.ArtifactID, Since: s.SentAt.Add(-30 * time.Second), Top: 1}
-		list, err := WaitForMessageLogs(ctx, exe, q, timeout, interval)
+		list, err := waitForMessageLogs(ctx, exe, q, timeout, interval, prog)
 		if err != nil {
 			return nil, err
 		}
@@ -254,6 +257,11 @@ func waitForMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMess
 		if l != nil && slices.Contains(FinalMessageStatuses, l.Status) {
 			return GetMessageLog(exe, guid, 0)
 		}
+		state := "no processing log yet"
+		if l != nil {
+			state = l.Status
+		}
+		prog.report(0, "message %s: %s (poll %d)", guid, state, prog.steps()+1)
 		if time.Now().Add(interval).After(deadline) {
 			return nil, &TimeoutError{Msg: fmt.Sprintf("message %s did not reach a final status within %s", guid, timeout)}
 		}
@@ -266,7 +274,7 @@ func waitForMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMess
 // waitForHarnessTarget waits for the message that the harness passed on: the
 // flow behind the ProcessDirect address shares the harness message's
 // correlation ID.
-func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMessage, timeout, interval time.Duration) (*MessageLogDetail, error) {
+func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMessage, timeout, interval time.Duration, prog *progress) (*MessageLogDetail, error) {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -285,6 +293,7 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 		if time.Now().Add(interval).After(deadline) {
 			return nil, &TimeoutError{Msg: fmt.Sprintf("harness message %s has no processing log within %s", s.HarnessMessageGuid, timeout)}
 		}
+		prog.report(0, "harness message %s: waiting for its correlation ID (poll %d)", s.HarnessMessageGuid, prog.steps()+1)
 		if err := sleep(ctx, interval); err != nil {
 			return nil, err
 		}
@@ -294,7 +303,7 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 	}
 	s.CorrelationID = correlation
 	q := MessageLogQuery{ArtifactID: s.ArtifactID, CorrelationID: correlation, Top: 1}
-	list, err := WaitForMessageLogs(ctx, exe, q, time.Until(deadline), interval)
+	list, err := waitForMessageLogs(ctx, exe, q, time.Until(deadline), interval, prog)
 	if err != nil {
 		return nil, err
 	}

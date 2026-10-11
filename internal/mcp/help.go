@@ -35,6 +35,12 @@ type HelpInfo struct {
 	// (see Redactor).
 	MaskPatterns   []string
 	RedactPayloads bool
+	// ServerInstructions are the server-specific parts of the instructions
+	// (mode, loop policy), appended to help topic "instructions".
+	ServerInstructions string
+	// ActiveToolsets returns the toolsets enabled now (dynamic toolsets);
+	// nil: the toolsets with at least one available tool.
+	ActiveToolsets func() []string
 }
 
 // Workflow is a task with the skill and tools for it.
@@ -149,7 +155,8 @@ func HelpTool(info HelpInfo) Tool {
 			"cli":       commandSummaries(info.Commands),
 			"topics": `help {"topic": X}: X is a tool name (description and input schema), a skill name (its SKILL.md), ` +
 				`"<skill>/<file>" (a reference file of a skill), a CLI command such as "iflow copy" (usage and flags), ` +
-				`or "tools", "toolsets", "skills", "cli", "workflows"`,
+				`or "tools", "toolsets", "skills", "cli", "workflows"; {"topic": "instructions", "toolsets": [...]} gives the server ` +
+				`instructions for those toolsets only (default: the active ones)`,
 			"docs": docsURL,
 		}
 	}
@@ -157,14 +164,16 @@ func HelpTool(info HelpInfo) Tool {
 		Name: "help", Title: "What this server, the skills and the CLI can do",
 		Description: "Overview of the available tools (after the server's mode and filters), the cpi skills (plan, build, test, review, discover) " +
 			"with their instructions, the cpictl CLI commands, and which tools and skill to use for common tasks. With topic: details of one tool, " +
-			"skill, skill file or CLI command. Use it when unsure which tool or skill fits, or to read a skill in a client that does not load skills. Reads nothing remote.",
+			"skill, skill file or CLI command; topic \"instructions\" with toolsets returns the server instructions limited to those toolsets. Use it when unsure which tool or skill fits, or to read a skill in a client that does not load skills. Reads nothing remote.",
 		InputSchema: object(props{
-			"topic": str(`Optional: a tool name, a skill name, "<skill>/<file>", a CLI command ("iflow copy"), or "tools", "toolsets", "skills", "cli", "workflows"`),
+			"topic":    str(`Optional: a tool name, a skill name, "<skill>/<file>", a CLI command ("iflow copy"), or "tools", "toolsets", "skills", "cli", "workflows", "instructions"`),
+			"toolsets": strArray(`With topic "instructions": the toolsets to describe (default: the active toolsets of this server)`),
 		}),
 		Annotations: map[string]any{"readOnlyHint": true, "openWorldHint": false},
 		Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var a struct {
-				Topic string `json:"topic"`
+				Topic    string   `json:"topic"`
+				Toolsets []string `json:"toolsets"`
 			}
 			if err := decode(raw, &a); err != nil {
 				return nil, err
@@ -178,6 +187,8 @@ func HelpTool(info HelpInfo) Tool {
 				return map[string]any{topic: ov[topic]}, nil
 			case "cli":
 				return map[string]any{"cli": commandSummaries(info.Commands), "reference": docsURL + "commands.md"}, nil
+			case "instructions":
+				return instructionsFor(info, available, a.Toolsets)
 			}
 			if t, ok := available[topic]; ok && t.Name != "help" {
 				return map[string]any{"tool": t.Name, "title": t.Title, "available": true, "effect": EffectOf(t.Name), "class": ClassOf(t.Name),
@@ -216,6 +227,33 @@ func HelpTool(info HelpInfo) Tool {
 			return nil, output.Usagef("no tool, skill or command %q%s", topic, suggest(topic, available, info.Commands))
 		},
 	}
+}
+
+// instructionsFor is help topic "instructions": the server instructions for
+// the toolsets (default: the active ones).
+func instructionsFor(info HelpInfo, available map[string]Tool, toolsets []string) (any, error) {
+	source := "requested"
+	if len(toolsets) == 0 {
+		source = "active"
+		if info.ActiveToolsets != nil {
+			toolsets = info.ActiveToolsets()
+		} else {
+			for _, set := range toolsetsFor(available) {
+				// doctor is part of every toolset, not a reason for "other"
+				if tools := set["tools"].([]string); set["name"] != OtherToolset || slices.ContainsFunc(tools, func(t string) bool { return t != "doctor" }) {
+					toolsets = append(toolsets, set["name"].(string))
+				}
+			}
+		}
+	}
+	for i, n := range toolsets {
+		toolsets[i] = strings.TrimSpace(n)
+		if _, ok := Toolsets[toolsets[i]]; !ok && toolsets[i] != OtherToolset {
+			return nil, output.Usagef("invalid toolset %q (%s, %s)", n, strings.Join(ToolsetNames(), ", "), OtherToolset)
+		}
+	}
+	return map[string]any{"toolsets": nonNil(toolsets), "toolsetsSource": source,
+		"instructions": ToolsetInstructions(toolsets) + info.ServerInstructions}, nil
 }
 
 func workflowsFor(available map[string]Tool) []Workflow {

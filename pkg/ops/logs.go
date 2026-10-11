@@ -148,6 +148,10 @@ func (e *TimeoutError) ExitCode() int { return exitcode.Timeout }
 // until timeout. Use Since = the time a test message was sent. On timeout the
 // last result is returned together with a *TimeoutError.
 func WaitForMessageLogs(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessageLogQuery, timeout, interval time.Duration) (*MessageLogList, error) {
+	return waitForMessageLogs(ctx, exe, q, timeout, interval, nil)
+}
+
+func waitForMessageLogs(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessageLogQuery, timeout, interval time.Duration, prog *progress) (*MessageLogList, error) {
 	exe = exe.WithContext(ctx)
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -160,6 +164,11 @@ func WaitForMessageLogs(ctx context.Context, exe *httpclnt.HTTPExecuter, q Messa
 		}
 		if err == nil && len(res.Logs) > 0 && allFinal(res.Logs) {
 			return res, nil
+		}
+		if res != nil && len(res.Logs) > 0 {
+			prog.report(0, "%d message(s) found, waiting for a final status (poll %d)", len(res.Logs), prog.steps()+1)
+		} else {
+			prog.report(0, "waiting for the message processing log (poll %d)", prog.steps()+1)
 		}
 		if time.Now().Add(interval).After(deadline) {
 			msg := fmt.Sprintf("no final message processing log within %s", timeout)

@@ -5,6 +5,24 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- MCP instructions per toolset: `help {"topic": "instructions", "toolsets": ["build", …]}`
+  returns the server instructions for those toolsets only (the general part, mode and loop policy,
+  plus the sections of their tools); without `toolsets` the active ones (after `--mode`, `--tools`,
+  `--toolset`; with `--dynamic-toolsets` the enabled ones). The instructions are now built from
+  fragments keyed by toolset, separated by blank lines.
+- MCP progress: a `tools/call` with `_meta.progressToken` gets `notifications/progress` while
+  `deploy`/`undeploy` poll the runtime status ("artifact X: STARTING, check 3/30"),
+  `discover_tenant` runs its phases, `check_guidelines` polls and `send_test_message` waits.
+  For Go callers: `ops.Progress`/`ops.ProgressFunc`, and the optional `Progress` field of
+  `ops.Options`, `ops.DiscoverOptions` and `ops.TestMessage`; `ops.CheckGuidelinesWith` with
+  `ops.GuidelineOptions` (`CheckGuidelines` is unchanged).
+- MCP resources: `resources/list` and `resources/read` (capability `resources`) offer the cpi
+  skills and their files (`cpictl://skills/<name>[/<file>]`), the workflows
+  (`cpictl://workflows`) and the loop journals under `--root` (`cpictl://loops/<id>`,
+  `text/markdown`). Unknown URIs are JSON-RPC errors; loop URIs cannot leave the root.
+- Fix (MCP): a `notifications/cancelled` sent right after its `tools/call` could arrive before the
+  call was registered and be ignored; calls are now registered before they start.
+
 - Component catalogue: `sourceDates` records when the editor metadata was imported and when
   versions were last learned (`generatedAt` changes with every write); `components list` prints
   the editor metadata's age.

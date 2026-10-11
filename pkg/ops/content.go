@@ -117,13 +117,32 @@ func guidelinePending(status string) bool {
 // an integration flow and waits for the result. Violations return the report
 // together with an error (exit code 5).
 func CheckGuidelines(ctx context.Context, exe *httpclnt.HTTPExecuter, id, version string, timeout, interval time.Duration) (*GuidelineReport, error) {
+	return CheckGuidelinesWith(ctx, exe, id, GuidelineOptions{Version: version, Timeout: timeout, Interval: interval})
+}
+
+// GuidelineOptions control CheckGuidelinesWith.
+type GuidelineOptions struct {
+	// Version is the designtime version (default "active").
+	Version string
+	// Timeout is the maximum wait for the result, Interval the time
+	// between two polls (default 3s).
+	Timeout, Interval time.Duration
+	// Progress, when set, receives every poll of the execution status.
+	Progress ProgressFunc
+}
+
+// CheckGuidelinesWith is CheckGuidelines with options.
+func CheckGuidelinesWith(ctx context.Context, exe *httpclnt.HTTPExecuter, id string, opts GuidelineOptions) (*GuidelineReport, error) {
 	exe = exe.WithContext(ctx)
+	version, timeout, interval := opts.Version, opts.Timeout, opts.Interval
 	if id == "" {
 		return nil, output.Usagef("artifact ID is required")
 	}
 	if interval <= 0 {
 		interval = 3 * time.Second
 	}
+	prog := newProgress(opts.Progress)
+	maxPolls := int(timeout/interval) + 1
 	c := cpi.NewContent(exe)
 	before := map[string]bool{}
 	if previous, err := c.GuidelineExecutions(id, version); err == nil {
@@ -149,6 +168,11 @@ func CheckGuidelines(ctx context.Context, exe *httpclnt.HTTPExecuter, id, versio
 				break
 			}
 		}
+		state := status
+		if state == "" {
+			state = "waiting for the execution"
+		}
+		prog.report(maxPolls, "guideline check of %s: %s, poll %d", id, state, prog.steps()+1)
 		if execID != "" && !guidelinePending(status) {
 			break
 		}

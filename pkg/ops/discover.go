@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
@@ -102,6 +103,10 @@ type DiscoverOptions struct {
 	MaxIFlows int
 	// Parallel downloads (default 4).
 	Parallel int
+	// Progress, when set, receives each phase (packages, runtime
+	// artifacts, artifacts per package) and each analysed flow; Total is
+	// known once the flows are listed.
+	Progress ProgressFunc
 }
 
 // topN limits the aggregated lists.
@@ -116,11 +121,14 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 		opts.Parallel = 4
 	}
 	d := &Discovery{GeneratedAt: time.Now().UTC().Truncate(time.Second), Source: source, Packages: []DiscoveredPackage{}, IFlows: []IFlowFacts{}}
+	prog := newProgress(opts.Progress)
+	prog.report(0, "listing packages")
 	ip := cpi.NewIntegrationPackage(exe)
 	pkgs, err := ip.GetPackagesData()
 	if err != nil {
 		return nil, err
 	}
+	prog.report(0, "listing runtime artifacts (%d packages)", len(pkgs))
 	runtime := map[string]string{}
 	if rts, err := cpi.NewContent(exe).RuntimeArtifacts(nil); err == nil {
 		for _, rt := range rts {
@@ -138,6 +146,7 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 		if len(opts.PackageIDs) > 0 && !slices.Contains(opts.PackageIDs, p.Root.Id) {
 			continue
 		}
+		prog.report(0, "listing artifacts of package %s", p.Root.Id)
 		arts, err := ip.GetAllArtifacts(p.Root.Id)
 		if err != nil {
 			if httpclnt.IsAuthError(err) {
@@ -162,6 +171,8 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 	}
 
 	results := make([]IFlowFacts, len(jobs))
+	listed := prog.steps()
+	var analysed atomic.Int32
 	sem := make(chan struct{}, opts.Parallel)
 	var wg sync.WaitGroup
 	for i, j := range jobs {
@@ -197,6 +208,8 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 				facts.Error = err.Error()
 			}
 			results[i] = *facts
+			n := int(analysed.Add(1))
+			prog.report(listed+len(jobs), "analysed integration flow %s (%d/%d)", j.id, n, len(jobs))
 		}()
 	}
 	wg.Wait()
