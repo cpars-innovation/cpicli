@@ -51,6 +51,9 @@ type Server struct {
 	// redaction, root-relative paths); NewServer sets one with the default
 	// masking.
 	Redactor *Redactor
+	// Root is the server root: resources list and read the loop journals
+	// under it (.cpi/loops); empty: no loop resources.
+	Root string
 
 	writeMu sync.Mutex
 	out     io.Writer
@@ -161,9 +164,26 @@ func (s *Server) dispatch(ctx context.Context, line []byte, wg *sync.WaitGroup) 
 		s.reply(req.ID, map[string]any{}, nil)
 	case "tools/list":
 		s.reply(req.ID, map[string]any{"tools": s.listedTools()}, nil)
+	case "resources/list":
+		s.reply(req.ID, map[string]any{"resources": s.listResources()}, nil)
+	case "resources/read":
+		result, rpcErr := s.readResource(req.Params)
+		s.reply(req.ID, result, rpcErr)
 	case "tools/call":
+		// registered before the call starts, so that a cancellation that
+		// follows right after the request is not missed
+		callCtx, cancel := context.WithCancel(ctx)
+		s.callsMu.Lock()
+		s.calls[string(req.ID)] = cancel
+		s.callsMu.Unlock()
 		wg.Go(func() {
-			result, rpcErr := s.callTool(ctx, req.ID, req.Params)
+			defer func() {
+				s.callsMu.Lock()
+				delete(s.calls, string(req.ID))
+				s.callsMu.Unlock()
+				cancel()
+			}()
+			result, rpcErr := s.callTool(callCtx, req.Params)
 			s.reply(req.ID, result, rpcErr)
 		})
 	case "notifications/cancelled":
@@ -195,9 +215,10 @@ func (s *Server) initialize(params json.RawMessage) any {
 	}
 	return map[string]any{
 		"protocolVersion": version,
-		"capabilities":    map[string]any{"tools": map[string]any{"listChanged": s.dynamic != nil}},
-		"serverInfo":      map[string]any{"name": s.Name, "version": s.Version},
-		"instructions":    s.Instructions,
+		"capabilities": map[string]any{"tools": map[string]any{"listChanged": s.dynamic != nil},
+			"resources": map[string]any{"subscribe": false, "listChanged": false}},
+		"serverInfo":   map[string]any{"name": s.Name, "version": s.Version},
+		"instructions": s.Instructions,
 	}
 }
 
@@ -250,7 +271,8 @@ func errorCategory(err error) string {
 	return Category(output.ExitCode(err))
 }
 
-func (s *Server) callTool(ctx context.Context, id json.RawMessage, params json.RawMessage) (any, *rpcError) {
+// callTool runs a tool; ctx is cancelled by notifications/cancelled.
+func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rpcError) {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -272,16 +294,13 @@ func (s *Server) callTool(ctx context.Context, id json.RawMessage, params json.R
 		p.Arguments = json.RawMessage("{}")
 	}
 
-	callCtx, cancel := context.WithCancel(ctx)
-	s.callsMu.Lock()
-	s.calls[string(id)] = cancel
-	s.callsMu.Unlock()
-	defer func() {
-		s.callsMu.Lock()
-		delete(s.calls, string(id))
-		s.callsMu.Unlock()
-		cancel()
-	}()
+	callCtx := ctx
+	// with _meta.progressToken long tools report notifications/progress
+	if token := progressToken(params); token != nil {
+		var stop func()
+		callCtx, stop = s.withProgress(callCtx, token)
+		defer stop()
+	}
 
 	log.Info().Str("tool", p.Name).Msg("Tool call started")
 	begin := time.Now()

@@ -48,6 +48,26 @@ func TestDeploy_PollsTaskStatusThenRuntime(t *testing.T) {
 	assert.NoError(t, Err(results))
 }
 
+func TestDeploy_Progress(t *testing.T) {
+	var got []Progress
+	opts := fastOpts()
+	opts.Progress = func(p Progress) { got = append(got, p) }
+	results, _ := run(t, map[string]*cpitest.Artifact{
+		"A": {
+			Type: "Integration", DesignVersion: "1.0.1",
+			TaskStatuses: []string{"DEPLOYING", "SUCCESS"},
+			AfterDeploy:  []*cpitest.Runtime{{Version: "1.0.1", Status: "STARTING"}, {Version: "1.0.1", Status: "STARTED", DeployedOn: t1}},
+		},
+	}, []string{"A"}, opts)
+	require.NoError(t, Err(results))
+	require.NotEmpty(t, got)
+	assert.Equal(t, Progress{Step: 1, Total: 5, Message: "artifact A: build and deploy task DEPLOYING, check 1/5"}, got[0])
+	for i, p := range got {
+		assert.Equal(t, i+1, p.Step)
+	}
+	assert.Contains(t, got[len(got)-1].Message, "STARTED")
+}
+
 // TestDeploy_SameVersionRedeployIsNotFalseSuccess reproduces the race where the
 // previous STARTED runtime artifact (same version) is still visible after the
 // redeploy was triggered. It must not be reported as deployed until DeployedOn

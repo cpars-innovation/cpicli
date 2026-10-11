@@ -103,6 +103,24 @@ func (s *Server) listedTools() []Tool {
 	return out
 }
 
+// EnabledToolsets returns the toolsets enabled now in dynamic mode, sorted
+// (nil without dynamic toolsets).
+func (s *Server) EnabledToolsets() []string {
+	if s.dynamic == nil {
+		return nil
+	}
+	s.dynamic.mu.Lock()
+	defer s.dynamic.mu.Unlock()
+	names := []string{}
+	for n, on := range s.dynamic.enabled {
+		if on {
+			names = append(names, n)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 func (s *Server) toolsetNames() []string {
 	names := make([]string, 0, len(s.dynamic.sets))
 	for n := range s.dynamic.sets {

@@ -135,17 +135,23 @@ CPICTL_* environment variables.`,
 				log.Info().Msgf("Tools disabled by configuration: %s", strings.Join(removed, ", "))
 			}
 			// help reports the tools that are really available, so it is added after filtering
-			tools = append(tools, mcp.HelpTool(mcp.HelpInfo{Tools: tools, Removed: removed, Reasons: reasons, Mode: mode, ReadOnly: readOnly,
-				Commands: commandInfos(cmd.Root()), Loop: ledger.Policy, MaskPatterns: maskPatterns, RedactPayloads: redactPayloads}))
-			instructions := mcp.FilteredInstructions(mcp.Instructions, filter, removed) + mcp.ModeInstructions(mode) + mcp.LoopPolicyInstructions(ledger.Policy)
+			var server *mcp.Server
+			help := mcp.HelpInfo{Tools: tools, Removed: removed, Reasons: reasons, Mode: mode, ReadOnly: readOnly,
+				Commands: commandInfos(cmd.Root()), Loop: ledger.Policy, MaskPatterns: maskPatterns, RedactPayloads: redactPayloads,
+				ServerInstructions: mcp.ModeInstructions(mode) + mcp.LoopPolicyInstructions(ledger.Policy)}
+			if dynamic {
+				help.ActiveToolsets = func() []string { return server.EnabledToolsets() }
+			}
+			tools = append(tools, mcp.HelpTool(help))
+			instructions := mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
 			if len(toolsets) > 0 && !dynamic {
 				instructions += "\n\nToolset: " + strings.Join(toolsets, ", ") + ". Only the tools of these tasks are available; call help to see them."
 			}
 			if dynamic {
 				instructions += mcp.DynamicInstructions()
 			}
-			server := mcp.NewServer("cpicli", version, instructions, tools)
-			server.Removed, server.Redactor = reasons, redactor
+			server = mcp.NewServer("cpicli", version, instructions, tools)
+			server.Removed, server.Redactor, server.Root = reasons, redactor, root
 			if dynamic {
 				if err := server.UseDynamicToolsets(toolsets); err != nil {
 					return err
