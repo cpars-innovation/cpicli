@@ -48,6 +48,9 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`keystore import-cert`](#keystore-import-cert) | Import a certificate (PEM or DER) into the tenant keystore |
 | [`keystore list`](#keystore-list) | List keystore entries with remaining validity |
 | [`lint`](#lint) | Check integration flows for reuse, dead weight, Partner Directory candidates and best practices (local files) |
+| [`locks`](#locks) | List the edit locks of artifacts, remove one (unlock) |
+| [`locks list`](#locks-list) | List edit locks (who, since when) |
+| [`locks unlock`](#locks-unlock) | Remove the edit lock of an artifact (requires --confirm) |
 | [`log-files`](#log-files) | List system and HTTP log files of the runtime |
 | [`log-files get`](#log-files-get) | Print the end of a log file |
 | [`log-level`](#log-level) | Set the message processing log level of a deployed integration flow |
@@ -1128,6 +1131,51 @@ removes content modifiers that do nothing). Review the diff, raise the versions
   cpictl lint --update-baseline
   cpictl lint --fix --dry-run
   cpictl lint --fix --package UtilitiesBaseEDM
+```
+
+## locks
+
+List the edit locks of artifacts, remove one (unlock)
+
+```
+An artifact opened for editing in the Web UI is locked for everyone else until the
+editor saves or cancels. A browser closed while editing leaves the lock behind.
+unlock removes it, as "Unlock" in the Web UI does: whoever held the lock loses
+unsaved changes.
+```
+
+**Examples:**
+
+```
+  cpictl locks list
+  cpictl locks list --package-id Orders
+  cpictl locks unlock --artifact-id Orders_In --confirm
+```
+
+## locks list
+
+List edit locks (who, since when)
+
+**Usage:** `cpictl locks list [flags]`
+
+**Flags:**
+
+```
+      --artifact-id string   Only this artifact's lock
+      --package-id string    Only locks in this package
+```
+
+## locks unlock
+
+Remove the edit lock of an artifact (requires --confirm)
+
+**Usage:** `cpictl locks unlock [flags]`
+
+**Flags:**
+
+```
+      --artifact-id string   Artifact to unlock
+      --confirm              Confirm: the editor holding the lock loses unsaved changes
 ```
 
 ## log-files

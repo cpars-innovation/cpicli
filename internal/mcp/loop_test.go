@@ -137,7 +137,7 @@ func TestModes(t *testing.T) {
 
 	kept, _, err = ApplyFilters(all, "develop", ToolFilter{})
 	require.NoError(t, err)
-	assert.Len(t, kept, len(all))
+	assert.Len(t, kept, len(all)-len(optInTools))
 
 	_, _, err = ApplyFilters(all, "admin", ToolFilter{})
 	assert.Error(t, err)
@@ -158,7 +158,25 @@ func TestFullModeAllowsEverything(t *testing.T) {
 	all := NewLedger(t.TempDir()).Wrap(Tools(Config{}))
 	kept, removed, err := ApplyFilters(all, "full", ToolFilter{})
 	require.NoError(t, err)
-	assert.Len(t, kept, len(all))
-	assert.Empty(t, removed)
+	assert.Len(t, kept, len(all)-len(optInTools))
+	assert.Equal(t, optInTools, removed, "opt-in tools need --tools even in full mode")
 	assert.Contains(t, ModeInstructions("full"), "full_sync")
+}
+
+// unlock_artifact is offered only when --tools names it exactly.
+func TestOptInToolNeedsExplicitName(t *testing.T) {
+	all := Tools(Config{})
+	for _, f := range []ToolFilter{{}, {Allow: []string{"*"}}, {Allow: []string{"unlock_*", "list_locks"}}} {
+		kept, removed, err := ApplyFilters(all, "full", f)
+		require.NoError(t, err)
+		assert.NotContains(t, toolNames(kept), "unlock_artifact", "%v", f.Allow)
+		assert.Contains(t, removed, "unlock_artifact")
+	}
+	kept, _, err := ApplyFilters(all, "develop", ToolFilter{Allow: []string{"list_locks", "unlock_artifact"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"list_locks", "unlock_artifact"}, toolNames(kept))
+
+	kept, _, err = ApplyFilters(all, "discover", ToolFilter{Allow: []string{"list_locks", "unlock_artifact"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"list_locks"}, toolNames(kept), "read-only modes still drop it")
 }

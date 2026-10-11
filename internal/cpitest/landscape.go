@@ -54,6 +54,8 @@ type TierSpec struct {
 	// Drafts are artifacts being edited in the Web UI (designtime version
 	// "Active"; the runtime keeps running the last version).
 	Drafts []string `yaml:"drafts"`
+	// Locks are artifacts open for editing, with the user holding the lock.
+	Locks map[string]string `yaml:"locks"`
 	// Parameters are configured values per artifact (as set on this tenant).
 	Parameters map[string]map[string]string `yaml:"parameters"`
 	// ModifiedBy marks artifacts changed on this tenant by someone (drift).
@@ -333,6 +335,11 @@ func (l *Landscape) validate() error {
 				return err
 			}
 		}
+		for id := range t.Locks {
+			if err := known("tier "+t.Name+" locks", id); err != nil {
+				return err
+			}
+		}
 		for _, list := range [][]string{t.Drafts, t.Exclude, t.NotDeployed} {
 			for _, id := range list {
 				if err := known("tier "+t.Name, id); err != nil {
@@ -469,6 +476,12 @@ func SeedLandscape(m *Tenant, l *Landscape, tier string, now time.Time) error {
 			a.ModifiedAt = now.Add(-30 * time.Minute)
 		}
 		m.Artifacts[la.ID] = a
+		if by := t.Locks[la.ID]; by != "" {
+			h := fnv.New64a()
+			_, _ = h.Write([]byte(l.Name + "/" + tier + "/" + la.ID))
+			m.Locks = append(m.Locks, Lock{ResourceID: fmt.Sprintf("%016x%016x", h.Sum64(), l.seed(tier)), ArtifactID: la.ID,
+				CreatedBy: by, CreatedAt: now.Add(-25 * time.Minute)})
+		}
 		if a.Runtime != nil {
 			m.registerEndpoints(la.ID, a)
 		}

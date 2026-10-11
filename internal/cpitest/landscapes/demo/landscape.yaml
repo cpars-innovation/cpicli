@@ -10,6 +10,7 @@ tiers:
   - name: dev
     # dev is ahead: a new flow, Billing_Post being edited in the Web UI
     drafts: [Billing_Post]
+    locks: { Billing_Post: dev.user@customer.example }
     keystore: [{ alias: finance_client, expiresInDays: 300 }]
   - name: test
     versions: { Orders_Route: 1.0.3 }

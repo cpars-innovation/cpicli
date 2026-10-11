@@ -143,6 +143,14 @@ type Package struct {
 	ShortText, Description string
 }
 
+// Lock is an edit lock of an artifact (IntegrationDesigntimeLocks).
+type Lock struct {
+	ResourceID string    `json:"resourceId"`
+	ArtifactID string    `json:"artifactId"`
+	CreatedBy  string    `json:"createdBy"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 // odataError writes an error the way the tenant's OData services do.
 func odataError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -237,6 +245,9 @@ type Tenant struct {
 	Inbound map[string]*Inbound
 	// Received are the messages received by runtime endpoints.
 	Received []ReceivedMessage
+
+	// Locks are the edit locks (artifacts open for editing in the Web UI).
+	Locks []Lock
 
 	mu        sync.Mutex
 	Artifacts map[string]*Artifact
@@ -1101,6 +1112,33 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, map[string]string{"Name": k, "Value": props[k]})
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
+
+	case r.Method == http.MethodGet && path == "/api/v1/IntegrationDesigntimeLocks":
+		rows := []map[string]any{}
+		for _, l := range m.Locks {
+			row := map[string]any{"ResourceId": l.ResourceID, "ArtifactId": l.ArtifactID, "ArtifactType": "INTEGRATION_FLOW",
+				"CreatedBy": l.CreatedBy, "CreatedAt": odataDate(l.CreatedAt)}
+			if a := m.Artifacts[l.ArtifactID]; a != nil {
+				row["ArtifactName"], row["PackageId"] = cmpOr(a.Name, l.ArtifactID), a.Package
+				for _, p := range m.Packages {
+					if p.ID == a.Package {
+						row["PackageName"] = p.Name
+					}
+				}
+			}
+			rows = append(rows, row)
+		}
+		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
+
+	case r.Method == http.MethodDelete && strings.HasPrefix(path, "/api/v1/IntegrationDesigntimeLocks("):
+		id := strings.Trim(strings.TrimSuffix(strings.TrimPrefix(path, "/api/v1/IntegrationDesigntimeLocks("), ")"), "'")
+		i := slices.IndexFunc(m.Locks, func(l Lock) bool { return l.ResourceID == id })
+		if i < 0 {
+			notFound(w)
+			return
+		}
+		m.Locks = slices.Delete(m.Locks, i, i+1)
+		w.WriteHeader(http.StatusOK)
 
 	case r.Method == http.MethodPost && path == "/api/v1/ValidateIntegrationDesigntimeArtifact":
 		a := m.Artifacts[strings.Trim(r.URL.Query().Get("Id"), "'")]

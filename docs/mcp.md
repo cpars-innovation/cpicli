@@ -121,8 +121,12 @@ restrictive wins:
 | `develop` | all tools; `pd_deploy` refuses `full_sync`, `undeploy` needs `confirm` |
 | `full` | all tools without restrictions, including `pd_deploy` with `full_sync` (same as no `--mode`) |
 
-`undeploy` and `delete_data_store_entry` always need `confirm: true`; that is part of the tool,
-not of a mode.
+`undeploy`, `delete_data_store_entry` and `unlock_artifact` always need `confirm: true`; that is
+part of the tool, not of a mode.
+
+`unlock_artifact` is **opt-in**: no mode offers it (not even `full`), only `--tools` naming it
+exactly (`--tools 'list_*,unlock_artifact'`; a pattern such as `unlock_*` or `*` does not count).
+Removing a lock discards the unsaved changes of whoever holds it.
 
 The mode is added to the server instructions.
 
@@ -144,7 +148,8 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 | `partner-directory` | Partner Directory | `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff` |
 | `security` | security material (read) | `list_credentials`, `list_keystore` |
 
-`undeploy` and `delete_data_store_entry` are in no toolset: offer them explicitly with `--tools`.
+`undeploy`, `delete_data_store_entry` and `unlock_artifact` are in no toolset: offer them explicitly
+with `--tools`. `list_locks` is in `inspect` and `build`.
 
 ```json
 "cpi-dev":  { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"] },
@@ -192,7 +197,7 @@ leaves a tool enabled by accident.
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry` | removed |
+| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact` | removed |
 
 ```json
 "cpi-qa":   { "command": "cpictl", "args": ["mcp", "--root", ".", "--read-only"] },
@@ -244,6 +249,8 @@ read roles.
 | `get_trace_message` | | Payload, headers, exchange properties at one traced step (sensitive values masked) |
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
 | `delete_data_store_entry` | tenant, **destructive** | Delete one entry; requires `confirm: true` |
+| `list_locks` | | Artifacts open for editing in the Web UI: artifact, package, who holds the lock, since when |
+| `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--tools unlock_artifact` |
 | `list_variables`, `get_variable` | | Global and flow variables, and a value |
 | `list_jms_queues`, `get_jms_broker` | | Queues with message counts; broker capacity and usage |
 | `list_number_ranges` | | Number range objects and current values |

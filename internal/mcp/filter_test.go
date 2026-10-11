@@ -103,7 +103,7 @@ func TestToolsets(t *testing.T) {
 	}
 	// destructive tools are offered only on request (--tools)
 	for name := range names {
-		if name == "undeploy" || name == "delete_data_store_entry" || name == "doctor" {
+		if name == "undeploy" || name == "delete_data_store_entry" || name == "unlock_artifact" || name == "doctor" {
 			continue
 		}
 		assert.True(t, inSome[name], "tool %s is in no toolset", name)

@@ -49,7 +49,7 @@ The tiers differ the way real ones do:
 |--|-----|------|------|
 | `Orders_Route` | 1.0.4 | 1.0.3 | 1.0.2 |
 | `Returns_In` | 0.1.0 | – | – |
-| `Billing_Post` | draft (edited in the Web UI) | 1.3.1 | 1.3.1, `Timeout` changed on the tenant |
+| `Billing_Post` | draft, locked by `dev.user@customer.example` (open in the Web UI) | 1.3.1 | 1.3.1, `Timeout` changed on the tenant |
 | `Returns_API` credential | yes | yes | missing |
 | `finance_client` certificate | expires in 300 days | 200 days | **20 days** |
 | parameter hosts | `*-dev.example.com` | `*-qa.example.com` | `*-www.example.com` |
@@ -102,6 +102,7 @@ seed: 7                             # optional: change the generated traffic and
 tiers:                              # required, in pipeline order; --tier picks one
   - name: dev
     drafts: [SF_Order_Upsert]       # being edited in the Web UI: designtime "Active"
+    locks: { SF_Order_Upsert: dev.user@customer.example }   # edit lock (cpictl locks list)
   - name: prod-eu
     versions: { S4_Orders_Out: 1.0.2 }                 # designtime and running version
     parameters: { S4_Orders_Out: { Host: s4-prd.example.com } }   # configured on this tenant

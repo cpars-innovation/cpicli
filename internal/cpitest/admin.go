@@ -40,6 +40,7 @@ type mockState struct {
 	Inbound     map[string]*Inbound                  `json:"inbound"`
 	Systems     map[string]SystemSpec                `json:"systems"`
 	LogLevels   map[string]map[string]string         `json:"logLevels"`
+	Locks       []Lock                               `json:"locks"`
 }
 
 // maxRunCount bounds /_mock/run (the runs happen under the tenant's lock).
@@ -203,7 +204,7 @@ func (m *Tenant) fault(path string) *fault {
 
 func (m *Tenant) exportState() mockState {
 	s := mockState{Packages: m.Packages, Artifacts: m.Artifacts, Credentials: m.Credentials, Keystore: m.Keystore,
-		PDStrings: m.PDStrings, PDBinaries: m.PDBinaries, Inbound: m.Inbound, Systems: m.systems, LogLevels: m.LogLevels}
+		PDStrings: m.PDStrings, PDBinaries: m.PDBinaries, Inbound: m.Inbound, Systems: m.systems, LogLevels: m.LogLevels, Locks: m.Locks}
 	if n := len(m.MessageLogSteps); n > 0 {
 		s.MessageLogs = m.MessageLogSteps[n-1]
 	}
@@ -213,6 +214,7 @@ func (m *Tenant) exportState() mockState {
 func (m *Tenant) importState(s mockState) {
 	m.Packages, m.Artifacts, m.Credentials, m.Keystore = s.Packages, s.Artifacts, s.Credentials, s.Keystore
 	m.PDStrings, m.PDBinaries, m.Inbound, m.systems, m.LogLevels = s.PDStrings, s.PDBinaries, s.Inbound, s.Systems, s.LogLevels
+	m.Locks = s.Locks
 	if m.Artifacts == nil {
 		m.Artifacts = map[string]*Artifact{}
 	}

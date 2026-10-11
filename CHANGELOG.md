@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `cpictl locks list` / `locks unlock --artifact-id X --confirm`: edit locks of artifacts (who holds
+  one, since when) and removing one, as Unlock in the Web UI (the holder's unsaved changes are
+  lost). Uses `/api/v1/IntegrationDesigntimeLocks`; verified on a real tenant. MCP: `list_locks`
+  (`inspect`, `build`) and `unlock_artifact`, which needs `confirm: true` and is **opt-in**: no mode
+  offers it, only `--tools` naming it exactly. The mock tenant has locks (landscape tier `locks`;
+  demo dev: `Billing_Post`).
+
 - Mock tenant: the demo flows now pass a real tenant's Check (adapter and step versions and
   properties as SAP's own content has them; `Billing_Post` uses a version 2 Groovy script;
   `Partner_Notify` sends to SFTP from its end event). The mock's `validate` runs a structural check
