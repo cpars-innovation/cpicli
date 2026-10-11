@@ -2,7 +2,8 @@
 
 `cpictl mock-tenant` serves an in-memory mock of the SAP CPI APIs that cpictl uses. It is for
 local development, demos, end-to-end tests of tools built on cpictl (such as a UI or an agent)
-and CI. It never talks to a real tenant, and any credentials are accepted.
+and CI. It never talks to a real tenant. By default any credentials are accepted;
+`--credentials strict` checks them like a tenant (see [Credentials](#credentials)).
 
 ```bash
 cpictl mock-tenant --tier dev --addr 127.0.0.1:8081
@@ -15,10 +16,38 @@ CPICTL_TMN_HOST=http://127.0.0.1:8081
 CPICTL_TMN_USERID=mock
 CPICTL_TMN_PASSWORD=mock
 # or OAuth: CPICTL_OAUTH_HOST=127.0.0.1:8081 CPICTL_OAUTH_CLIENTID=mock CPICTL_OAUTH_CLIENTSECRET=mock
+CPICTL_RUNTIME_OAUTH_HOST=127.0.0.1:8081
+CPICTL_RUNTIME_OAUTH_CLIENTID=mock-rt
+CPICTL_RUNTIME_OAUTH_CLIENTSECRET=mock-rt
+# credentials any: every credential is accepted (--credentials strict checks them like a tenant)
 CPICTL_MOCK_ADMIN_TOKEN=<random token for the /_mock admin API; printed unless you pass --admin-token>
 ```
 
 State is in memory: a restart resets it. Stop it with Ctrl+C.
+
+## Credentials
+
+A Cloud Foundry tenant has two service keys: the **API key** (plan `api`) manages content through
+`/api/v1` but cannot call a flow, the **runtime key** (plan `integration-flow`, role
+`ESBMessaging.send`) calls the flows' endpoints (`/http/...`, `/cxf/...`) but cannot manage
+content. `--credentials` chooses how the mock treats credentials:
+
+| `--credentials` | `/api/v1` | `/http/...`, `/cxf/...` | `/oauth/token` |
+|---|---|---|---|
+| `any` (default) | any credentials | any credentials | a token for any client |
+| `strict` | the API user (`--api-user`/`--api-password`, Basic Auth) or API client (`--api-client-id`/`--api-client-secret`, OAuth or Basic Auth); the runtime client gets **403**, anything else **401** | the runtime client (`--runtime-client-id`/`--runtime-client-secret`, OAuth or Basic Auth); the API user or client gets **403**, anything else **401** | a token per client, for the configured clients only (else 401 `Bad credentials`) |
+
+Defaults: API user `mock`/`mock`, API client `mock`/`mock`, runtime client `mock-rt`/`mock-rt`;
+all are printed at start. `cpictl send` and the MCP tool `send_test_message` use the runtime
+client from `CPICTL_RUNTIME_OAUTH_*` (without it the API credentials, which a strict mock refuses
+on the endpoint like a tenant). Use `strict` in tests that must not pass on the mock and fail on a
+tenant because the runtime key was forgotten:
+
+```bash
+cpictl mock-tenant --tier dev --credentials strict --runtime-client-id rt-client --runtime-client-secret rt-secret
+```
+
+In Go tests: `Tenant.Auth` (`mocktenant.Auth`; nil accepts any credentials).
 
 ## Demo landscape
 
@@ -144,7 +173,10 @@ The built-in demo is a landscape of this format (`internal/cpitest/landscapes/de
 
 - A deploy starts the designtime version (a draft deploys as the version running before); the
   build task reports `SUCCESS`; an undeploy removes the runtime artifact.
-- Uploads (create, update) record `ModifiedBy: mock-user` and the time, and the tenant derives
+- Uploads (create, update, value mapping changes) set `ModifiedAt` and `ModifiedBy` of the
+  designtime artifact like every save on a tenant: `ModifiedBy` is the API user (Basic Auth) or
+  the OAuth client of the request (`mock-user` without credentials). The package's artifact list
+  and the artifact itself report both. The tenant derives
   what a real one does from the archive: the resources (scripts, mappings, schemas, the model)
   and the externalised parameters from `parameters.prop`. A new upload keeps the configured value
   of a parameter that still exists. Like a real tenant, the upload does not take the version from
@@ -180,7 +212,8 @@ The built-in demo is a landscape of this format (`internal/cpitest/landscapes/de
   served (empty unless set in Go tests: `Tenant.SecurityMaterial`). `Partners`, alternative
   partners and authorized users of the Partner Directory work the same way; parameter listings
   honour `$select` (no values without `Value`).
-- Data stores and log files answer with empty lists; APIs the mock does not know answer 404.
+- Data stores and log files answer with empty lists (also with `--seed empty`); APIs the mock does
+  not know answer 404.
 
 ## Execution
 
@@ -217,8 +250,29 @@ executed: the payload passes through unchanged.
   values that are not whole numbers, invalid mail addresses and Groovy steps whose script file is
   missing. It is not SAP's full Check: a flow the mock passes can still fail on a tenant. The demo
   flows pass both (verified on a real tenant).
+- The Check also checks **component versions against the runtime profile** (`integrationcell`),
+  using a component catalogue (see [Component catalogue](#component-catalogue)), with the
+  tenant's messages:
+  - a channel whose variant URI (`cmdVariantUri`) names no variant the catalogue knows (e.g. the
+    old shape `ctype::AdapterVariant/cname::sap:JMS/tp::JMS/direction::Receiver`): `Enter adapter
+    details for channel`;
+  - a channel whose version the profile does not support: `This component HTTP with version 1.0
+    is not supported in integrationcell profile.` The version is the channel's `componentVersion`
+    (without it the tenant reads 1.0). Not supported: a version newer than the catalogue offers
+    (`componentVersion` above its major.minor, or the URI's version above it), and 1.0 of an
+    adapter that has a newer version (what a real tenant answered for HTTPS, HTTP, ProcessDirect
+    and JMS channels with 1.0);
+  - a step whose variant URI version is newer than the catalogue offers (e.g. `GroovyScript`
+    `2.1.0` where the editor offers `2.0.0`).
+
+  The `sourceObject` of these findings is `ComponentMetadataEditor/eid:<id>/etype:<type>/location:<name>`
+  (no `pid`). In Go tests `Tenant.NoComponentCheck` turns the version check off.
 - A failed step has the error and one **trace** (payload, headers, `CamelExceptionCaught`), so
   `logs steps` and `logs trace` show something.
+- **Attachments**: a step whose script writes an attachment (`addAttachmentAsString("Invoice", …)`,
+  `addAttachmentAsBinary`) adds one with that name and the payload to the run's log (demo:
+  `Billing_Post` attaches `Invoice`, so failed postings have a trace and an attachment for
+  `logs payload`).
 - **Business key**: a run gets the landscape's key headers as custom header properties when the
   flow's scripts write them (`addCustomHeaderProperty("OrderNo", …)`), and the key as
   `ApplicationMessageId` when they set `SAP_ApplicationID`. A received message's key is taken from
@@ -231,6 +285,24 @@ executed: the payload passes through unchanged.
   landscape and the tier (or `seed`), so a tier always generates the same history and tiers
   differ. `--live-traffic <speed>` keeps generating messages in real time (`60`: an hour per
   minute): at most one message per millisecond and rule, however high the speed.
+
+## Component catalogue
+
+The version check uses a component catalogue in the format of `cpictl components`
+(`.cpi/components.json`). Built in: SAP's editor metadata of an `integrationcell` tenant (Web UI,
+October 2026; `internal/cpitest/components.json`). A landscape can bring its own, for the whole
+landscape or per tier (a tenant on another release), with a path relative to the landscape
+directory:
+
+```yaml
+components: components.json            # cpictl components import <editor metadata> writes this format
+tiers:
+  - name: prod
+    components: components-prod.json   # this tier's tenant
+```
+
+`cpictl components import` turns the editor metadata the Web UI loads (`/api/1.0/metadata`) into
+such a file. In Go tests: `Tenant.Components` (nil: the built-in catalogue).
 
 ## Admin API (`/_mock/...`)
 
@@ -299,7 +371,7 @@ tools built on cpicli.
 
 Supported entry points: `Serve` and `Start` (a live mock on your listener or on a free loopback
 port), `SeedDemo`, `SeedDir` and `SeedLandscape` (content; `LoadLandscapeDir` reads a landscape),
-`Tenant.MessageLogs` (what the mock logged), and the [admin API](#admin-api-_mock) (set
+`Tenant.Auth` ([credentials](#credentials)), `Tenant.MessageLogs` (what the mock logged), and the [admin API](#admin-api-_mock) (set
 `Tenant.AdminToken` to require a bearer token from every client, otherwise only loopback clients
 are allowed). `Tenant` and the other types are aliases of internal types: besides the entry points,
 rely only on fields such as `Artifacts`, `URL()` and `Executer()`; the test-scripting fields

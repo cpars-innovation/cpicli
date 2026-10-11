@@ -2260,8 +2260,16 @@ Run an in-memory SAP CPI tenant for local development and tests (never a real te
 Serve an in-memory mock of the SAP CPI APIs that cpictl uses: packages,
 artifacts (download, upload, deploy, undeploy), parameters, runtime status,
 endpoints, message processing logs with custom headers, steps and errors,
-credentials, keystore and Partner Directory. Any credentials are accepted
-(Basic Auth with CSRF, or OAuth client credentials at /oauth/token).
+credentials, keystore and Partner Directory. Basic Auth (with CSRF) and OAuth
+client credentials (token at /oauth/token) are accepted.
+
+--credentials any (default) accepts any credentials everywhere. --credentials
+strict checks them like a Cloud Foundry tenant with two service keys: the API
+user and client (--api-*) manage content through /api/v1, the runtime client
+(--runtime-client-*, plan integration-flow) calls the flows' endpoints
+(/http/..., /cxf/...). The other key is refused with 403, wrong credentials with
+401. The credentials are printed at start; cpictl send takes the runtime client
+as CPICTL_RUNTIME_OAUTH_*.
 
 --seed demo loads a demo landscape for --tier dev|test|prod:
   Orders_In -> (ProcessDirect) Orders_Route -> (JMS) Billing_In -> (ProcessDirect)
@@ -2295,17 +2303,24 @@ SSL_CERT_FILE.
 **Flags:**
 
 ```
-      --addr string              Listen address (default "127.0.0.1:8081")
-      --admin-token string       Bearer token for the /_mock admin API (default: a random token, printed at start)
-      --ca-out string            With --tls: file the generated CA certificate is written to (PEM)
-      --live-traffic float       Keep generating the landscape's traffic in real time at this speed (1: as in landscape.yaml, 60: an hour per minute; 0: off)
-      --log-retention duration   How long message logs are kept (older ones are dropped; at most 100000 are kept; 0: no age limit) (default 168h0m0s)
-      --public-url string        Base URL of the flows' runtime endpoints as clients reach the mock, e.g. https://mock-dev:8443 (default: the listen address)
-      --seed string              Content: demo or empty (default "demo")
-      --seed-dir string          Landscape directory to load instead of --seed (landscape.yaml + packages/)
-      --tier string              Tier of the landscape (demo: dev, test, prod) (default "dev")
-      --tls                      Serve HTTPS with a generated certificate (for access from other containers)
-      --tls-hosts strings        Host names and IPs of the generated certificate (default [localhost,127.0.0.1])
+      --addr string                    Listen address (default "127.0.0.1:8081")
+      --admin-token string             Bearer token for the /_mock admin API (default: a random token, printed at start)
+      --api-client-id string           OAuth client ID of the API key (plan api) (default "mock")
+      --api-client-secret string       OAuth client secret of the API key (default "mock")
+      --api-password string            Password of --api-user (default "mock")
+      --api-user string                Basic Auth user of the API (default "mock")
+      --ca-out string                  With --tls: file the generated CA certificate is written to (PEM)
+      --credentials string             Credential check: any (accept all) or strict (API key on /api/v1, runtime key on runtime endpoints, like a tenant) (default "any")
+      --live-traffic float             Keep generating the landscape's traffic in real time at this speed (1: as in landscape.yaml, 60: an hour per minute; 0: off)
+      --log-retention duration         How long message logs are kept (older ones are dropped; at most 100000 are kept; 0: no age limit) (default 168h0m0s)
+      --public-url string              Base URL of the flows' runtime endpoints as clients reach the mock, e.g. https://mock-dev:8443 (default: the listen address)
+      --runtime-client-id string       OAuth client ID of the runtime key (plan integration-flow), for runtime endpoints (default "mock-rt")
+      --runtime-client-secret string   OAuth client secret of the runtime key (default "mock-rt")
+      --seed string                    Content: demo or empty (default "demo")
+      --seed-dir string                Landscape directory to load instead of --seed (landscape.yaml + packages/)
+      --tier string                    Tier of the landscape (demo: dev, test, prod) (default "dev")
+      --tls                            Serve HTTPS with a generated certificate (for access from other containers)
+      --tls-hosts strings              Host names and IPs of the generated certificate (default [localhost,127.0.0.1])
 ```
 
 **Examples:**
@@ -2313,6 +2328,7 @@ SSL_CERT_FILE.
 ```
   cpictl mock-tenant --tier dev --addr 127.0.0.1:8081
   cpictl mock-tenant --seed-dir ./landscapes/retail-b --tier prod-eu --addr 127.0.0.1:8084
+  cpictl mock-tenant --tier dev --credentials strict --runtime-client-id rt-client --runtime-client-secret rt-secret
   cpictl mock-tenant --tier prod --addr 0.0.0.0:8443 --tls --tls-hosts mock-prod,localhost --ca-out /certs/mock-ca.pem
 ```
 

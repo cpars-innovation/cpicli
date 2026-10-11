@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 )
 
@@ -259,6 +260,13 @@ type Tenant struct {
 	// Received are the messages received by runtime endpoints.
 	Received []ReceivedMessage
 
+	// Components is the component catalogue of the tenant's runtime profile:
+	// the Check (validate) rejects adapter and step versions it does not
+	// support. nil: DefaultComponents (SAP's editor metadata of an
+	// integrationcell tenant). NoComponentCheck turns the check off.
+	Components       *catalog.Catalog
+	NoComponentCheck bool
+
 	// Locks are the edit locks (artifacts open for editing in the Web UI).
 	Locks []Lock
 	// ExternalLogging and Archiving are the tenant-wide switches.
@@ -291,8 +299,14 @@ type Tenant struct {
 	// ForbidPaths answers 403 for paths with one of these prefixes (an API
 	// area the credentials have no role for).
 	ForbidPaths []string
-	// OAuth serves client credential tokens at /oauth/token (any client).
+	// OAuth serves client credential tokens at /oauth/token (any client;
+	// with Auth only its clients).
 	OAuth bool
+	// Auth makes the mock check credentials like a tenant with an API key and
+	// a runtime key (nil: any credentials are accepted everywhere).
+	Auth        *Auth
+	tokens      map[string]issuedToken
+	tokenSerial int
 	// EndpointBase is the base URL of runtime endpoints in ServiceEndpoints
 	// (default: the mock's URL), e.g. the name other containers reach it by.
 	EndpointBase string
@@ -327,6 +341,17 @@ type Tenant struct {
 	requests    []string
 	queries     map[string]url.Values
 	server      *httptest.Server
+}
+
+// components is the catalogue the Check uses (nil: no version check).
+func (m *Tenant) components() *catalog.Catalog {
+	switch {
+	case m.NoComponentCheck:
+		return nil
+	case m.Components != nil:
+		return m.Components
+	}
+	return DefaultComponents()
 }
 
 // NewTenant starts a mock tenant; it is closed when the test ends.
@@ -906,12 +931,17 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(m.StatusOverride)
 		return
 	}
-	if strings.HasPrefix(path, "/http/") || strings.HasPrefix(path, "/cxf/") {
-		m.handleInbound(w, r)
+	if m.OAuth && r.Method == http.MethodPost && path == "/oauth/token" { // client credentials
+		m.handleToken(w, r)
 		return
 	}
-	if m.OAuth && r.Method == http.MethodPost && path == "/oauth/token" { // client credentials, any client accepted
-		writeJSON(w, map[string]any{"access_token": "mock-token", "token_type": "bearer", "expires_in": 3600})
+	if strings.HasPrefix(path, "/http/") || strings.HasPrefix(path, "/cxf/") {
+		if m.authorize(w, r, true) {
+			m.handleInbound(w, r)
+		}
+		return
+	}
+	if !m.authorize(w, r, false) {
 		return
 	}
 	if r.Method == http.MethodGet && path == "/api/v1/" { // CSRF token fetch
@@ -956,6 +986,11 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, map[string]any{"d": val})
 			}
 		}
+		return
+	}
+	if m.Live && r.Method == http.MethodGet && (path == "/api/v1/DataStores" || path == "/api/v1/LogFiles") {
+		// a tenant without data stores or log files lists none (not 404)
+		writeJSON(w, map[string]any{"d": map[string]any{"results": []any{}}})
 		return
 	}
 
@@ -1221,7 +1256,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		if result == "" {
 			var issues []checkIssue
 			if c, err := readArtifactZip(a.Zip); err == nil && a.Type == "Integration" {
-				issues = checkFlow(c)
+				issues = checkFlow(c, m.components())
 			}
 			result = checkResult(issues)
 		}
@@ -1476,9 +1511,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		a.Type, a.DesignVersion, a.Package, a.Name = typ, "1.0.0", body.PackageId, body.Name
 		a.applyContent(zipData)
 		a.Uploads++
-		if m.Live {
-			a.ModifiedAt, a.ModifiedBy = time.Now(), "mock-user"
-		}
+		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r) // as on every save on a tenant
 		w.WriteHeader(http.StatusCreated)
 
 	case r.Method == http.MethodPut && reDesign.MatchString(path):
@@ -1504,10 +1537,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		a.applyContent(zipData)
 		a.Uploads++
-		a.ModifiedAt = time.Now()
-		if m.Live {
-			a.ModifiedBy = "mock-user"
-		}
+		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r)
 		w.WriteHeader(http.StatusOK)
 
 	// like the public API: only integration flows can be saved as a version
@@ -1552,6 +1582,9 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		d := map[string]string{"Id": mm[2], "Version": a.DesignVersion}
 		if !a.ModifiedAt.IsZero() {
 			d["ModifiedAt"] = odataDate(a.ModifiedAt)
+		}
+		if a.ModifiedBy != "" {
+			d["ModifiedBy"] = a.ModifiedBy
 		}
 		writeJSON(w, map[string]any{"d": d})
 
