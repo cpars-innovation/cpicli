@@ -2,7 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
@@ -33,6 +36,24 @@ func TestDoctor(t *testing.T) {
 	assert.NotEmpty(t, env.Result.Local)
 	for _, req := range mock.Requests() {
 		assert.Regexp(t, `^GET `, req, "doctor only reads")
+	}
+
+	// a profile counts as configuration
+	home := t.TempDir()
+	r = runMainWith(t, func() {
+		t.Setenv("HOME", home)
+		host, port := mock.HostPort()
+		require.NoError(t, os.MkdirAll(filepath.Join(home, ".cpictl"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(home, ".cpictl", "dev.yaml"),
+			fmt.Appendf(nil, "tmn-host: http://%s:%d\ntmn-userid: u\ntmn-password: p\n", host, port), 0o600))
+	}, "doctor", "--profile", "dev", "--output", "json")
+	require.Equal(t, 0, r.code, r.stderr)
+	require.NoError(t, json.Unmarshal([]byte(r.stdout), &env))
+	for _, c := range env.Result.Local {
+		if c.Name == "config" {
+			assert.Equal(t, ops.CheckOK, c.Status, c.Detail)
+			assert.Contains(t, c.Detail, "dev.yaml")
+		}
 	}
 
 	// wrong credentials: exit code 3

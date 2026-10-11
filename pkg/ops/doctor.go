@@ -2,8 +2,10 @@ package ops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,19 +49,22 @@ type apiProbe struct {
 	core               bool
 }
 
+// The probes send the same requests as the commands that need the area: some
+// collections reject query options such as $top (HTTP 400 / 501), and the
+// keystore needs keystoreName.
 var apiProbes = []apiProbe{
 	{"designtime", "/api/v1/IntegrationPackages?$top=1", "packages, artifacts, upload, snapshot, orchestrator", true},
 	{"runtime", "/api/v1/IntegrationRuntimeArtifacts?$top=1", "deploy, undeploy, status, plan", false},
 	{"message logs", "/api/v1/MessageProcessingLogs?$top=1", "logs, send (wait), test loops", false},
-	{"security material", "/api/v1/UserCredentials?$top=1", "credentials list/apply", false},
-	{"keystore", "/api/v1/KeystoreEntries?$top=1", "keystore list, expiring certificates", false},
+	{"security material", "/api/v1/UserCredentials", "credentials list/apply", false},
+	{"keystore", "/api/v1/KeystoreEntries?keystoreName=system", "keystore list, expiring certificates", false},
 	{"partner directory", "/api/v1/StringParameters?$top=1", "pd-snapshot, pd-deploy, pd_diff", false},
-	{"data stores", "/api/v1/DataStores?$top=1", "datastore commands", false},
-	{"log files", "/api/v1/LogFiles?$top=1", "log-files", false},
+	{"data stores", "/api/v1/DataStores", "datastore commands", false},
+	{"log files", "/api/v1/LogFiles?$orderby=LastModified%20desc", "log-files", false},
 }
 
 // Doctor checks the connection and which API areas the credentials can
-// read. Only GET requests with $top=1 are sent.
+// read. Only GET requests are sent.
 func Doctor(ctx context.Context, exe *httpclnt.HTTPExecuter) *DoctorResult {
 	res := &DoctorResult{Checks: make([]Check, len(apiProbes))}
 
@@ -103,7 +108,7 @@ func probe(exe *httpclnt.HTTPExecuter, p apiProbe) (c Check, err error) {
 		}
 		return c, output.WithExitCode(err, exitcode.TenantHTTP)
 	}
-	_, _ = exe.ReadRespBody(resp)
+	body, _ := exe.ReadRespBody(resp)
 	switch {
 	case resp.StatusCode < 300:
 		c.Status = CheckOK
@@ -114,8 +119,13 @@ func probe(exe *httpclnt.HTTPExecuter, p apiProbe) (c Check, err error) {
 		c.Status, c.Detail = CheckForbidden, "403: the credentials lack the role for this area"
 	case resp.StatusCode == http.StatusNotFound:
 		c.Status, c.Detail = CheckMissing, "404: this API is not available on the tenant"
+	case resp.StatusCode == http.StatusNotImplemented:
+		c.Status, c.Detail = CheckMissing, "501: the tenant does not offer this API (e.g. a trial or another environment)"
 	default:
 		c.Status, c.Detail = CheckWarn, fmt.Sprintf("HTTP %d", resp.StatusCode)
+	}
+	if msg := apiErrorMessage(body); msg != "" && c.Status != CheckOK {
+		c.Detail += ": " + msg
 	}
 	if p.core && c.Status != CheckOK {
 		c.Status = CheckFailed
@@ -126,4 +136,31 @@ func probe(exe *httpclnt.HTTPExecuter, p apiProbe) (c Check, err error) {
 		return c, output.WithExitCode(fmt.Errorf("%s: %s", p.name, c.Detail), code)
 	}
 	return c, nil
+}
+
+// apiErrorMessage returns the tenant's error text from a response body: the
+// OData error message, else the start of a plain text body (HTML pages are
+// ignored).
+func apiErrorMessage(body []byte) string {
+	var odata struct {
+		Error struct {
+			Message any `json:"message"`
+		} `json:"error"`
+	}
+	msg := ""
+	if json.Unmarshal(body, &odata) == nil {
+		switch m := odata.Error.Message.(type) {
+		case string:
+			msg = m
+		case map[string]any:
+			msg, _ = m["value"].(string)
+		}
+	} else if t := strings.TrimSpace(string(body)); t != "" && !strings.HasPrefix(t, "<") {
+		msg = t
+	}
+	msg = strings.Join(strings.Fields(msg), " ")
+	if len(msg) > 200 {
+		msg = msg[:200] + "…"
+	}
+	return msg
 }

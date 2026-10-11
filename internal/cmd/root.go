@@ -333,6 +333,10 @@ func hintSuffix(hint string) string {
 }
 
 // configFile is a loaded config file.
+// loadedConfig are the config files (profile, home, project) of the current
+// command, for doctor.
+var loadedConfig []string
+
 type configFile struct {
 	path    string
 	v       *viper.Viper
@@ -499,6 +503,10 @@ func initializeConfig(cmd *cobra.Command) error {
 	files, err := loadConfigFiles(cfgFile, profile)
 	if err != nil {
 		return output.Usage(err)
+	}
+	loadedConfig = loadedConfig[:0]
+	for _, f := range files {
+		loadedConfig = append(loadedConfig, f.path)
 	}
 
 	viper.SetEnvPrefix(envPrefix)

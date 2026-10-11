@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Fix: `doctor` probed some API areas with requests the commands never send (`$top=1` on
+  credentials, data stores and log files; the keystore without `keystoreName`), so tenants that
+  reject those options showed HTTP 400 / 501 for areas that work. The probes now send the
+  commands' own requests, show the tenant's error message, and report 501 as "not offered by the
+  tenant". `doctor` also recognises a profile as configuration (it reported "no config file or
+  profile" while using one).
+
 ## 0.8.0
 
 ### Mock tenant

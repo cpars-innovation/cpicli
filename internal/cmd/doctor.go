@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/stats"
@@ -86,7 +87,9 @@ func localChecks(cmd *cobra.Command) []ops.Check {
 	add := func(name, status, detail, needed string) {
 		checks = append(checks, ops.Check{Name: name, Status: status, Detail: detail, Needed: needed})
 	}
-	if f := viper.ConfigFileUsed(); f != "" {
+	if len(loadedConfig) > 0 {
+		add("config", ops.CheckOK, strings.Join(loadedConfig, ", "), "")
+	} else if f := viper.ConfigFileUsed(); f != "" {
 		add("config", ops.CheckOK, f, "")
 	} else {
 		add("config", ops.CheckWarn, "no config file or profile: flags and CPICTL_* variables only", "")
