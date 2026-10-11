@@ -14,6 +14,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
   tenant's 400; an upload whose `parameters.propdef` lacks `<constraint/>` fails with the tenant's
   500; the demo propdefs have the shape the Web UI writes; credentials, keystore, data stores and
   log files refuse `$top` (and log files `$orderby`) with the tenant's answers.
+- Mock admin API: a fault can stay until deleted (`"count": -1`) and carry the tenant's error
+  message (`"message"`), so an API area can answer like a tenant that does not offer it.
 
 - Fix: `doctor` probed some API areas with requests the commands never send (`$top=1` on
   credentials, data stores and log files; the keystore without `keystoreName`), so tenants that

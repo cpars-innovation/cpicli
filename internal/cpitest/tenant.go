@@ -838,8 +838,12 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		m.handleAdmin(w, r)
 		return
 	}
-	if status := m.fault(path); status != 0 {
-		w.WriteHeader(status)
+	if f := m.fault(path); f != nil {
+		if f.Message != "" {
+			odataError(w, f.Status, http.StatusText(f.Status), f.Message)
+		} else {
+			w.WriteHeader(f.Status)
+		}
 		return
 	}
 	for _, prefix := range m.ForbidPaths {

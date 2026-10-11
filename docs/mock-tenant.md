@@ -216,7 +216,7 @@ part of the SAP API and is protected by a token, TLS or not (encryption is not a
 | `PUT /_mock/systems/<name>` | `{"match", "latencyMs", "failRate", "status", "error"}` | add or change a system (e.g. `failRate: 1`: it is down) |
 | `POST /_mock/run` | `{"artifact", "key", "payload", "count"}` | run a deployed flow now, `count` up to 1000 times (also timer and ProcessDirect flows); returns `{runs: [{messageGuid, status, error}]}` |
 | `POST /_mock/messagelogs` | `[{"Guid", "Artifact", "Status", "CorrelationID", "ErrorText", "Headers", "Steps", ...}]` | add message logs as they are; answers `{"added": n, "kept": k}` (`k < n` when the retention or the cap dropped some) |
-| `POST /_mock/faults` | `{"pathPrefix": "/api/v1/IntegrationPackages", "status": 401, "count": 2}` | the next `count` requests on the path answer `status` (expired login, 429, 503 …) |
+| `POST /_mock/faults` | `{"pathPrefix": "/api/v1/IntegrationPackages", "status": 401, "count": 2}` | the next `count` requests on the path answer `status` (expired login, 429, 503 …); `"count": -1` keeps answering until `DELETE`; `"message"` is sent as the tenant's OData error body, e.g. `{"pathPrefix": "/api/v1/LogFiles", "status": 501, "count": -1, "message": "Not implemented"}` to make an API area answer like a tenant that does not offer it |
 | `DELETE /_mock/faults` | | drop pending faults |
 | `GET /_mock/state` / `PUT /_mock/state` | the exported state | export the whole tenant (content, security material, Partner Directory, logs, systems) and load it into another mock |
 

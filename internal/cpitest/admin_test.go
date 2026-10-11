@@ -182,3 +182,28 @@ func TestLogRetentionIsMeasuredFromTheNewestLog(t *testing.T) {
 		[]cpitest.MessageLog{mkLog("then", time.Now().Add(-30*24*time.Hour+time.Minute))}, &res))
 	assert.Equal(t, before+1, len(past.MessageLogs()))
 }
+
+func TestPersistentFaultWithTenantMessage(t *testing.T) {
+	m := cpitest.NewTenant(t, nil)
+	require.NoError(t, cpitest.SeedDemo(m, "dev", time.Now()))
+	require.Equal(t, http.StatusOK, admin(t, m, http.MethodPost, "/faults",
+		map[string]any{"pathPrefix": "/api/v1/LogFiles", "status": 501, "count": -1, "message": "Not implemented"}, nil))
+	for range 3 { // stays until deleted
+		res, err := m.Executer().ExecGetRequest("/api/v1/LogFiles", nil)
+		require.NoError(t, err)
+		var body struct {
+			Error struct {
+				Message struct{ Value string } `json:"message"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.NewDecoder(res.Body).Decode(&body))
+		_ = res.Body.Close()
+		assert.Equal(t, 501, res.StatusCode)
+		assert.Equal(t, "Not implemented", body.Error.Message.Value)
+	}
+	require.Equal(t, http.StatusNoContent, admin(t, m, http.MethodDelete, "/faults", nil, nil))
+	res, err := m.Executer().ExecGetRequest("/api/v1/LogFiles", nil)
+	require.NoError(t, err)
+	_ = res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+}

@@ -21,7 +21,11 @@ import (
 type fault struct {
 	PathPrefix string `json:"pathPrefix"`
 	Status     int    `json:"status"`
-	Count      int    `json:"count"`
+	// Count is how many requests get the fault; -1 until the faults are
+	// deleted (an API area that answers like this on a tenant).
+	Count int `json:"count"`
+	// Message, if set, is sent as the tenant's OData error body.
+	Message string `json:"message,omitempty"`
 }
 
 // mockState is the exportable state of the tenant (/_mock/state).
@@ -133,7 +137,9 @@ func (m *Tenant) handleAdmin(w http.ResponseWriter, r *http.Request) {
 			bad(fmt.Errorf("pathPrefix starting with / and status 400..599 are required"))
 			return
 		}
-		f.Count = max(f.Count, 1)
+		if f.Count != -1 {
+			f.Count = max(f.Count, 1)
+		}
 		m.faults = append(m.faults, f)
 		writeJSON(w, f)
 
@@ -180,15 +186,19 @@ func (m *Tenant) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// fault returns the status of a pending fault for path, consuming it.
-func (m *Tenant) fault(path string) int {
+// fault returns the pending fault for path (consuming one of its count),
+// or nil.
+func (m *Tenant) fault(path string) *fault {
 	for i := range m.faults {
-		if m.faults[i].Count > 0 && strings.HasPrefix(path, m.faults[i].PathPrefix) {
-			m.faults[i].Count--
-			return m.faults[i].Status
+		f := &m.faults[i]
+		if (f.Count > 0 || f.Count == -1) && strings.HasPrefix(path, f.PathPrefix) {
+			if f.Count > 0 {
+				f.Count--
+			}
+			return f
 		}
 	}
-	return 0
+	return nil
 }
 
 func (m *Tenant) exportState() mockState {
