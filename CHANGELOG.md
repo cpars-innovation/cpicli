@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Progress events (`--events <file>` or `--events -`): JSON lines `start`, one `item` per artifact
+  (`snapshot`, `orchestrator`, `deploy`, `undeploy`, `configure`) and `end` with exit code and
+  category, for progress displays without parsing log lines. Go: `ops.OrchestratorOptions.Progress`
+  (and `snapshot.Options.Progress`).
+
 - `orchestrator --plan` (and `ops.PlanOrchestration`) no longer fills the update counters and
   artifact statuses (`packagesUpdated`, `artifactsChanged`, `successfulArtifactUpdates`, …): a plan
   writes nothing, its outcome is in `plan[]`. Failures still count.

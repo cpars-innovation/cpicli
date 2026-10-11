@@ -108,6 +108,9 @@ type OrchestratorOptions struct {
 	// Plan writes nothing to the tenant and collects what would be done
 	// (see Orchestrator.Plan).
 	Plan bool
+	// Progress, when set, is called whenever an artifact's status changes
+	// (uploaded, skipped, failed, deployed). Calls are serialized.
+	Progress func(OrchestratorArtifact)
 }
 
 // Artifact statuses of an orchestrator run (OrchestratorArtifact.Status).
@@ -525,6 +528,7 @@ func (orc *Orchestrator) RecordDeployments(results []Result) {
 		}
 		if st := stats.artifacts[r.ID]; st != nil {
 			st.Deploy = string(r.Status)
+			orc.progress(st)
 		}
 		if r.Status.Succeeded() {
 			stats.ArtifactsDeployedSuccess++
@@ -543,6 +547,14 @@ func (orc *Orchestrator) RecordDeployments(results []Result) {
 			log.Warn().Msgf("⚠ Package %s: %d artifact deployment(s) failed", packageID, failedByPackage[packageID])
 			stats.PackagesFailed++
 		}
+	}
+}
+
+// progress reports an artifact's status to OrchestratorOptions.Progress
+// (callers hold the lock, or run alone).
+func (orc *Orchestrator) progress(st *OrchestratorArtifact) {
+	if orc.opts.Progress != nil {
+		orc.opts.Progress(*st)
 	}
 }
 
@@ -739,6 +751,7 @@ func (orc *Orchestrator) uploadOneArtifact(pkg *models.Package, artifact *models
 			stats.FailedArtifactUpdates[artifact.Id] = true
 			st := stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir)
 			st.Status, st.LocalVersion, st.Reason = ArtifactFailed, localVersion, err.Error()
+			orc.progress(st)
 		})
 	}
 
@@ -862,6 +875,7 @@ func (orc *Orchestrator) uploadOneArtifact(pkg *models.Package, artifact *models
 		st.Status = map[string]string{"CREATED": ArtifactCreated, "UPDATED": ArtifactUpdated}[outcome.Action]
 		st.Status = cmp.Or(st.Status, ArtifactUnchanged)
 		st.Designtime, st.LocalVersion = outcome.Version, localVersion
+		orc.progress(st)
 		if outcome.Action == "UNCHANGED" {
 			stats.ArtifactsUnchanged++
 		} else {
@@ -928,7 +942,9 @@ func (orc *Orchestrator) collectDeploymentTasks(pkg *models.Package, packageDir,
 				}
 				continue
 			}
-			stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir).Status = ArtifactNotUploaded
+			st := stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir)
+			st.Status = ArtifactNotUploaded
+			orc.progress(st)
 		}
 
 		mode, err := resolveVersioning(artifact.Versioning, pkg.Versioning, orc.opts.Versioning)
@@ -988,6 +1004,7 @@ func (orc *Orchestrator) recordDraft(d DraftSkip, source, typ string, uploadStep
 		slices.SortFunc(stats.SkippedDrafts, func(a, b DraftSkip) int { return cmp.Or(cmp.Compare(a.Package, b.Package), cmp.Compare(a.ID, b.ID)) })
 		log.Warn().Msgf("%s is in draft on the tenant: not uploaded, not deployed", d.ID)
 	}
+	orc.progress(st)
 	if orc.plan != nil {
 		orc.plan.upsert(d.ID, func(it *PlanItem) {
 			it.Package, it.Type, it.Deploy = d.Package, cmp.Or(it.Type, typ), false

@@ -72,6 +72,7 @@ Exit codes: 0 ok, 2 usage, 3 auth, 4 tenant HTTP error, 5 failed, 6 timeout,
 	rootCmd.PersistentFlags().Int("read-retries", cpi.ReadRetries, "Retries of a tenant read (GET) answered with 429, 502, 503 or 504, with backoff 2s, 4s, 8s ... (0: none). Writes are never retried")
 	rootCmd.PersistentFlags().String("summary", "", "Append a markdown job summary of orchestrator, configure, deploy, undeploy and snapshot to this file (default: $GITHUB_STEP_SUMMARY when set; \"off\": none)")
 	rootCmd.PersistentFlags().Bool("debug", false, "Show debug logs")
+	rootCmd.PersistentFlags().String("events", "", "Write progress events as JSON lines (start, one per artifact, end) to this file, or to stderr with \"-\" (see the README, Output)")
 	rootCmd.PersistentFlags().String("output", output.FormatText, "Output format: text or json. With json the result is written to stdout as one JSON document and logs are written to stderr as JSON lines")
 
 	rootCmd.MarkFlagsRequiredTogether("tmn-userid", "tmn-password")
@@ -184,12 +185,16 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 		if run := c.RunE; run != nil {
 			c.RunE = func(cmd *cobra.Command, args []string) error {
 				started = true
+				if err := startEvents(cmd, stderr); err != nil {
+					return err
+				}
 				return run(cmd, args)
 			}
 		}
 	})
 
 	ctx = output.WithResultHolder(ctx)
+	ctx = output.WithEvents(ctx)
 	cmd, err := rootCmd.ExecuteContextC(ctx)
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("output"); f != nil && f.Changed {
@@ -217,7 +222,9 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 			stats.Record(commandName(cmd), stats.SourceCLI, code, elapsed)
 		}
 		writeSummary(cmd, output.Result(ctx), code, elapsed)
+		output.Emit(ctx, output.EventEnd, output.EndData{ExitCode: code, ErrorCategory: output.Category(code), DurationMs: elapsed.Milliseconds()})
 	}
+	output.CloseEvents(ctx)
 
 	// --help/--version and commands without RunE produce no result document
 	ownsStdout := cmd != nil && cmd.Annotations[annotationNoEnvelope] == "true" && started
@@ -233,6 +240,27 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 	}
 	return code
 }
+
+// startEvents activates the --events stream for cmd (Run writes the end
+// event and closes a file).
+func startEvents(cmd *cobra.Command, stderr io.Writer) error {
+	switch dest, _ := cmd.Flags().GetString("events"); dest {
+	case "":
+	case "-":
+		output.StartEvents(cmd.Context(), nopCloser{stderr}, commandName(cmd))
+	default:
+		f, err := os.Create(dest)
+		if err != nil {
+			return output.Usagef("--events: %v", err)
+		}
+		output.StartEvents(cmd.Context(), f, commandName(cmd))
+	}
+	return nil
+}
+
+type nopCloser struct{ io.Writer }
+
+func (nopCloser) Close() error { return nil }
 
 // annotationNoStats marks commands that are not recorded in the usage statistics.
 const annotationNoStats = "cpicli/no-stats"

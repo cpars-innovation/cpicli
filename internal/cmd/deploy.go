@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/output"
@@ -120,6 +121,7 @@ func runDeploy(cmd *cobra.Command) error {
 		Parallelism: len(artifacts),
 	})
 	logResults(results)
+	emitResults(cmd.Context(), results)
 	output.SetResult(cmd.Context(), artifactResults{Results: results})
 	if err := ops.Err(results); err != nil {
 		return err
@@ -157,6 +159,7 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 	}
 	results := deployTasks(cmd.Context(), exe, tasks, true, maxChecks, delaySeconds, parallel)
 	logResults(results)
+	emitResults(cmd.Context(), results)
 	output.SetResult(cmd.Context(), artifactResults{Results: results})
 	drafts := 0
 	for _, r := range results {
@@ -210,4 +213,11 @@ func errSuffix(msg string) string {
 		return ""
 	}
 	return " - " + msg
+}
+
+// emitResults writes an item event (--events) per deployment result.
+func emitResults(ctx context.Context, results []ops.Result) {
+	for _, r := range results {
+		output.Emit(ctx, output.EventItem, r)
+	}
 }

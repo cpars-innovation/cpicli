@@ -276,6 +276,20 @@ With `--output json` stdout receives exactly one JSON document and stderr receiv
 removed or changes meaning. Go code calling `pkg/ops` gets the same classes from
 `ops.ErrorCategory(err)` and `ops.ExitCode(err)`.
 
+Progress for a display (Studio, a CI step) comes as events with `--events <file>` (or `--events -`
+for stderr, next to the log lines): one JSON object per line with `schemaVersion`, `seq`, `time`,
+`command`, `event` and `data`. `start` opens the stream, `item` reports one artifact as soon as
+it is handled (`snapshot`: the snapshot item with `status` and `action`; `orchestrator`: the
+artifact with `status` and later `deploy`; `deploy`/`undeploy`/`configure`: the deployment
+result), and `end` carries `exitCode`, `errorCategory` (empty for success) and `durationMs`. The result document
+stays the final word; events never change it or the exit code.
+
+```text
+{"schemaVersion":1,"seq":1,"time":"…","command":"snapshot","event":"start"}
+{"schemaVersion":1,"seq":2,"time":"…","command":"snapshot","event":"item","data":{"package":"Billing","artifact":"Billing_In","status":"new","action":"write",…}}
+{"schemaVersion":1,"seq":9,"time":"…","command":"snapshot","event":"end","data":{"exitCode":0,"errorCategory":"","durationMs":5123}}
+```
+
 Every command ends with the time it took, on stderr (`⏱ deploy failed in 48.2s`, JSON log field
 `durationMs`) and in the envelope (`durationMs`). `--help` and `--version` print none.
 

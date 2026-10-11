@@ -153,6 +153,9 @@ func runSnapshot(cmd *cobra.Command) error {
 		WorkDir:              workDir,
 		KeepWorkDir:          config.GetBoolWithFallback(cmd, "keep-work-dir", "snapshot.keepWorkDir"),
 	}
+	if output.EventsActive(cmd.Context()) {
+		o.Progress = func(it snapshot.Item) { output.Emit(cmd.Context(), output.EventItem, it) }
+	}
 	if o.Derived, err = derivedIndex(cmd, artifactsBaseDir); err != nil {
 		return err
 	}

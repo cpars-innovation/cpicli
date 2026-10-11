@@ -747,6 +747,7 @@ func deployConfiguredArtifacts(ctx context.Context, exe *httpclnt.HTTPExecuter, 
 	// Tasks with configuration changes are forced (the version does not
 	// change); the others are skipped when the runtime has the version.
 	results := deployTasks(ctx, exe, tasks, true, deployRetries, deployDelaySeconds, parallelDeployments)
+	emitResults(ctx, results)
 	for _, r := range results {
 		if r.Status.Succeeded() {
 			stats.DeploymentTasksSuccessful++

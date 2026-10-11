@@ -113,6 +113,19 @@ func TestPlanOrchestration(t *testing.T) {
 	assert.Empty(t, st.Artifacts())
 	assert.NoError(t, st.Err())
 
+	// Progress reports each artifact as it is handled (here: drafts and
+	// statuses of a real run are covered elsewhere; a plan reports none)
+	var reported []OrchestratorArtifact
+	orc, err = NewOrchestrator(mock.Executer(), repo, OrchestratorOptions{Mode: OrchestratorUpdateOnly, ArtifactFilter: []string{"New"},
+		Progress: func(a OrchestratorArtifact) { reported = append(reported, a) }})
+	require.NoError(t, err)
+	_, err = orc.Process(context.Background(), &cfg)
+	require.NoError(t, err)
+	orc.Close()
+	require.Len(t, reported, 1)
+	assert.Equal(t, OrchestratorArtifact{ID: "New", Package: "Pkg", Source: "New", Status: ArtifactCreated, Designtime: reported[0].Designtime,
+		LocalVersion: reported[0].LocalVersion}, reported[0])
+
 	// update only: no deployment predicted
 	plan, err = PlanOrchestration(context.Background(), mock.Executer(), repo, &cfg,
 		OrchestratorOptions{Mode: OrchestratorUpdateOnly, ArtifactFilter: []string{"New"}})

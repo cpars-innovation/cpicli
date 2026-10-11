@@ -314,6 +314,9 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 	exe := cpi.InitHTTPExecuter(serviceDetails)
 	opts := ops.OrchestratorOptions{Mode: mode, PackageFilter: packageFilter, ArtifactFilter: artifactFilter,
 		Versioning: versionMode, Host: serviceDetails.Host, DraftHandling: draftHandling, Parallel: parallel, WorkDir: workDir}
+	if output.EventsActive(cmd.Context()) {
+		opts.Progress = func(a ops.OrchestratorArtifact) { output.Emit(cmd.Context(), output.EventItem, a) }
+	}
 	if plan, _ := cmd.Flags().GetBool("plan"); plan {
 		opts.Plan = true
 		log.Info().Msg("PLAN: nothing is written to the tenant")

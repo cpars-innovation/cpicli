@@ -168,6 +168,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 ```
       --config string               config file (default: the profile, else $CPICTL_CONFIG, else $HOME/cpictl.yaml plus ./cpictl.yaml of the repository)
       --debug                       Show debug logs
+      --events string               Write progress events as JSON lines (start, one per artifact, end) to this file, or to stderr with "-" (see the README, Output)
       --oauth-clientid string       Client ID for using OAuth
       --oauth-clientsecret string   Client Secret for using OAuth
       --oauth-host string           OAuth token server host
