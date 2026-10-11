@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.9.0
+
+Many new tenant APIs (so an agent can do what a Web UI user can). Every read was checked on a
+real Cloud Foundry tenant; most write calls follow the API metadata and are tested against the
+mock tenant only, notably: value mapping `set`, JMS retry/move/delete, keystore key generation,
+CSR, chain upload and delete, PGP import, access policies, alternative partners and authorized
+users, delete artifact/package, external logging and archiving switches.
+
 - `cpictl connections`: the integration connections the tenant computes from its deployed flows
   (sender host -> flows -> receiver host; `--refresh` recomputes). MCP
   `list_integration_connections`.
