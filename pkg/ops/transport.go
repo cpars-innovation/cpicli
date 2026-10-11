@@ -284,6 +284,7 @@ type TransportCheckResult struct {
 // target, credentials and key aliases, Partner Directory parameters and
 // parameter values.
 func CheckTransport(ctx context.Context, exe *httpclnt.HTTPExecuter, dir string, ids []string, o TransportCheckOptions) (*TransportCheckResult, error) {
+	exe = exe.WithContext(ctx)
 	set, err := ResolveTransport(ctx, dir, ids, o.WithDeps)
 	if err != nil {
 		return nil, err

@@ -36,6 +36,7 @@ type DeleteResult struct {
 // package view). A deployed artifact is refused unless UndeployFirst: the
 // tenant would keep running it without a designtime artifact.
 func DeleteArtifact(ctx context.Context, exe *httpclnt.HTTPExecuter, req DeleteRequest) (*DeleteResult, error) {
+	exe = exe.WithContext(ctx)
 	if req.ArtifactID == "" {
 		return nil, output.Usagef("artifact ID is required")
 	}
@@ -116,6 +117,7 @@ type DeletePackageResult struct {
 // one by one first (only with WithArtifacts); deployed ones are refused
 // before anything is deleted unless UndeployFirst.
 func DeletePackage(ctx context.Context, exe *httpclnt.HTTPExecuter, req DeletePackageRequest) (*DeletePackageResult, error) {
+	exe = exe.WithContext(ctx)
 	if req.PackageID == "" {
 		return nil, output.Usagef("package ID is required")
 	}

@@ -94,6 +94,7 @@ func findByHeader(exe *httpclnt.HTTPExecuter, q HeaderSearchQuery) (logs []Messa
 // tenant it scans the scope instead (needs ArtifactIDs or PackageID, and
 // Since; Filter then says "client-side").
 func SearchMessagesByHeader(ctx context.Context, exe *httpclnt.HTTPExecuter, q HeaderSearchQuery) (*MessageLogList, error) {
+	exe = exe.WithContext(ctx)
 	if q.Header.Name == "" {
 		return nil, output.Usagef("header name is required (name=value)")
 	}

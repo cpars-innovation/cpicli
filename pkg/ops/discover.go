@@ -111,6 +111,7 @@ const topN = 30
 // Integration flows are downloaded and analysed in memory; nothing is written
 // to the tenant. Flows that cannot be read are reported in Errors.
 func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source string, opts DiscoverOptions) (*Discovery, error) {
+	exe = exe.WithContext(ctx)
 	if opts.Parallel <= 0 {
 		opts.Parallel = 4
 	}

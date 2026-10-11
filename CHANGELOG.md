@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Cancellation and injectable HTTP client for Go callers: `exe.WithContext(ctx)` returns a copy
+  of an executer whose requests (and retry waits) end with ctx and that shares the session (CSRF
+  token, cookies, OAuth token). `httpclnt.NewWithOptions(httpclnt.Options{…, HTTPClient})` and
+  `cpi.ServiceDetails.HTTPClient` set the client (transport, proxy, timeout). The OAuth token
+  request had no timeout; it now uses the client's (default 30 s). `pkg/ops` functions that take
+  a context cancel their tenant calls with it, and the CLI's requests end on Ctrl+C.
+
 - Typed errors for Go callers: `ops.ErrorCategory(err)` and `ops.ExitCode(err)` with exported
   constants (`ops.CategoryUsage`, …, `ops.ExitUsage`, …); the usage, partial and failed errors
   implement `ExitCode() int`, so `errors.As` with an `ExitCode` interface works everywhere.

@@ -20,6 +20,9 @@ type ServiceDetails struct {
 	OauthPath         string
 	OauthClientId     string
 	OauthClientSecret string
+	// HTTPClient is the client requests go through (timeouts, transport,
+	// proxy); nil: one with httpclnt.DefaultTimeout.
+	HTTPClient *http.Client
 }
 
 // ReadRetries and ReadBackoff apply to every executer created by
@@ -37,7 +40,9 @@ func InitHTTPExecuter(serviceDetails *ServiceDetails) *httpclnt.HTTPExecuter {
 		// The token server shares scheme and port with the tenant host
 		_, oauthHost, _ = ParseHost(oauthHost)
 	}
-	exe := httpclnt.New(oauthHost, serviceDetails.OauthPath, serviceDetails.OauthClientId, serviceDetails.OauthClientSecret, serviceDetails.Userid, serviceDetails.Password, host, scheme, port, true)
+	exe := httpclnt.NewWithOptions(httpclnt.Options{Host: host, Scheme: scheme, Port: port,
+		OAuthHost: oauthHost, OAuthPath: serviceDetails.OauthPath, ClientID: serviceDetails.OauthClientId, ClientSecret: serviceDetails.OauthClientSecret,
+		BasicUserID: serviceDetails.Userid, BasicPassword: serviceDetails.Password, HTTPClient: serviceDetails.HTTPClient, ShowLogs: true})
 	return exe.RetryReads(ReadRetries, ReadBackoff)
 }
 

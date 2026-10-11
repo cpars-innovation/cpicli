@@ -117,6 +117,7 @@ func guidelinePending(status string) bool {
 // an integration flow and waits for the result. Violations return the report
 // together with an error (exit code 5).
 func CheckGuidelines(ctx context.Context, exe *httpclnt.HTTPExecuter, id, version string, timeout, interval time.Duration) (*GuidelineReport, error) {
+	exe = exe.WithContext(ctx)
 	if id == "" {
 		return nil, output.Usagef("artifact ID is required")
 	}

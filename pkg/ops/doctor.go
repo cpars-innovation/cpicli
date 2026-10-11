@@ -73,6 +73,7 @@ var apiProbes = []apiProbe{
 // Doctor checks the connection and which API areas the credentials can
 // read. Only GET requests are sent.
 func Doctor(ctx context.Context, exe *httpclnt.HTTPExecuter) *DoctorResult {
+	exe = exe.WithContext(ctx)
 	res := &DoctorResult{Checks: make([]Check, len(apiProbes))}
 
 	// the first probe also proves authentication and connectivity; run it

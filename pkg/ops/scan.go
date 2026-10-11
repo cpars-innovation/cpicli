@@ -138,6 +138,7 @@ type ScanResult struct {
 // ScanByHeaders lists the messages of the scope (at most max) and returns
 // those whose custom header properties satisfy match.
 func ScanByHeaders(ctx context.Context, exe *httpclnt.HTTPExecuter, scope ScanScope, max int, match func([]cpi.NameValue) bool) (*ScanResult, error) {
+	exe = exe.WithContext(ctx)
 	logs, truncated, err := listScoped(exe, scope, max)
 	if err != nil {
 		return nil, err
@@ -177,6 +178,7 @@ const maxHeaderScan = 500
 // header property Name equals Value, newest first, at most top. It scans at
 // most top*10 messages (capped at 500).
 func QueryMessageLogsByHeader(ctx context.Context, exe *httpclnt.HTTPExecuter, scope ScanScope, h CustomHeaderFilter, top int, includeErrors bool) (*MessageLogList, error) {
+	exe = exe.WithContext(ctx)
 	if h.Name == "" {
 		return nil, output.Usagef("custom_header needs a name")
 	}
