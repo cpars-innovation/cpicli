@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Typed errors for Go callers: `ops.ErrorCategory(err)` and `ops.ExitCode(err)` with exported
+  constants (`ops.CategoryUsage`, …, `ops.ExitUsage`, …); the usage, partial and failed errors
+  implement `ExitCode() int`, so `errors.As` with an `ExitCode` interface works everywhere.
+- The CLI's JSON envelope has `errorCategory` (as MCP tool results) and `schemaVersion` (1).
+- `doctor`: every check has `category` (`auth` or `tenant_http` when it is not ok) and
+  `httpStatus`.
+
 - Fix: `MessagePathFor` (`logs tree --message`, `get_trace_tree message_guid`) panicked for an
   unknown message GUID; it is a usage error now.
 - Fix: data race on the batch boundary counter when batches were built concurrently.

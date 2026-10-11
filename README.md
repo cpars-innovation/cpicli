@@ -258,7 +258,9 @@ With `--output json` stdout receives exactly one JSON document and stderr receiv
   "command": "deploy",
   "ok": false,
   "exitCode": 7,
+  "errorCategory": "partial",
   "error": "1 of 2 artifact(s) failed - Billing: FAILED (designtime artifact Billing does not exist)",
+  "schemaVersion": 1,
   "durationMs": 48210,
   "result": {
     "results": [
@@ -268,6 +270,11 @@ With `--output json` stdout receives exactly one JSON document and stderr receiv
   }
 }
 ```
+
+`errorCategory` names the exit code as MCP tool results do (`usage`, `auth`, `tenant_http`,
+`failed`, `timeout`, `partial`, `stopped`, `error`). `schemaVersion` changes only when a field is
+removed or changes meaning. Go code calling `pkg/ops` gets the same classes from
+`ops.ErrorCategory(err)` and `ops.ExitCode(err)`.
 
 Every command ends with the time it took, on stderr (`⏱ deploy failed in 48.2s`, JSON log field
 `durationMs`) and in the envelope (`durationMs`). `--help` and `--version` print none.

@@ -222,7 +222,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 	// --help/--version and commands without RunE produce no result document
 	ownsStdout := cmd != nil && cmd.Annotations[annotationNoEnvelope] == "true" && started
 	if format == output.FormatJSON && (started || err != nil) && !ownsStdout {
-		env := output.Envelope{Command: commandName(cmd), OK: code == exitcode.OK, ExitCode: code, DurationMs: elapsed.Milliseconds(), Result: output.Result(ctx)}
+		env := output.Envelope{Command: commandName(cmd), OK: code == exitcode.OK, ExitCode: code, ErrorCategory: output.Category(code),
+			SchemaVersion: output.SchemaVersion, DurationMs: elapsed.Milliseconds(), Result: output.Result(ctx)}
 		if err != nil {
 			env.Error = err.Error()
 		}

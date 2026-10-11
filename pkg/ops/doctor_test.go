@@ -10,6 +10,7 @@ import (
 
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDoctorProbesAndErrorText(t *testing.T) {
@@ -51,6 +52,20 @@ func TestDoctorProbesAndErrorText(t *testing.T) {
 	assert.Contains(t, byName["log files"].Detail, "501")
 	assert.Contains(t, byName["log files"].Detail, ": Not supported")
 	assert.Equal(t, CheckForbidden, byName["audit log"].Status, "as on a trial tenant")
+
+	// categories per check, for UIs that classify without parsing Detail
+	assert.Equal(t, "", byName["keystore"].Category)
+	assert.Equal(t, 200, byName["keystore"].HTTPStatus)
+	assert.Equal(t, CategoryAuth, byName["audit log"].Category)
+	assert.Equal(t, 403, byName["audit log"].HTTPStatus)
+	assert.Equal(t, CategoryTenantHTTP, byName["log files"].Category)
+	assert.Equal(t, CategoryTenantHTTP, byName["data stores"].Category)
+
+	// no connection at all: the first check fails with tenant_http
+	res = Doctor(context.Background(), httpclnt.New("", "", "", "", "u", "p", "127.0.0.1", "http", 1, false))
+	require.Len(t, res.Checks, 1)
+	assert.Equal(t, CategoryTenantHTTP, res.Checks[0].Category)
+	assert.Equal(t, CategoryTenantHTTP, ErrorCategory(res.Err))
 }
 
 func TestAPIErrorMessage(t *testing.T) {
