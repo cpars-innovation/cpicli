@@ -1,0 +1,394 @@
+[
+ {
+  "adapterMetadata": {
+   "listOfSenderAdapters": [
+    {
+     "name": "ProcessDirect",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OlByb2Nlc3NEaXJlY3QvdmVuZG9yOjpTQVAvdmVyc2lvbjo6MS4xLjI=",
+     "adapterURI": "ctype::Adapter/cname::ProcessDirect/vendor::SAP/version::1.1.2",
+     "displayName": "ProcessDirect",
+     "displayNameWithVendor": "ProcessDirect",
+     "adapterDetails": [
+      {
+       "name": "Process Direct Sender",
+       "messageProtocol": "Not Applicable",
+       "transportProtocol": "Not Applicable",
+       "messageProtocolDisplayName": "Not Applicable",
+       "transportProtocolDisplayName": "Not Applicable",
+       "adapterDisplayName": "ProcessDirect",
+       "vendor": "SAP",
+       "MessageProtocolVersion": "1.1.2",
+       "TransportProtocolVersion": "1.1.2",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpQcm9jZXNzRGlyZWN0L3ZlbmRvcjo6U0FQL3RwOjpOb3QgQXBwbGljYWJsZS9tcDo6Tm90IEFwcGxpY2FibGUvZGlyZWN0aW9uOjpTZW5kZXIvdmVyc2lvbjo6MS4xLjI=",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::ProcessDirect/vendor::SAP/tp::Not Applicable/mp::Not Applicable/direction::Sender/version::1.1.2",
+       "componentVersion": "1.1.2",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "JMS",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OnNhcDpKTVMvdmVyc2lvbjo6MS42LjM=",
+     "adapterURI": "ctype::Adapter/cname::sap:JMS/version::1.6.3",
+     "displayName": "JMS",
+     "displayNameWithVendor": "JMS",
+     "adapterDetails": [
+      {
+       "name": "JMS Sender",
+       "messageProtocol": "Not Applicable",
+       "transportProtocol": "Not Applicable",
+       "messageProtocolDisplayName": "Not Applicable",
+       "transportProtocolDisplayName": "Not Applicable",
+       "adapterDisplayName": "JMS",
+       "MessageProtocolVersion": "1.6.3",
+       "TransportProtocolVersion": "1.6.3",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpzYXA6Sk1TL3RwOjpOb3QgQXBwbGljYWJsZS9tcDo6Tm90IEFwcGxpY2FibGUvZGlyZWN0aW9uOjpTZW5kZXIvdmVyc2lvbjo6MS41LjA=",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::sap:JMS/tp::Not Applicable/mp::Not Applicable/direction::Sender/version::1.5.0",
+       "componentVersion": "1.5.0",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "HTTPS",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OnNhcDpIVFRQUy92ZXJzaW9uOjoxLjUuMw==",
+     "adapterURI": "ctype::Adapter/cname::sap:HTTPS/version::1.5.3",
+     "displayName": "HTTPS",
+     "displayNameWithVendor": "HTTPS",
+     "adapterDetails": [
+      {
+       "name": "Http Sender Component",
+       "messageProtocol": "None",
+       "transportProtocol": "HTTPS",
+       "messageProtocolDisplayName": "None",
+       "transportProtocolDisplayName": "HTTPS",
+       "adapterDisplayName": "HTTPS",
+       "MessageProtocolVersion": "1.5.3",
+       "TransportProtocolVersion": "1.5.3",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpzYXA6SFRUUFMvdHA6OkhUVFBTL21wOjpOb25lL2RpcmVjdGlvbjo6U2VuZGVyL3ZlcnNpb246OjEuNS4z",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::sap:HTTPS/tp::HTTPS/mp::None/direction::Sender/version::1.5.3",
+       "componentVersion": "1.5.3",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "SFTP",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OnNhcDpTRlRQL3ZlcnNpb246OjEuMjEuMA==",
+     "adapterURI": "ctype::Adapter/cname::sap:SFTP/version::1.21.0",
+     "displayName": "SFTP",
+     "displayNameWithVendor": "SFTP",
+     "adapterDetails": [
+      {
+       "name": "SFTP Sender",
+       "messageProtocol": "File",
+       "transportProtocol": "SFTP",
+       "messageProtocolDisplayName": "File",
+       "transportProtocolDisplayName": "SFTP",
+       "adapterDisplayName": "SFTP",
+       "MessageProtocolVersion": "1.21.0",
+       "TransportProtocolVersion": "1.21.0",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpzYXA6U0ZUUC90cDo6U0ZUUC9tcDo6RmlsZS9kaXJlY3Rpb246OlNlbmRlci92ZXJzaW9uOjoxLjIxLjA=",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::sap:SFTP/tp::SFTP/mp::File/direction::Sender/version::1.21.0",
+       "componentVersion": "1.21.0",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    }
+   ],
+   "listOfReceiverAdapters": [
+    {
+     "name": "ProcessDirect",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OlByb2Nlc3NEaXJlY3QvdmVuZG9yOjpTQVAvdmVyc2lvbjo6MS4xLjI=",
+     "adapterURI": "ctype::Adapter/cname::ProcessDirect/vendor::SAP/version::1.1.2",
+     "displayName": "ProcessDirect",
+     "displayNameWithVendor": "ProcessDirect",
+     "adapterDetails": [
+      {
+       "name": "Process Direct Receiver",
+       "messageProtocol": "Not Applicable",
+       "transportProtocol": "Not Applicable",
+       "messageProtocolDisplayName": "Not Applicable",
+       "transportProtocolDisplayName": "Not Applicable",
+       "adapterDisplayName": "ProcessDirect",
+       "vendor": "SAP",
+       "MessageProtocolVersion": "1.1.2",
+       "TransportProtocolVersion": "1.1.2",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpQcm9jZXNzRGlyZWN0L3ZlbmRvcjo6U0FQL3RwOjpOb3QgQXBwbGljYWJsZS9tcDo6Tm90IEFwcGxpY2FibGUvZGlyZWN0aW9uOjpSZWNlaXZlci92ZXJzaW9uOjoxLjEuMQ==",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::ProcessDirect/vendor::SAP/tp::Not Applicable/mp::Not Applicable/direction::Receiver/version::1.1.1",
+       "componentVersion": "1.1.1",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "JMS",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OnNhcDpKTVMvdmVyc2lvbjo6MS42LjM=",
+     "adapterURI": "ctype::Adapter/cname::sap:JMS/version::1.6.3",
+     "displayName": "JMS",
+     "displayNameWithVendor": "JMS",
+     "adapterDetails": [
+      {
+       "name": "JMS Receiver",
+       "messageProtocol": "Not Applicable",
+       "transportProtocol": "Not Applicable",
+       "messageProtocolDisplayName": "Not Applicable",
+       "transportProtocolDisplayName": "Not Applicable",
+       "adapterDisplayName": "JMS",
+       "MessageProtocolVersion": "1.6.3",
+       "TransportProtocolVersion": "1.6.3",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpzYXA6Sk1TL3RwOjpOb3QgQXBwbGljYWJsZS9tcDo6Tm90IEFwcGxpY2FibGUvZGlyZWN0aW9uOjpSZWNlaXZlci92ZXJzaW9uOjoxLjYuMw==",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::sap:JMS/tp::Not Applicable/mp::Not Applicable/direction::Receiver/version::1.6.3",
+       "componentVersion": "1.6.3",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "HTTP",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OnNhcDpIVFRQL3ZlcnNpb246OjEuMjIuMA==",
+     "adapterURI": "ctype::Adapter/cname::sap:HTTP/version::1.22.0",
+     "displayName": "HTTP",
+     "displayNameWithVendor": "HTTP",
+     "adapterDetails": [
+      {
+       "name": "HTTP Receiver",
+       "messageProtocol": "None",
+       "transportProtocol": "HTTP",
+       "messageProtocolDisplayName": "Not Applicable",
+       "transportProtocolDisplayName": "HTTP/HTTPS",
+       "adapterDisplayName": "HTTP",
+       "MessageProtocolVersion": "1.22.0",
+       "TransportProtocolVersion": "1.22.0",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpzYXA6SFRUUC90cDo6SFRUUC9tcDo6Tm9uZS9kaXJlY3Rpb246OlJlY2VpdmVyL3ZlcnNpb246OjEuMjIuMA==",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::sap:HTTP/tp::HTTP/mp::None/direction::Receiver/version::1.22.0",
+       "componentVersion": "1.22.0",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "SFTP",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6OnNhcDpTRlRQL3ZlcnNpb246OjEuMjEuMA==",
+     "adapterURI": "ctype::Adapter/cname::sap:SFTP/version::1.21.0",
+     "displayName": "SFTP",
+     "displayNameWithVendor": "SFTP",
+     "adapterDetails": [
+      {
+       "name": "SFTP Receiver",
+       "messageProtocol": "File",
+       "transportProtocol": "SFTP",
+       "messageProtocolDisplayName": "File",
+       "transportProtocolDisplayName": "SFTP",
+       "adapterDisplayName": "SFTP",
+       "MessageProtocolVersion": "1.21.0",
+       "TransportProtocolVersion": "1.21.0",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpzYXA6U0ZUUC90cDo6U0ZUUC9tcDo6RmlsZS9kaXJlY3Rpb246OlJlY2VpdmVyL3ZlcnNpb246OjEuMTQuMA==",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::sap:SFTP/tp::SFTP/mp::File/direction::Receiver/version::1.14.0",
+       "componentVersion": "1.14.0",
+       "properties": {},
+       "modelInfoTO": {}
+      }
+     ]
+    },
+    {
+     "name": "GoogleWorkspace",
+     "adapterType": "Adapter",
+     "adapterHashURI": "Y3R5cGU6OkFkYXB0ZXIvY25hbWU6Okdvb2dsZVdvcmtzcGFjZS92ZW5kb3I6OnJvam9jb25zdWx0YW5jeS5jb20vdmVyc2lvbjo6MS4wLjA=",
+     "adapterURI": "ctype::Adapter/cname::GoogleWorkspace/vendor::rojoconsultancy.com/version::1.0.0",
+     "version": "1.0.0",
+     "displayName": "GoogleWorkspace",
+     "displayNameWithVendor": "GoogleWorkspace",
+     "adapterDetails": [
+      {
+       "name": "Google Workspace Receiver",
+       "messageProtocol": "GoogleDrive",
+       "transportProtocol": "HTTPS",
+       "messageProtocolDisplayName": "GoogleDrive",
+       "transportProtocolDisplayName": "HTTPS",
+       "adapterDisplayName": "GoogleWorkspace",
+       "vendor": "rojoconsultancy.com",
+       "MessageProtocolVersion": "1.0.0",
+       "TransportProtocolVersion": "1.0.0",
+       "ITYPE": "DEFAULT_CHANNEL",
+       "adapterVariantHashURI": "Y3R5cGU6OkFkYXB0ZXJWYXJpYW50L2NuYW1lOjpHb29nbGVXb3Jrc3BhY2UvdmVuZG9yOjpyb2pvY29uc3VsdGFuY3kuY29tL3RwOjpIVFRQUy9tcDo6R29vZ2xlRHJpdmUvZGlyZWN0aW9uOjpSZWNlaXZlci92ZXJzaW9uOjoxLjAuMA==",
+       "adapterVariantURI": "ctype::AdapterVariant/cname::GoogleWorkspace/vendor::rojoconsultancy.com/tp::HTTPS/mp::GoogleDrive/direction::Receiver/version::1.0.0",
+       "componentVersion": "1.0.0",
+       "properties": {},
+       "packageId": "cd379fb8785146b6b7607b3f9071b851",
+       "subsystemSymbolicName": "GoogleWorkspace_rojoconsultancy.com"
+      }
+     ]
+    }
+   ]
+  },
+  "shapeMetadataTOMap": {
+   "DEFAULT_FLOWSTEP_Splitter_PKCS#7/CMS Signature-Content Splitter": [
+    {
+     "cursor": "Splitter",
+     "attributes": {
+      "type": "Activity",
+      "flavor": "Splitter_PKCS#7/CMS Signature-Content Splitter",
+      "name": "PKCS#7/CMS Splitter",
+      "seedId": "CallActivity_",
+      "height": 60,
+      "width": 100,
+      "iType": "DEFAULT_FLOWSTEP",
+      "version": "1.1.1",
+      "cmdURI": "ctype::FlowstepVariant/cname::PKCS#7/CMS Signature-Content Splitter/version::1.1.1",
+      "hashedCmdURI": "Y3R5cGU6OkZsb3dzdGVwVmFyaWFudC9jbmFtZTo6UEtDUyM3L0NNUyBTaWduYXR1cmUtQ29udGVudCBTcGxpdHRlci92ZXJzaW9uOjoxLjEuMQ==",
+      "displayName": "PKCS#7/CMS Splitter",
+      "properties": {
+       "flowstepGeneralTabRequired": "true"
+      }
+     }
+    }
+   ],
+   "DEFAULT_FLOWSTEP_ExternalCall": [
+    {
+     "cursor": "ExternalCall",
+     "attributes": {
+      "type": "Activity",
+      "flavor": "ExternalCall",
+      "name": "Request Reply",
+      "seedId": "ServiceTask_",
+      "height": 60,
+      "width": 100,
+      "iType": "DEFAULT_FLOWSTEP",
+      "version": "1.0.0",
+      "cmdURI": "ctype::FlowstepVariant/cname::ExternalCall/version::1.0.4",
+      "hashedCmdURI": "Y3R5cGU6OkZsb3dzdGVwVmFyaWFudC9jbmFtZTo6RXh0ZXJuYWxDYWxsL3ZlcnNpb246OjEuMC40",
+      "displayName": "Request Reply",
+      "properties": {
+       "flowstepGeneralTabRequired": "true"
+      }
+     }
+    }
+   ],
+   "DEFAULT_FLOWSTEP_terminate": [
+    {
+     "cursor": "speedbuttons/Events",
+     "attributes": {
+      "type": "Event",
+      "flavor": "terminate",
+      "name": "End",
+      "seedId": "EndEvent_",
+      "height": 32,
+      "width": 32,
+      "iType": "DEFAULT_FLOWSTEP",
+      "version": "1.0.0",
+      "cmdURI": "ctype::FlowstepVariant/cname::TerminateEndEvent",
+      "hashedCmdURI": "Y3R5cGU6OkZsb3dzdGVwVmFyaWFudC9jbmFtZTo6VGVybWluYXRlRW5kRXZlbnQ=",
+      "displayName": "Terminate Message",
+      "properties": {
+       "flowstepGeneralTabRequired": "true"
+      }
+     }
+    }
+   ],
+   "RECEIVER": [
+    {
+     "cursor": "System",
+     "attributes": {
+      "type": "Pool",
+      "flavor": "System",
+      "name": "Receiver",
+      "seedId": "Participant_",
+      "height": 140,
+      "width": 100,
+      "iType": "RECEIVER",
+      "orientation": "Vertical"
+     }
+    }
+   ],
+   "DEFAULT_PROCESS_Process": [
+    {
+     "cursor": "speedbuttons/PoolV",
+     "attributes": {
+      "type": "Pool",
+      "flavor": "Process",
+      "name": "Integration Process",
+      "seedId": "Process_",
+      "height": 220,
+      "width": 540,
+      "iType": "DEFAULT_PROCESS",
+      "orientation": "Vertical",
+      "version": "1.2.1",
+      "cmdURI": "ctype::FlowElementVariant/cname::IntegrationProcess/version::1.2.1",
+      "hashedCmdURI": "Y3R5cGU6OkZsb3dFbGVtZW50VmFyaWFudC9jbmFtZTo6SW50ZWdyYXRpb25Qcm9jZXNzL3ZlcnNpb246OjEuMi4x",
+      "displayName": "Integration Process",
+      "properties": {
+       "flowstepGeneralTabRequired": "true"
+      }
+     }
+    }
+   ],
+   "DEFAULT_FLOWSTEP_Enricher": [
+    {
+     "cursor": "Enricher",
+     "attributes": {
+      "type": "Activity",
+      "flavor": "Enricher",
+      "name": "Content Modifier",
+      "seedId": "CallActivity_",
+      "height": 60,
+      "width": 100,
+      "iType": "DEFAULT_FLOWSTEP",
+      "version": "1.6.5",
+      "cmdURI": "ctype::FlowstepVariant/cname::Enricher/version::1.6.5",
+      "hashedCmdURI": "Y3R5cGU6OkZsb3dzdGVwVmFyaWFudC9jbmFtZTo6RW5yaWNoZXIvdmVyc2lvbjo6MS42LjU=",
+      "displayName": "Content Modifier",
+      "properties": {
+       "flowstepGeneralTabRequired": "true"
+      }
+     }
+    }
+   ],
+   "DEFAULT_FLOWSTEP_Script_GroovyScript": [
+    {
+     "cursor": "GroovyScript",
+     "attributes": {
+      "type": "Activity",
+      "flavor": "GroovyScript",
+      "name": "Groovy Script",
+      "seedId": "CallActivity_",
+      "height": 60,
+      "width": 100,
+      "iType": "DEFAULT_FLOWSTEP",
+      "version": "2.0.0",
+      "cmdURI": "ctype::FlowstepVariant/cname::GroovyScript/version::2.0.0",
+      "hashedCmdURI": "Y3R5cGU6OkZsb3dzdGVwVmFyaWFudC9jbmFtZTo6R3Jvb3Z5U2NyaXB0L3ZlcnNpb246OjIuMC4w",
+      "displayName": "Groovy Script",
+      "parentFlavor": "Script",
+      "properties": {
+       "flowstepGeneralTabRequired": "true"
+      }
+     }
+    }
+   ]
+  }
+ }
+]

@@ -35,5 +35,8 @@
 
 !Makefile
 
+# Test fixtures
+!**/testdata/**
+
 # Landscape fixtures embedded by the mock tenant (go:embed)
 !internal/cpitest/landscapes/**
