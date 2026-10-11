@@ -152,7 +152,7 @@ func profileServiceDetails(name string) (*cpi.ServiceDetails, error) {
 		OauthHost:         v.GetString("oauth-host"),
 		OauthClientId:     v.GetString("oauth-clientid"),
 		OauthClientSecret: v.GetString("oauth-clientsecret"),
-		OauthPath:         v.GetString("oauth-path"),
+		OauthPath:         cmp.Or(v.GetString("oauth-path"), "/oauth/token"), // the default of --oauth-path
 	}
 	if sd.Host == "" {
 		return nil, fmt.Errorf("profile %s has no tmn-host", name)

@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Fix: `tenant:<profile>` sides (`compare`, `matrix`, `transport check --target/--source`) with
+  OAuth sent the token request to the token host's root instead of `/oauth/token`
+  ("oauth2: cannot parse json"). Found on a real tenant.
+
 - Groovy script step version 2 (Groovy 4, `com.sap.it.script.v2.api`, scripts under `script/v2/`):
   lint resolves `v2/<name>.groovy` references, so v2 scripts are no longer reported as unused
   (and `lint --fix` no longer deletes them); v2 scripts stay out of the script collection fixes;
