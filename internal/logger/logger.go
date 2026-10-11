@@ -34,11 +34,11 @@ func Init(w io.Writer, jsonLines bool, debug bool) {
 	}
 }
 
+// GetErrorDetails is the error text for the log: the message, and the Go
+// stack of wrapped errors only with --debug (it means nothing to users).
 func GetErrorDetails(err error) string {
-	switch err.(type) {
-	case *errors.Error:
-		return err.(*errors.Error).ErrorStack()
-	default:
-		return err.Error()
+	if e, ok := err.(*errors.Error); ok && zerolog.GlobalLevel() <= zerolog.DebugLevel {
+		return e.ErrorStack()
 	}
+	return err.Error()
 }

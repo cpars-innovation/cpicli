@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Fix: `update artifact` (and everything reading `MANIFEST.MF`) failed with "EOF" on a manifest
+  exactly as a tenant exports it (no closing blank line), e.g. a flow from `iflow copy --from`.
+  Found on a real tenant.
+- Errors no longer print a Go stack trace (only with `--debug`).
+
 - Fix: `log-files` sent `$orderby`, which the tenant refuses on that collection (HTTP 501 on Cloud
   Foundry); it now lists without it and sorts newest first itself. Verified on a real tenant.
 - Packages created without `ShortText` get the package name as short text (with a warning): the

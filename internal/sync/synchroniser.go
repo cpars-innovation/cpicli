@@ -2,6 +2,7 @@ package sync
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/textproto"
@@ -486,17 +487,18 @@ func (s *Synchroniser) ArtifactsToTenant(packageId string, workDir string, artif
 	return nil
 }
 
+// GetManifestHeaders reads the headers of a MANIFEST.MF. Manifests from a
+// tenant end without the blank line that closes a header block; that is
+// accepted.
 func GetManifestHeaders(manifestPath string) (textproto.MIMEHeader, error) {
-	manifestFile, err := os.Open(manifestPath)
+	data, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, errors.Wrap(err, 0)
+		return nil, err
 	}
-	defer manifestFile.Close()
-
-	tp := textproto.NewReader(bufio.NewReader(manifestFile))
-	headers, err := tp.ReadMIMEHeader()
+	data = append(bytes.TrimRight(data, "\r\n"), "\r\n\r\n"...)
+	headers, err := textproto.NewReader(bufio.NewReader(bytes.NewReader(data))).ReadMIMEHeader()
 	if err != nil {
-		return nil, errors.Wrap(err, 0)
+		return nil, fmt.Errorf("%s: %w", manifestPath, err)
 	}
 	return headers, nil
 }
