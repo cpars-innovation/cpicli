@@ -98,6 +98,21 @@ func TestPlanOrchestration(t *testing.T) {
 	assert.True(t, items["New"].Deploy)
 	assert.Equal(t, "not deployed yet", items["New"].Reason)
 
+	// a plan fills no update or deploy counters (Studio C5)
+	orc, err := NewOrchestrator(mock.Executer(), repo, OrchestratorOptions{Plan: true, ArtifactFilter: []string{"OrderIntake", "New"}})
+	require.NoError(t, err)
+	tasks, err := orc.Process(context.Background(), &cfg)
+	require.NoError(t, err)
+	orc.PlanDeployments(tasks)
+	orc.Close()
+	assert.Len(t, orc.Plan(), 2)
+	st := orc.Stats
+	assert.Zero(t, st.PackagesUpdated+st.ArtifactsChanged+st.ArtifactsUnchanged+st.ArtifactsDeployedSuccess)
+	assert.Empty(t, st.SuccessfulArtifactUpdates)
+	assert.Empty(t, st.SuccessfulPackageUpdates)
+	assert.Empty(t, st.Artifacts())
+	assert.NoError(t, st.Err())
+
 	// update only: no deployment predicted
 	plan, err = PlanOrchestration(context.Background(), mock.Executer(), repo, &cfg,
 		OrchestratorOptions{Mode: OrchestratorUpdateOnly, ArtifactFilter: []string{"New"}})

@@ -61,6 +61,9 @@ func TestCompareTrees(t *testing.T) {
 
 	c := itemOf(res, "Content")
 	assert.Equal(t, CompareContentDiffers, c.Status)
+	assert.Equal(t, []string{"content", "version"}, c.Differences, "every differing aspect, not only the status")
+	assert.Equal(t, []string{"parameters"}, itemOf(res, "Params").Differences)
+	assert.Empty(t, itemOf(res, "Same").Differences)
 	assert.Equal(t, "1.0.1", c.VersionA)
 	assert.Equal(t, "1.0.2", c.VersionB)
 	require.Len(t, c.Files, 3)

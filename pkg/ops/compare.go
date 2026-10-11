@@ -94,13 +94,16 @@ type CompareItem struct {
 	Type     string `json:"type,omitempty"`
 	// Status: same, only_a, only_b, content_differs, version_differs
 	// (same content), parameters_differ (same content and version).
-	Status     string            `json:"status"`
-	VersionA   string            `json:"versionA,omitempty"`
-	VersionB   string            `json:"versionB,omitempty"`
-	A          *CompareSideInfo  `json:"a,omitempty"`
-	B          *CompareSideInfo  `json:"b,omitempty"`
-	Files      []FileChange      `json:"files,omitempty"`
-	Parameters []ParameterChange `json:"parameters,omitempty"`
+	Status string `json:"status"`
+	// Differences lists every aspect that differs (content, version,
+	// parameters), also those Status does not name; empty when same.
+	Differences []string          `json:"differences,omitempty"`
+	VersionA    string            `json:"versionA,omitempty"`
+	VersionB    string            `json:"versionB,omitempty"`
+	A           *CompareSideInfo  `json:"a,omitempty"`
+	B           *CompareSideInfo  `json:"b,omitempty"`
+	Files       []FileChange      `json:"files,omitempty"`
+	Parameters  []ParameterChange `json:"parameters,omitempty"`
 }
 
 // CompareResult is the outcome of Compare.
@@ -255,6 +258,15 @@ func compareArtifact(a, b LocalArtifact, labelA, labelB string, o CompareOptions
 	pa, _ := os.ReadFile(filepath.Join(a.Dir, filepath.FromSlash(file.ParametersFile)))
 	pb, _ := os.ReadFile(filepath.Join(b.Dir, filepath.FromSlash(file.ParametersFile)))
 	it.Parameters = parameterChanges(PropertyValues(pa), PropertyValues(pb), o.Values)
+	if ha != hb {
+		it.Differences = append(it.Differences, "content")
+	}
+	if CompareVersions(it.VersionA, it.VersionB) != 0 {
+		it.Differences = append(it.Differences, "version")
+	}
+	if len(it.Parameters) > 0 {
+		it.Differences = append(it.Differences, "parameters")
+	}
 	switch {
 	case ha != hb:
 		it.Status = CompareContentDiffers

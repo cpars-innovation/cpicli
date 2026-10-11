@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `orchestrator --plan` (and `ops.PlanOrchestration`) no longer fills the update counters and
+  artifact statuses (`packagesUpdated`, `artifactsChanged`, `successfulArtifactUpdates`, …): a plan
+  writes nothing, its outcome is in `plan[]`. Failures still count.
+- `matrix`: every row has `cells`, the tiers in promotion order (also tiers without the artifact,
+  `present: false`); `tiers` stays as the map. `compare`: every item has `differences`, all
+  differing aspects (`content`, `version`, `parameters`), not only the one `status` names.
+
 - Component catalogue: `sourceDates` records when the editor metadata was imported and when
   versions were last learned (`generatedAt` changes with every write); `components list` prints
   the editor metadata's age.

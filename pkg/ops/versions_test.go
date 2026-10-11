@@ -49,6 +49,9 @@ func TestVersionMatrix(t *testing.T) {
 	only := rows["Only"]
 	assert.Empty(t, only.Git)
 	assert.Equal(t, []string{"PROD"}, only.Behind, "not on PROD yet")
+	require.Len(t, only.Cells, 2, "every tier, in tier order")
+	assert.Equal(t, MatrixTierCell{Tier: "DEV", Present: true, MatrixCell: only.Tiers["DEV"]}, only.Cells[0])
+	assert.Equal(t, MatrixTierCell{Tier: "PROD"}, only.Cells[1])
 
 	m, err = BuildVersionMatrix(context.Background(), []MatrixTier{dev, prod}, MatrixOptions{Dir: git, Artifacts: []string{"Billing"}})
 	require.NoError(t, err)

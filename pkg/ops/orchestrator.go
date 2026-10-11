@@ -156,7 +156,10 @@ type OrchestratorStats struct {
 	// final artifact ID; artifacts holds the status of each.
 	skippedDraft map[string]bool
 	draftFailed  int
-	artifacts    map[string]*OrchestratorArtifact
+	// uploaded holds the final artifact IDs the upload phase handled
+	// (also in a plan).
+	uploaded  map[string]bool
+	artifacts map[string]*OrchestratorArtifact
 }
 
 // NewOrchestratorStats returns empty statistics.
@@ -171,6 +174,7 @@ func NewOrchestratorStats() *OrchestratorStats {
 		changed:                   map[string]bool{},
 		redeploy:                  map[string]bool{},
 		skippedDraft:              map[string]bool{},
+		uploaded:                  map[string]bool{},
 		artifacts:                 map[string]*OrchestratorArtifact{},
 		SkippedDrafts:             []DraftSkip{},
 	}
@@ -841,6 +845,18 @@ func (orc *Orchestrator) uploadOneArtifact(pkg *models.Package, artifact *models
 		if err != nil {
 			return
 		}
+		stats.uploaded[finalArtifactID] = true
+		if outcome.Action != "UNCHANGED" {
+			stats.changed[finalArtifactID] = true
+		}
+		if outcome.Redeploy {
+			stats.redeploy[finalArtifactID] = true
+		}
+		if orc.plan != nil {
+			// a plan writes nothing: the counters stay at zero, the plan
+			// items carry the outcome
+			return
+		}
 		st := stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir)
 		st.Status = map[string]string{"CREATED": ArtifactCreated, "UPDATED": ArtifactUpdated}[outcome.Action]
 		st.Status = cmp.Or(st.Status, ArtifactUnchanged)
@@ -849,10 +865,6 @@ func (orc *Orchestrator) uploadOneArtifact(pkg *models.Package, artifact *models
 			stats.ArtifactsUnchanged++
 		} else {
 			stats.ArtifactsChanged++
-			stats.changed[finalArtifactID] = true
-		}
-		if outcome.Redeploy {
-			stats.redeploy[finalArtifactID] = true
 		}
 		stats.SuccessfulArtifactUpdates[finalArtifactID] = true
 	})
@@ -893,7 +905,7 @@ func (orc *Orchestrator) collectDeploymentTasks(pkg *models.Package, packageDir,
 			log.Debug().Msgf("Skipping deployment of %s (draft on the tenant)", finalArtifactID)
 			continue
 		}
-		if _, uploaded := stats.artifacts[finalArtifactID]; !uploaded && orc.drafts != nil {
+		if !stats.uploaded[finalArtifactID] && orc.drafts != nil {
 			// deployed without an upload in this run: is it a draft?
 			typ := DesigntimeType(artifactType)
 			draft, err := orc.drafts.isDraft(finalPackageID, typ, finalArtifactID)

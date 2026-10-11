@@ -29,6 +29,13 @@ type MatrixCell struct {
 	DeployedOn *time.Time `json:"deployedOn,omitempty"`
 }
 
+// MatrixTierCell is a MatrixCell with its tier, in tier order.
+type MatrixTierCell struct {
+	Tier    string `json:"tier"`
+	Present bool   `json:"present"`
+	MatrixCell
+}
+
 // MatrixRow is one artifact across Git and the tiers.
 type MatrixRow struct {
 	Package  string `json:"package"`
@@ -37,6 +44,9 @@ type MatrixRow struct {
 	// Git is the Bundle-Version in the content tree (empty: not in it).
 	Git   string                `json:"git,omitempty"`
 	Tiers map[string]MatrixCell `json:"tiers"`
+	// Cells are the tiers in promotion order (VersionMatrix.Tiers), also
+	// those without the artifact (Present false).
+	Cells []MatrixTierCell `json:"cells"`
 	// Differs is true when the designtime versions (and Git) are not all
 	// equal, Behind lists the tiers whose designtime version is lower than
 	// the tier (or Git) before them, in tier order: the next promotion.
@@ -167,8 +177,10 @@ func BuildVersionMatrix(ctx context.Context, tiers []MatrixTier, o MatrixOptions
 		if r.Git != "" {
 			versions[r.Git] = true
 		}
+		r.Cells = make([]MatrixTierCell, 0, len(m.Tiers))
 		for _, t := range m.Tiers {
 			c, ok := r.Tiers[t]
+			r.Cells = append(r.Cells, MatrixTierCell{Tier: t, Present: ok, MatrixCell: c})
 			v := c.Designtime
 			if c.Draft {
 				v = "draft"
