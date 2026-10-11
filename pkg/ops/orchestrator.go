@@ -19,6 +19,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/manifest"
 	"github.com/cpars-innovation/cpicli/pkg/models"
+	"github.com/cpars-innovation/cpicli/pkg/snapshot"
 	"github.com/cpars-innovation/cpicli/pkg/versioning"
 	"github.com/rs/zerolog/log"
 )
@@ -424,7 +425,7 @@ type Orchestrator struct {
 	opts OrchestratorOptions
 	// Stats are the counters of the run.
 	Stats    *OrchestratorStats
-	baseline *sync.SnapshotState
+	baseline *snapshot.State
 	plan     *planCollector
 	drafts   *draftChecker
 	workDir  string
@@ -464,7 +465,7 @@ func NewOrchestrator(exe *httpclnt.HTTPExecuter, dir string, o OrchestratorOptio
 	}
 	if o.Mode != OrchestratorDeployOnly {
 		if o.SnapshotState != "" {
-			state, err := sync.LoadSnapshotState(o.SnapshotState)
+			state, err := snapshot.LoadState(o.SnapshotState)
 			if err != nil {
 				return nil, output.Usagef("cannot read the snapshot state %s: %v", o.SnapshotState, err)
 			}

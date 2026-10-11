@@ -467,6 +467,7 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 | [Examples](docs/examples) | Ready-to-copy configuration files |
 | [End-to-end test](docs/e2e.md) | Opt-in test of the pipeline on a development tenant, manual checks (drafts, layout) |
 | [Coming from FlashPipe](docs/migrating-from-flashpipe.md) | What changed and how to migrate |
+| [Go API](docs/go-api.md) | Using cpictl as a Go library: packages, operations, snapshot, content hashing |
 
 ## Development
 
@@ -483,6 +484,8 @@ internal/cmd       CLI commands, output contract
 internal/mcp       MCP server and tools
 pkg/ops            operations with structured results (shared by CLI and MCP; docs/go-api.md)
 pkg/models         deploy config and configure file models
+pkg/snapshot       tenant -> folder snapshot, its state, commit
+pkg/content        content hashing, normalisation and diffs
 pkg/cpi            SAP Cloud Integration OData API client
 pkg/httpclnt       HTTP client: OAuth / Basic Auth, CSRF, typed errors
 internal/cpitest   mock tenant for tests

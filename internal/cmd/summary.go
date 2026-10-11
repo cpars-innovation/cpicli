@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/cpars-innovation/cpicli/internal/sync"
 	"github.com/cpars-innovation/cpicli/pkg/lint"
+	"github.com/cpars-innovation/cpicli/pkg/snapshot"
 	"os"
 	"strings"
 	"time"
@@ -189,10 +189,10 @@ func (r *snapshotResult) MarkdownSummary() string {
 		b.WriteString("**Dry run**: nothing was written.\n\n")
 	}
 	fmt.Fprintf(&b, "%d of %d package(s): %s; %d warning(s); %d artifact(s) downloaded, %.1fs.\n\n",
-		r.Succeeded, r.Packages, formatCounts(r.Counts), r.Warnings, r.Downloaded, r.Seconds)
+		r.Succeeded, r.Packages, snapshot.FormatCounts(r.Counts), r.Warnings, r.Downloaded, r.Seconds)
 	var rows [][]string
 	for _, it := range r.Artifacts {
-		if it.Status == sync.SnapUnchanged && it.Warning == "" {
+		if it.Status == snapshot.StatusUnchanged && it.Warning == "" {
 			continue
 		}
 		note := it.Note

@@ -36,6 +36,7 @@ cpictl snapshot --dir-git-repo packages --ids-include UtilitiesBaseEDMEnergyData
 | `deleted` | local, written by an earlier snapshot, no longer on the tenant (also whole packages) | kept; `--prune` removes it |
 | `local-only` | local, not on the tenant, never snapshotted (a new artifact not uploaded yet) | always kept |
 | `derived` | a deployment copy of another artifact ([below](#deployment-copies)) | not written |
+| `draft` | in draft on the tenant, `--draft-handling SKIP` ([below](#drafts)) | not written |
 
 The text output has one line per artifact that is not unchanged, and a count per status;
 `--output json` returns `counts`, `warnings` and `artifacts` (package, artifact, status, action,
@@ -46,7 +47,10 @@ job summary. Packages outside `--ids-include` (or in `--ids-exclude`) are counte
 ### Drafts
 
 `--draft-handling` decides about artifacts in draft on the tenant (being edited in the Web UI):
-`SKIP` (default) leaves the local folder alone, `ERROR` fails the package, `ADD` writes the draft.
+`SKIP` (default) leaves the local folder alone and reports the artifact as `draft` (JSON `status:
+"draft"`, `draft: true`); the state file keeps it with `draft: true` (the entry of the last saved
+version the snapshot saw, or a new entry without hashes). `ERROR` fails the package, `ADD` writes
+the draft.
 A draft has no version number (the tenant reports `Active`), so `ADD` writes a numeric
 `Bundle-Version`: the repository's when it is higher, else the last saved version known (the
 snapshot state's, or the running one), else `1.0.0`. The artifact is marked as draft in the report
@@ -81,6 +85,24 @@ Files that are gone from an artifact on the tenant are deleted locally: a writte
 is replaced by the tenant's content. A whole artifact or package that is gone from the tenant is
 only reported (`deleted`); `--prune` removes its folder, never when it was edited locally, and never
 `local-only` folders. Packages outside `--ids-include` / `--ids-exclude` are left alone.
+
+## Commit and work folder
+
+Unless `--git-skip-commit`, the snapshot commits (it never pushes). `--dir-git-repo` is the root of
+a Git working tree or a folder inside one: the repository is found in it or above it (as `git
+rev-parse --show-toplevel` does), and only changes below `--dir-git-repo` are staged and
+committed. Changes elsewhere in the working tree stay as they are; when the Git index already holds
+staged changes outside `--dir-git-repo`, the commit is refused rather than mixing them
+in.
+
+- `--git-commit-changed-only` stages only what this snapshot wrote or removed (artifact folders,
+  package files, the state file) instead of every change below `--dir-git-repo`.
+- `--git-commit-user` / `--git-commit-email` set the author (default: the GitHub Actions bot),
+  `--git-commit-msg` the message.
+
+Downloads are extracted into a temporary folder of the run, created in `--dir-work` (default: the
+system's temporary directory) and removed after the run; `--keep-work-dir` keeps it for debugging.
+`snapshot restore` uses a work folder the same way.
 
 ## Stable output
 

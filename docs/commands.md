@@ -3070,11 +3070,12 @@ Configuration:
       --deploy-config string        Deploy config file or folder of the orchestrator: its deployment copies are not written (config: snapshot.deployConfig, else orchestrator.deployConfig)
       --deployment-prefix strings   Additional deployment prefixes whose copies are not written (the deploy config's deploymentPrefix always counts)
       --draft-handling string       Handling when artifact is in draft version. Allowed values: SKIP, ADD, ERROR (config: snapshot.draftHandling) (default "SKIP")
-      --dry-run                     Only report per artifact what the snapshot would do (new, changed, deleted, unchanged, local-modified, derived); writes no files and no state
+      --dry-run                     Only report per artifact what the snapshot would do (new, changed, deleted, unchanged, local-modified, local-only, derived, draft); writes no files and no state
       --fail-on-local-modified      Exit with code 5 when an artifact is local-modified (for CI)
-      --git-commit-email string     Email used in commit (config: snapshot.gitCommitEmail) (default "41898282+github-actions[bot]@users.noreply.github.com")
+      --git-commit-changed-only     Commit only the artifact folders, package files and state file this snapshot changed (default: every change below --dir-git-repo) (config: snapshot.gitCommitChangedOnly)
+      --git-commit-email string     Author email of the commit (config: snapshot.gitCommitEmail) (default "41898282+github-actions[bot]@users.noreply.github.com")
       --git-commit-msg string       Message used in commit (config: snapshot.gitCommitMsg) (default "Tenant snapshot of <current time>")
-      --git-commit-user string      User used in commit (config: snapshot.gitCommitUser) (default "github-actions[bot]")
+      --git-commit-user string      Author name of the commit (config: snapshot.gitCommitUser) (default "github-actions[bot]")
       --git-skip-commit             Skip committing changes to Git repository (config: snapshot.gitSkipCommit)
       --include-derived             Write deployment copies like any other artifact (ignore the deploy config)
       --incremental                 Skip the download of artifacts whose version, ModifiedAt, configured parameters and local copy did not change since the last snapshot (config: snapshot.incremental)

@@ -91,6 +91,30 @@ All notable changes to cpictl. Coming from FlashPipe? See
   - `ops.NewLogLevelReverter` (`Schedule`, `RunDue`, `RevertAll`), used by the MCP server.
   - `ops.ListArtifacts` reports `ModifiedBy` and `ModifiedAt`.
 
+- Go API: the snapshot is public as `pkg/snapshot`: `snapshot.Take(ctx, exe, dir, Options)`
+  with a progress callback per artifact, `Result` (items, counts, changed `Paths`, state),
+  `State`/`ArtifactState`/`LoadState`, `Commit`. `cpictl snapshot` runs it (one implementation).
+  See [docs/go-api.md](docs/go-api.md).
+- Go API: content hashing and normalised diffs are public as `pkg/content` (`UploadHash`,
+  `ContentHash`, `TreeHash`, `NormalizeTree`, `NormalizeProperties`, `TreeDiff`, `UnifiedDiff`,
+  ...), moved from `internal/file`; the hashes are unchanged (a test pins them), so existing
+  snapshot states stay valid.
+- Go API: `ops.UploadRequest` has `Baseline` (a snapshot state: compare without a download, as
+  the orchestrator does) and `KeepRuntime` (never undeploy: a content change with the running
+  version sets `Redeploy`).
+- `snapshot`: an artifact in draft that is skipped (`--draft-handling SKIP`) is reported with
+  status `draft` (was `unchanged` with a note), counted as such and listed in the job summary; the
+  state file keeps it with `draft: true`.
+- `snapshot`: `--dir-git-repo` may be a folder inside a Git working tree (the repository is found
+  above it); only changes below it are committed, and a commit is refused when the index holds
+  staged changes outside it. `--git-commit-changed-only` commits only what the snapshot wrote or
+  removed instead of every change below `--dir-git-repo`.
+- `snapshot`, `snapshot restore`: downloads go to a temporary folder of the run, created in
+  `--dir-work` (default now the system's temporary directory instead of `/tmp` itself) and removed
+  after the run; `--keep-work-dir` keeps it.
+- `KeepRuntime` of an upload (orchestrator) also covers changed configured parameters: reported
+  as to be deployed again instead of undeploying.
+
 ## 0.9.1
 
 - Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with
