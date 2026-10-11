@@ -78,13 +78,19 @@ Entries from the editor metadata win over learned ones.`,
 				}
 				cat.Learn(uses)
 				cat.Tenant = old.Tenant
+				// re-adding the learned entries does not make them newer
+				if d, ok := old.SourceDates[catalog.SourceLearned]; ok {
+					cat.SourceDates[catalog.SourceLearned] = d
+				} else {
+					delete(cat.SourceDates, catalog.SourceLearned)
+				}
 			}
 			cat.Tenant = cmp.Or(config.GetString(cmd, "tenant"), cat.Tenant)
 			cat.GeneratedAt = time.Now().UTC().Truncate(time.Second)
 			if err := saveCatalog(cat, file); err != nil {
 				return err
 			}
-			output.SetResult(cmd.Context(), map[string]any{"file": file, "adapters": len(cat.Adapters), "steps": len(cat.Steps), "sources": cat.Sources})
+			output.SetResult(cmd.Context(), map[string]any{"file": file, "adapters": len(cat.Adapters), "steps": len(cat.Steps), "sources": cat.Sources, "sourceDates": cat.SourceDates})
 			log.Info().Msgf("%d adapter and %d step variants written to %s", len(cat.Adapters), len(cat.Steps), file)
 			return nil
 		},
@@ -159,6 +165,11 @@ Entries from the editor metadata win over learned ones.`,
 				log.Info().Msgf("step    %-32s %-10s %s", s.Name, s.Version, s.VariantURI)
 			}
 			log.Info().Msgf("%d adapter and %d step variants (%s; %s)", len(res.Adapters), len(res.Steps), strings.Join(cat.Sources, ", "), cat.GeneratedAt.Format(time.DateOnly))
+			if d, ok := cat.SourceDates[catalog.SourceEditor]; ok {
+				log.Info().Msgf("Editor metadata from %s (%d days ago)", d.Format(time.DateOnly), int(time.Since(d).Hours()/24))
+			} else {
+				log.Info().Msg("No editor metadata: the versions the tenant offers are not known exactly (cpictl components import)")
+			}
 			return nil
 		},
 	}

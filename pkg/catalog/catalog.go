@@ -37,9 +37,13 @@ type Catalog struct {
 	Tenant      string    `json:"tenant,omitempty"`
 	GeneratedAt time.Time `json:"generatedAt"`
 	// Sources says what the catalogue was built from (editor, learned).
-	Sources  []string  `json:"sources"`
-	Adapters []Adapter `json:"adapters"`
-	Steps    []Step    `json:"steps"`
+	Sources []string `json:"sources"`
+	// SourceDates is when each source was last added: the age of the
+	// editor metadata says whether to paste it again after an upgrade.
+	// GeneratedAt changes with every write.
+	SourceDates map[string]time.Time `json:"sourceDates,omitempty"`
+	Adapters    []Adapter            `json:"adapters"`
+	Steps       []Step               `json:"steps"`
 	// DeployedAdapters are custom adapters deployed on the tenant (runtime
 	// artifacts of an adapter type), with the deployed version.
 	DeployedAdapters []DeployedAdapter `json:"deployedAdapters,omitempty"`
@@ -179,7 +183,7 @@ func Import(data []byte) (*Catalog, error) {
 		}
 		list = []editorMetadata{one}
 	}
-	c := &Catalog{Schema: Schema, Sources: []string{SourceEditor}}
+	c := &Catalog{Schema: Schema, Sources: []string{SourceEditor}, SourceDates: map[string]time.Time{SourceEditor: now()}}
 	for _, md := range list {
 		for dir, adapters := range map[string][]editorAdapter{"Sender": md.AdapterMetadata.Senders, "Receiver": md.AdapterMetadata.Receivers} {
 			for _, a := range adapters {
@@ -256,6 +260,12 @@ func (c *Catalog) Learn(uses []Use) {
 	}
 	if learned && !slices.Contains(c.Sources, SourceLearned) {
 		c.Sources = append(c.Sources, SourceLearned)
+	}
+	if learned {
+		if c.SourceDates == nil {
+			c.SourceDates = map[string]time.Time{}
+		}
+		c.SourceDates[SourceLearned] = now()
 	}
 	if c.Schema == "" {
 		c.Schema = Schema
@@ -388,6 +398,9 @@ func CompareVersions(a, b string) int {
 	}
 	return 0
 }
+
+// now is the time stamped on sources (UTC, whole seconds).
+var now = func() time.Time { return time.Now().UTC().Truncate(time.Second) }
 
 // Load reads a catalogue file.
 func Load(path string) (*Catalog, error) {

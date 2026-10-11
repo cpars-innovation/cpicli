@@ -47,6 +47,7 @@ current without a browser: `cpictl components learn` on a schedule.
   "tenant": "dev",
   "generatedAt": "2026-10-11T10:00:00Z",
   "sources": ["editor", "learned"],
+  "sourceDates": {"editor": "2026-10-11T10:00:00Z", "learned": "2026-10-12T02:00:00Z"},
   "adapters": [
     {"name": "HTTP", "displayName": "HTTP", "direction": "Receiver", "transportProtocol": "HTTP",
      "messageProtocol": "None",
@@ -61,6 +62,9 @@ current without a browser: `cpictl components learn` on a schedule.
 ```
 
 - One entry per variant (the URI without its version); `version` is the newest known.
+- `sourceDates` is when each source was last added; `generatedAt` changes with every write. The
+  editor date tells whether the metadata predates a tenant upgrade (`components list` prints its
+  age).
 - `custom: true` marks adapters installed from a package (for example from the Business
   Accelerator Hub); a tier without that package does not offer them.
 - In the model, `componentVersion` is the major.minor of the variant's version (`1.22` for

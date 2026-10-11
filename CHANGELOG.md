@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Component catalogue: `sourceDates` records when the editor metadata was imported and when
+  versions were last learned (`generatedAt` changes with every write); `components list` prints
+  the editor metadata's age.
+
 - Cancellation and injectable HTTP client for Go callers: `exe.WithContext(ctx)` returns a copy
   of an executer whose requests (and retry waits) end with ctx and that shares the session (CSRF
   token, cookies, OAuth token). `httpclnt.NewWithOptions(httpclnt.Options{…, HTTPClient})` and

@@ -60,11 +60,13 @@ func DeployedAdapters(exe *httpclnt.HTTPExecuter) ([]catalog.DeployedAdapter, er
 
 // ComponentList is a filtered view of the catalogue.
 type ComponentList struct {
-	Tenant      string            `json:"tenant,omitempty"`
-	GeneratedAt time.Time         `json:"generatedAt"`
-	Sources     []string          `json:"sources"`
-	Adapters    []catalog.Adapter `json:"adapters"`
-	Steps       []catalog.Step    `json:"steps"`
+	Tenant      string    `json:"tenant,omitempty"`
+	GeneratedAt time.Time `json:"generatedAt"`
+	Sources     []string  `json:"sources"`
+	// SourceDates is when each source was last added.
+	SourceDates map[string]time.Time `json:"sourceDates,omitempty"`
+	Adapters    []catalog.Adapter    `json:"adapters"`
+	Steps       []catalog.Step       `json:"steps"`
 	// DeployedAdapters are custom adapters deployed on the tenant.
 	DeployedAdapters []catalog.DeployedAdapter `json:"deployedAdapters,omitempty"`
 }
@@ -72,7 +74,7 @@ type ComponentList struct {
 // FilterComponents filters the catalogue by name (substring, case-insensitive,
 // also matching the display name), kind (adapter, step) and direction.
 func FilterComponents(c *catalog.Catalog, name, kind, direction string) *ComponentList {
-	res := &ComponentList{Tenant: c.Tenant, GeneratedAt: c.GeneratedAt, Sources: c.Sources, Adapters: []catalog.Adapter{}, Steps: []catalog.Step{}}
+	res := &ComponentList{Tenant: c.Tenant, GeneratedAt: c.GeneratedAt, Sources: c.Sources, SourceDates: c.SourceDates, Adapters: []catalog.Adapter{}, Steps: []catalog.Step{}}
 	if kind == "" || strings.EqualFold(kind, "adapter") {
 		for _, d := range c.DeployedAdapters {
 			if name == "" || strings.Contains(strings.ToLower(d.ID+" "+d.Name), strings.ToLower(name)) {
