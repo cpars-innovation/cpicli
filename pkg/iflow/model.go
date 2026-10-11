@@ -80,6 +80,9 @@ func Parse(data []byte) (*Model, error) {
 		text    strings.Builder
 		props   map[string]string
 		capture bool
+		// container: a process or subprocess, whose direct children are the
+		// flow elements
+		container bool
 	}
 	var stack []*frame
 	var containers []string
@@ -134,7 +137,10 @@ func Parse(data []byte) (*Model, error) {
 					f.el.Source, f.el.Target = attr("sourceRef"), attr("targetRef")
 					m.Adapters = append(m.Adapters, f.el)
 				}
-			case id != "" && (containerTags[f.tag] || container != "") && f.tag != "incoming" && f.tag != "outgoing":
+			// flow elements are the direct children of a process or subprocess;
+			// nested parts with an id (conditionExpression, loop
+			// characteristics, event definitions) are not steps
+			case id != "" && (containerTags[f.tag] || (len(stack) > 0 && stack[len(stack)-1].container)) && f.tag != "incoming" && f.tag != "outgoing":
 				f.el = &Element{ID: id, Tag: f.tag, Name: attr("name"), Container: container, Props: map[string]string{},
 					TriggeredByEvent: attr("triggeredByEvent") == "true"}
 				m.Elements[id] = f.el
@@ -142,6 +148,7 @@ func Parse(data []byte) (*Model, error) {
 			}
 			if containerTags[f.tag] && id != "" {
 				containers = append(containers, id)
+				f.container = true
 			}
 			f.capture = f.tag == "key" || f.tag == "value" || f.tag == "incoming" || f.tag == "outgoing" || f.tag == "conditionExpression"
 			stack = append(stack, f)

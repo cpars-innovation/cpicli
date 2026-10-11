@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Groovy script step version 2 (Groovy 4, `com.sap.it.script.v2.api`, scripts under `script/v2/`):
+  lint resolves `v2/<name>.groovy` references, so v2 scripts are no longer reported as unused
+  (and `lint --fix` no longer deletes them); v2 scripts stay out of the script collection fixes;
+  new rule `prefer-script-v2` (info) for version 1 steps; the build skill writes new scripts as
+  version 2.
+- Fix: the flow model counted nested parts with an id (a router's `conditionExpression`, a loop's
+  `standardLoopCharacteristics` / `loopCondition`) as steps; lint reported them as unconnected and
+  `lint --fix` removed them, breaking routers and loops. Only direct children of a process are
+  steps now.
+- `hardcoded-secret` no longer reports parameters that name a credential or key (`…_REF`,
+  `…_ALIAS`, `…_NAME`, `…CREDENTIAL`, `…_ID`) when the value is an identifier.
+
 - Fix: `update artifact` (and everything reading `MANIFEST.MF`) failed with "EOF" on a manifest
   exactly as a tenant exports it (no closing blank line), e.g. a flow from `iflow copy --from`.
   Found on a real tenant.

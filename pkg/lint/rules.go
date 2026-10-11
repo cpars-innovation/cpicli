@@ -87,6 +87,7 @@ var lintRules = []lintRule{
 	{id: "hardcoded-url-in-script", group: GroupConfiguration, severity: SevWarning, title: "A script contains a URL", artifact: ruleURLsInScripts},
 	{id: "hardcoded-secret", group: GroupConfiguration, severity: SevError, title: "A script or parameter holds a password, token or key", artifact: ruleSecrets},
 	// hygiene
+	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},
 	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than other flows", cross: ruleOutdatedComponents},
 	{id: "default-step-name", group: GroupHygiene, severity: SevInfo, title: "A step has its default name", artifact: ruleDefaultNames},
 	{id: "layout", group: GroupHygiene, severity: SevInfo, title: "The diagram has overlapping or undrawn shapes, or lines through steps", artifact: ruleLayout},
@@ -119,6 +120,16 @@ type scriptStep struct {
 	// script is the file name; bundle the script collection (empty: local).
 	script, bundle string
 }
+
+// scriptRef is how a script step references a script file: its path under
+// script/ ("check.groovy", "v2/check.groovy" for Groovy step version 2).
+func scriptRef(file string) string {
+	return strings.TrimPrefix(file, ops.ResourcesDir+"/script/")
+}
+
+// isV2Script reports a Groovy step version 2 script (script/v2/, Groovy 4,
+// com.sap.it.script.v2.api).
+func isV2Script(file string) bool { return strings.HasPrefix(scriptRef(file), "v2/") }
 
 func scriptSteps(a *lintArtifact) []scriptStep {
 	var out []scriptStep
@@ -249,7 +260,9 @@ func localScriptGroups(lc *lintContext, key func([]byte) string) map[string][]sc
 		}
 		sort.Strings(files)
 		for _, f := range files {
-			if !used[path.Base(f)] || scriptLanguage(f) == "" {
+			// v2 scripts stay out of the script collection moves: whether a
+			// collection can hold them is not verified
+			if !used[scriptRef(f)] || scriptLanguage(f) == "" || isV2Script(f) {
 				continue
 			}
 			data := a.Scripts[f]
@@ -600,7 +613,7 @@ func ruleUnusedScripts(lc *lintContext, a *lintArtifact) []Finding {
 	var out []Finding
 	for _, file := range sortedKeys(a.Scripts) {
 		name := path.Base(file)
-		if used[name] || scriptLanguage(file) == "" {
+		if used[scriptRef(file)] || scriptLanguage(file) == "" {
 			continue
 		}
 		// a script may be loaded by another script
@@ -1000,6 +1013,11 @@ func ruleURLsInScripts(lc *lintContext, a *lintArtifact) []Finding {
 
 var reSecret = regexp.MustCompile(`(?i)\b(password|passwd|pwd|secret|apikey|api_key|client_secret|token)\b\s*[=:]\s*["']([^"'\s]{4,})["']`)
 
+var (
+	reSecretRefKey = regexp.MustCompile(`(?i)(_ref|_alias|_name|credential|_id)$`)
+	reIdentifier   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.\-]*$`)
+)
+
 func ruleSecrets(lc *lintContext, a *lintArtifact) []Finding {
 	var out []Finding
 	for _, file := range sortedKeys(a.Scripts) {
@@ -1015,6 +1033,10 @@ func ruleSecrets(lc *lintContext, a *lintArtifact) []Finding {
 		lk := strings.ToLower(key)
 		v := strings.TrimSpace(a.Params[key])
 		if v == "" || strings.HasPrefix(v, "{{") {
+			continue
+		}
+		// the name of a credential or secure parameter, not the secret itself
+		if reSecretRefKey.MatchString(key) && reIdentifier.MatchString(v) {
 			continue
 		}
 		for _, s := range []string{"password", "secret", "apikey", "api_key", "token"} {
@@ -1091,10 +1113,36 @@ func ruleOutdatedComponents(lc *lintContext) []Finding {
 		if v == "" || compareVersionStrings(v, latest[k]) >= 0 {
 			return
 		}
+		if k == "GroovyScript" && majorOf(v) < 2 && majorOf(latest[k]) >= 2 {
+			return // a migration, not an update: prefer-script-v2
+		}
 		out = append(out, a.finding("outdated-component", file, el.ID, el.Name, el.ID,
 			fmt.Sprintf("%s %q has version %s; other flows use %s", k, el.Name, v, latest[k]),
 			"update the step in the Web UI editor (newer versions fix bugs and add options)"))
 	})
+	return out
+}
+
+func majorOf(v string) int {
+	n, _ := strconv.Atoi(strings.SplitN(v, ".", 2)[0])
+	return n
+}
+
+// rulePreferScriptV2 points at Groovy script steps of version 1: version 2
+// runs Groovy 4 with the com.sap.it.script.v2.api API (package script.v2,
+// files under script/v2/).
+func rulePreferScriptV2(lc *lintContext, a *lintArtifact) []Finding {
+	var out []Finding
+	for _, s := range scriptSteps(a) {
+		v := s.el.Version()
+		if s.el.Kind() != "GroovyScript" || v == "" || majorOf(v) >= 2 {
+			continue
+		}
+		out = append(out, a.finding("prefer-script-v2", s.file, s.el.ID, s.el.Name, s.el.ID,
+			fmt.Sprintf("Groovy script step %q is version %s (Groovy 2.4, com.sap.gateway.ip.core.customdev.util.Message)", s.el.Name, v),
+			"for new and changed scripts use the Groovy script step 2.x: Groovy 4, package script.v2, import com.sap.it.script.v2.api.Message, file under script/v2/; "+
+				"this is a rewrite of the script, not a version change"))
+	}
 	return out
 }
 

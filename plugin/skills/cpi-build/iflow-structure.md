@@ -32,6 +32,14 @@ What `download_artifact` extracts and `upload_artifact` expects:
   entries in its `bpmn2:extensionElements`. `cmdVariantUri` names the component and version,
   e.g. `ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2`
   (Enricher = Content Modifier, GroovyScript, MessageMapping, XSLTMapping, ...).
+- **Groovy scripts: prefer the script step version 2** for new and changed scripts (Groovy 4).
+  The step has `componentVersion` `2.0` and
+  `cmdVariantUri` `ctype::FlowstepVariant/cname::GroovyScript/version::2.0.0`; its `script`
+  property is `v2/<Name>.groovy` and the file lives in `src/main/resources/script/v2/`. The
+  script starts with `package script.v2` and `import com.sap.it.script.v2.api.Message`
+  (not `com.sap.gateway.ip.core.customdev.util.Message`, which is version 1). Moving a version 1
+  script to version 2 is a rewrite for the new API, not a version change; lint reports version 1
+  steps as `prefer-script-v2`. Keep a version 1 step only where its script must stay unchanged.
 - `bpmndi:BPMNDiagram` holds the layout (shapes and edges with coordinates). Every element and
   sequence flow needs a shape/edge there, or the Web UI cannot display the flow. Never compute
   coordinates: run `layout_iflow` (or `cpictl iflow layout`) after editing; it draws missing

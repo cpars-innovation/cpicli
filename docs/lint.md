@@ -47,7 +47,8 @@ cpictl lint --list-rules
 | configuration | `hardcoded-endpoint` | warning | a receiver address that is not a `{{parameter}}` or `${...}` | |
 | | `hardcoded-url-in-script` | warning | a URL in a script (namespaces excluded) | |
 | | `hardcoded-secret` | error | a password, token or key assigned in a script or parameter | |
-| hygiene | `outdated-component` | info | a step or adapter older than the newest version used in the repository | |
+| hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
+| hygiene | `outdated-component` | info | a step or adapter older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
 | | `default-step-name` | info | "Groovy Script 1", "Content Modifier 2", ... | |
 | | `layout` | info | the diagram has steps or lines that are not drawn, overlapping shapes, shapes outside their pool, lines through steps or shapes that nearly touch ([diagram layout](#diagram-layout)) | yes |
 | | `naming` | warning | a flow ID not matching `naming.iflowId` | |

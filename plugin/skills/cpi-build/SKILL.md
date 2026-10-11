@@ -29,7 +29,9 @@ Read [iflow-structure.md](iflow-structure.md) before editing a model for the fir
      `remaining` and adapt receivers, steps and parameters. Never rename files by hand and do
      not write a model from scratch. Upload without `name`: it comes from the manifest.
    - scripts: start from `.cpi/templates/scripts/` and the reference flow's scripts; write a
-     new script only for logic that none of them covers.
+     new script only for logic that none of them covers. New scripts use the Groovy script step
+     version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under
+     `script/v2/`); see iflow-structure.md.
 
 ## The loop
 
