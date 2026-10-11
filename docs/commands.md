@@ -23,6 +23,9 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`datastore entries`](#datastore-entries) | List entries of a data store (or of all stores) |
 | [`datastore get`](#datastore-get) | Download the content of a data store entry |
 | [`datastore list`](#datastore-list) | List data stores with their number of entries |
+| [`delete`](#delete) | Delete a designtime artifact or an integration package from the tenant |
+| [`delete artifact`](#delete-artifact) | Delete a designtime artifact (requires --confirm) |
+| [`delete package`](#delete-package) | Delete an integration package (requires --confirm) |
 | [`deploy`](#deploy) | Deploy designtime artifacts and wait for the result |
 | [`discover`](#discover) | Inventory existing integration flows to derive conventions |
 | [`doctor`](#doctor) | Check the setup: configuration, connection and which API areas the credentials can use |
@@ -106,6 +109,10 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`update artifact`](#update-artifact) | Create or update a designtime artifact from a local directory |
 | [`update package`](#update-package) | Create or update an integration package from a JSON file |
 | [`validate`](#validate) | Validate an integration flow on the tenant (like Check in the Web UI) |
+| [`valmap`](#valmap) | Read and change the values of value mappings |
+| [`valmap get`](#valmap-get) | Show the schemas and value pairs of a value mapping |
+| [`valmap list`](#valmap-list) | List value mapping artifacts |
+| [`valmap set`](#valmap-set) | Add a value pair or change a target value (requires --confirm) |
 | [`variables`](#variables) | List global and integration flow variables |
 | [`variables get`](#variables-get) | Read the value of a variable |
 | [`version`](#version) | Artifact versions in the repository (Bundle-Version) |
@@ -540,6 +547,62 @@ List data stores with their number of entries
 
 ```
       --overdue-only   Only stores with overdue entries
+```
+
+## delete
+
+Delete a designtime artifact or an integration package from the tenant
+
+```
+Delete a designtime artifact or a whole integration package, as Delete in the Web
+UI. This cannot be undone: keep the content in Git (cpictl snapshot, download)
+before deleting it.
+
+A deployed artifact is refused unless --undeploy-first, which undeploys it, waits
+until it is gone and then deletes it. A package that still has artifacts is
+refused unless --with-artifacts.
+```
+
+**Examples:**
+
+```
+  cpictl delete artifact --artifact-id Orders_Old --confirm
+  cpictl delete artifact --artifact-id Country_Codes --type ValueMapping --undeploy-first --confirm
+  cpictl delete package --package-id Sandbox --with-artifacts --undeploy-first --confirm
+```
+
+## delete artifact
+
+Delete a designtime artifact (requires --confirm)
+
+**Usage:** `cpictl delete artifact [flags]`
+
+**Flags:**
+
+```
+      --artifact-id string    Artifact to delete
+      --confirm               Confirm: deleting cannot be undone
+      --delay-length int      Seconds between undeployment status checks (default 10)
+      --max-check-limit int   Undeployment status checks per artifact (default 30)
+      --type string           Artifact type: Integration, MessageMapping, ScriptCollection, ValueMapping (default: the type the tenant has)
+      --undeploy-first        Undeploy deployed artifacts first (otherwise they are refused)
+```
+
+## delete package
+
+Delete an integration package (requires --confirm)
+
+**Usage:** `cpictl delete package [flags]`
+
+**Flags:**
+
+```
+      --confirm               Confirm: deleting cannot be undone
+      --delay-length int      Seconds between undeployment status checks (default 10)
+      --max-check-limit int   Undeployment status checks per artifact (default 30)
+      --package-id string     Package to delete
+      --undeploy-first        Undeploy deployed artifacts first (otherwise they are refused)
+      --with-artifacts        Delete the package's artifacts too
 ```
 
 ## deploy
@@ -2547,6 +2610,78 @@ Validate an integration flow on the tenant (like Check in the Web UI)
 
 ```
   cpictl validate --artifact-id OrderIntake
+```
+
+## valmap
+
+Read and change the values of value mappings
+
+```
+A value mapping artifact maps values between agencies and identifiers (schemas),
+e.g. SAP:Country -> Partner:CountryCode. get shows each schema with its value
+pairs and default values; set adds a value pair or changes the target value of a
+source value in an existing schema. The runtime uses a change after the value
+mapping is deployed (cpictl deploy --artifact-type ValueMapping).
+
+New schemas (agency/identifier pairs) are added in the Web UI or by uploading the
+artifact. Deleting single value pairs is not offered: the API's DeleteValMaps
+call is not documented well enough to use safely.
+```
+
+**Examples:**
+
+```
+  cpictl valmap list --package-id Orders
+  cpictl valmap get --id Country_Codes
+  cpictl valmap set --id Country_Codes --src-agency SAP --src-id Country --tgt-agency Partner --tgt-id CountryCode \
+    --src-value DE --tgt-value GER --confirm
+```
+
+## valmap get
+
+Show the schemas and value pairs of a value mapping
+
+**Usage:** `cpictl valmap get [flags]`
+
+**Flags:**
+
+```
+      --id string           Value mapping ID
+      --src-agency string   Only schemas with this source agency
+      --src-id string       Only schemas with this source identifier
+      --tgt-agency string   Only schemas with this target agency
+      --tgt-id string       Only schemas with this target identifier
+```
+
+## valmap list
+
+List value mapping artifacts
+
+**Usage:** `cpictl valmap list [flags]`
+
+**Flags:**
+
+```
+      --package-id string   Only value mappings of this package
+```
+
+## valmap set
+
+Add a value pair or change a target value (requires --confirm)
+
+**Usage:** `cpictl valmap set [flags]`
+
+**Flags:**
+
+```
+      --confirm             Confirm the change on the tenant
+      --id string           Value mapping ID
+      --src-agency string   Schema: source agency
+      --src-id string       Schema: source identifier
+      --src-value string    Source value
+      --tgt-agency string   Schema: target agency
+      --tgt-id string       Schema: target identifier
+      --tgt-value string    Target value
 ```
 
 ## variables

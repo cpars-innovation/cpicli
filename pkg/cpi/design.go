@@ -178,7 +178,11 @@ func TriggerDeploy(id string, artifactType string, exe *httpclnt.HTTPExecuter) (
 	if err != nil {
 		return "", err
 	}
-	if resp.StatusCode != http.StatusAccepted {
+	// Integration flows answer 202 with the task ID as a string. The API
+	// metadata declares the designtime entity as the answer for
+	// MessageMapping and ValueMapping (not seen on a tenant yet), so any 2xx
+	// is accepted and only a plain string is taken as the task ID
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		_, err = exe.LogError(resp, callType)
 		return "", err
 	}
@@ -186,7 +190,11 @@ func TriggerDeploy(id string, artifactType string, exe *httpclnt.HTTPExecuter) (
 	if err != nil {
 		return "", err
 	}
-	return strings.Trim(strings.TrimSpace(string(body)), `"`), nil
+	taskID := strings.TrimSpace(string(body))
+	if strings.HasPrefix(taskID, "{") || strings.HasPrefix(taskID, "<") {
+		return "", nil // no task to poll: the runtime status decides
+	}
+	return strings.Trim(taskID, `"`), nil
 }
 
 // ArtifactTypes lists the designtime artifact types supported by

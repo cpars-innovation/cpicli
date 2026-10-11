@@ -119,7 +119,7 @@ func TestProtocol(t *testing.T) {
 		"get_parameters", "set_parameters", "create_package", "upload_artifact", "upload_artifacts", "deploy", "send_test_message", "undeploy", "pd_deploy",
 		"get_pd_parameters", "pd_diff", "pd_dependencies", "config_diff", "drift", "compare", "transport_check", "discover_tenant",
 		"list_data_stores", "list_data_store_entries", "get_data_store_entry", "delete_data_store_entry", "list_variables", "get_variable",
-		"list_jms_queues", "get_jms_broker", "list_number_ranges", "list_log_files", "get_log_file", "list_idempotent_entries", "list_id_mappings", "list_locks", "unlock_artifact", "graph_search", "graph_neighbors", "graph_path"}, names)
+		"list_jms_queues", "get_jms_broker", "list_number_ranges", "list_log_files", "get_log_file", "list_idempotent_entries", "list_id_mappings", "list_locks", "unlock_artifact", "list_value_mappings", "get_value_mapping", "set_value_mapping", "delete_artifact", "delete_package", "graph_search", "graph_neighbors", "graph_path"}, names)
 
 	assert.Nil(t, resp["3"].Error)
 	assert.Equal(t, codeMethodNotFound, resp["4"].Error.Code)

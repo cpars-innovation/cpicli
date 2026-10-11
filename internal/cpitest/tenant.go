@@ -920,6 +920,9 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if m.handleValMap(w, r, path) {
+		return
+	}
 	switch {
 	case rePDCollection.MatchString(path) || rePDEntity.MatchString(path):
 		m.handlePD(w, r)
@@ -1279,6 +1282,22 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		notFound(w)
 
+	// like the tenant: the package goes with its designtime artifacts
+	case r.Method == http.MethodDelete && rePackage.MatchString(path):
+		id := rePackage.FindStringSubmatch(path)[1]
+		i := slices.IndexFunc(m.Packages, func(p Package) bool { return p.ID == id })
+		if i < 0 {
+			notFound(w)
+			return
+		}
+		m.Packages = slices.Delete(m.Packages, i, i+1)
+		for _, aid := range sortedKeys(m.Artifacts) {
+			if a := m.Artifacts[aid]; a.Package == id {
+				m.deleteDesigntime(aid)
+			}
+		}
+		w.WriteHeader(http.StatusAccepted)
+
 	case r.Method == http.MethodPost && path == "/api/v1/IntegrationPackages":
 		var body struct {
 			D struct{ Id, Name, ShortText, Description string } `json:"d"`
@@ -1445,6 +1464,17 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"d": map[string]string{"Id": id, "Version": version}})
 
+	// a deployed artifact keeps running without its designtime artifact
+	case r.Method == http.MethodDelete && reDesign.MatchString(path):
+		mm := reDesign.FindStringSubmatch(path)
+		a := m.Artifacts[mm[2]]
+		if a == nil || a.DesignVersion == "" || a.Type != mm[1] {
+			notFound(w)
+			return
+		}
+		m.deleteDesigntime(mm[2])
+		w.WriteHeader(http.StatusOK)
+
 	case r.Method == http.MethodGet && reDesign.MatchString(path):
 		mm := reDesign.FindStringSubmatch(path)
 		a := m.Artifacts[mm[2]]
@@ -1461,7 +1491,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && reDeploy.MatchString(path):
 		id := strings.Trim(r.URL.Query().Get("Id"), "'")
 		a := m.Artifacts[id]
-		if a == nil {
+		if a == nil || (a.Type != "" && a.Type != reDeploy.FindStringSubmatch(path)[1]) {
 			notFound(w)
 			return
 		}
@@ -1556,6 +1586,18 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	default:
 		notFound(w)
 	}
+}
+
+// deleteDesigntime removes the designtime artifact id and its edit locks; a
+// deployed artifact stays in the runtime.
+func (m *Tenant) deleteDesigntime(id string) {
+	a := m.Artifacts[id]
+	m.Locks = slices.DeleteFunc(m.Locks, func(l Lock) bool { return l.ArtifactID == id })
+	if a.Runtime == nil {
+		delete(m.Artifacts, id)
+		return
+	}
+	a.DesignVersion, a.Package, a.Zip, a.Resources, a.cached = "", "", nil, nil, nil
 }
 
 // compareVersions compares dotted numeric versions (-1, 0, 1).

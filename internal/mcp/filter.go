@@ -36,7 +36,9 @@ var toolEffects = map[string]Effect{
 	"get_pd_parameters": EffectRead, "pd_diff": EffectRead, "get_trace_tree": EffectRead,
 	"pd_dependencies": EffectRead, "config_diff": EffectRead,
 	"list_data_stores": EffectRead, "list_data_store_entries": EffectRead, "get_data_store_entry": EffectRead,
-	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "unlock_artifact": EffectTenant, "list_variables": EffectRead, "get_variable": EffectRead,
+	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "unlock_artifact": EffectTenant,
+	"list_value_mappings": EffectRead, "get_value_mapping": EffectRead, "set_value_mapping": EffectTenant,
+	"delete_artifact": EffectTenant, "delete_package": EffectTenant, "list_variables": EffectRead, "get_variable": EffectRead,
 	"list_jms_queues": EffectRead, "get_jms_broker": EffectRead, "list_number_ranges": EffectRead,
 	"list_log_files": EffectRead, "get_log_file": EffectRead, "list_idempotent_entries": EffectRead, "list_id_mappings": EffectRead,
 	"drift": EffectRead, "doctor": EffectRead, "lint": EffectRead, "compare": EffectRead, "message_summary": EffectRead, "transport_check": EffectRead,
@@ -51,8 +53,9 @@ var toolEffects = map[string]Effect{
 }
 
 // optInTools are offered only when the user's --tools names them exactly
-// (not by a pattern), whatever the mode: they can destroy someone else's work.
-var optInTools = []string{"unlock_artifact"}
+// (not by a pattern), whatever the mode: they can destroy someone else's work
+// or content that cannot be restored.
+var optInTools = []string{"unlock_artifact", "delete_artifact", "delete_package"}
 
 // ToolFilter limits the tools a server offers.
 type ToolFilter struct {
@@ -201,7 +204,7 @@ func ModeInstructions(mode string) string {
 	case "develop":
 		return "\n\nMode: develop. Build loop on a development tenant; pd_deploy full_sync is refused, undeploy needs confirm. Open a loop with loop_start before changing anything."
 	case "full":
-		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy and delete_data_store_entry still need confirm; unlock_artifact only when --tools names it."
+		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy and delete_data_store_entry still need confirm; unlock_artifact, delete_artifact and delete_package only when --tools names them."
 	}
 	return ""
 }
@@ -212,11 +215,12 @@ func ModeInstructions(mode string) string {
 // doctor is in every toolset, help is always added.
 var Toolsets = map[string][]string{
 	"inspect": {"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "list_runtime_artifacts",
-		"get_runtime_status", "list_service_endpoints", "graph_search", "graph_neighbors", "graph_path", "discover_tenant", "drift", "compare"},
+		"get_runtime_status", "list_service_endpoints", "graph_search", "graph_neighbors", "graph_path", "discover_tenant", "drift", "compare",
+		"list_value_mappings", "get_value_mapping"},
 	"build": {"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "set_parameters", "download_artifact",
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifact", "upload_artifacts", "validate_artifact", "check_guidelines",
 		"deploy", "get_runtime_status", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors", "list_credentials",
-		"list_locks", "loop_start", "loop_status", "loop_end"},
+		"list_locks", "list_value_mappings", "get_value_mapping", "set_value_mapping", "loop_start", "loop_status", "loop_end"},
 	"test": {"send_test_message", "list_service_endpoints", "list_message_logs", "get_message_log", "get_message_steps",
 		"get_message_attachment", "get_message_store_entry", "get_trace_tree", "set_log_level", "get_message_trace",
 		"get_trace_message", "get_runtime_status", "loop_start", "loop_status", "loop_end"},
