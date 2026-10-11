@@ -16,11 +16,11 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/file"
-	"github.com/cpars-innovation/cpicli/internal/manifest"
 	"github.com/cpars-innovation/cpicli/internal/str"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 	"github.com/go-errors/errors"
 	"github.com/magiconair/properties"
 	"github.com/rs/zerolog/log"

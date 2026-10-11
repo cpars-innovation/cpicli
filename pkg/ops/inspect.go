@@ -79,6 +79,11 @@ type DesigntimeArtifact struct {
 	Type    string `json:"type"`
 	Version string `json:"version"`
 	IsDraft bool   `json:"isDraft"`
+	// ModifiedBy and ModifiedAt are the last change of the designtime
+	// artifact (ModifiedBy, else CreatedBy); empty when the tenant does not
+	// report them.
+	ModifiedBy string     `json:"modifiedBy,omitempty"`
+	ModifiedAt *time.Time `json:"modifiedAt,omitempty"`
 }
 
 // ListArtifacts returns all designtime artifacts (all types) of a package.
@@ -89,7 +94,12 @@ func ListArtifacts(exe *httpclnt.HTTPExecuter, packageID string) ([]DesigntimeAr
 	}
 	artifacts := make([]DesigntimeArtifact, 0, len(details))
 	for _, d := range details {
-		artifacts = append(artifacts, DesigntimeArtifact{ID: d.Id, Name: d.Name, Type: d.ArtifactType, Version: d.Version, IsDraft: d.IsDraft})
+		a := DesigntimeArtifact{ID: d.Id, Name: d.Name, Type: d.ArtifactType, Version: d.Version, IsDraft: d.IsDraft, ModifiedBy: d.ModifiedBy}
+		if !d.ModifiedAt.IsZero() {
+			modified := d.ModifiedAt
+			a.ModifiedAt = &modified
+		}
+		artifacts = append(artifacts, a)
 	}
 	return artifacts, nil
 }

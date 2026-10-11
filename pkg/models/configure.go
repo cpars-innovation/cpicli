@@ -1,3 +1,5 @@
+// Package models holds the file models of cpictl: deploy configs
+// (orchestrator) and configure files.
 package models
 
 // ConfigureConfig represents the complete configuration file structure

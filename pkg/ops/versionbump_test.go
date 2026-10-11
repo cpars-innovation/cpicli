@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cpars-innovation/cpicli/internal/manifest"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

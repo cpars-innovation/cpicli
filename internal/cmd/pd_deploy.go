@@ -3,10 +3,10 @@ package cmd
 import (
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/internal/str"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -101,7 +101,7 @@ func runPDDeploy(cmd *cobra.Command) error {
 	pdAPI := cpi.NewPartnerDirectory(exe)
 
 	// Initialise Partner Directory Repository
-	pdRepo := repo.NewPartnerDirectory(resourcesPath)
+	pdRepo := pdrepo.New(resourcesPath)
 
 	// Trim PIDs
 	pids = str.TrimSlice(pids)

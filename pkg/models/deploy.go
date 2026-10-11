@@ -37,6 +37,10 @@ type Package struct {
 	// tenant-bump). Only for exceptions: the mode belongs to the pipeline.
 	Versioning string     `yaml:"versioning,omitempty"`
 	Artifacts  []Artifact `yaml:"artifacts"`
+	// MergedPrefix is the deploymentPrefix of the config file the package
+	// came from when several files were merged (its ID and artifact IDs
+	// carry the prefix already); not part of the file.
+	MergedPrefix string `yaml:"-"`
 }
 
 func (p *Package) UnmarshalYAML(unmarshal func(any) error) error {

@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
-	"github.com/cpars-innovation/cpicli/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -144,28 +143,4 @@ func TestOrchestratorDraftOnlyOnCopy(t *testing.T) {
 	assert.Equal(t, StatusUpdated, statusOf(res, "A1").Status)
 	assert.Empty(t, statusOf(res, "D").Status, "filtered")
 	assert.Equal(t, 1, res.Counts["skippedDraft"])
-}
-
-func TestArtifactFilterSelectsCopies(t *testing.T) {
-	pkgDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(pkgDir, "Folder", "META-INF"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pkgDir, "Folder", "META-INF", "MANIFEST.MF"),
-		[]byte("Bundle-SymbolicName: SourceID; singleton:=true\nBundle-Version: 1.0.0\n"), 0o644))
-	source := &models.Artifact{Id: "SourceID", ArtifactDir: "Folder"}
-	copyA := &models.Artifact{Id: "Copy_A", ArtifactDir: "Folder"}
-	other := &models.Artifact{Id: "Other", ArtifactDir: "OtherDir"}
-	for _, tc := range []struct {
-		filter []string
-		want   [3]bool // source, copy, other
-	}{
-		{nil, [3]bool{true, true, true}},
-		{[]string{"Folder"}, [3]bool{true, true, false}},
-		{[]string{"SourceID"}, [3]bool{true, true, false}},
-		{[]string{"Copy_A"}, [3]bool{false, true, false}},
-		{[]string{"Other"}, [3]bool{false, false, true}},
-		{[]string{"OtherDir"}, [3]bool{false, false, true}},
-	} {
-		got := [3]bool{artifactSelected(source, pkgDir, tc.filter), artifactSelected(copyA, pkgDir, tc.filter), artifactSelected(other, pkgDir, tc.filter)}
-		assert.Equal(t, tc.want, got, "filter %v", tc.filter)
-	}
 }

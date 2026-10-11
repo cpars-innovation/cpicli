@@ -8,9 +8,9 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/sync"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 )
 
 // UploadRequest describes a local artifact directory to upload.

@@ -1,4 +1,4 @@
-package repo
+package pdrepo
 
 import (
 	"encoding/base64"
@@ -307,7 +307,7 @@ func TestWriteAndReadStringParameters(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 	pid := "TestPID"
 
 	params := []cpi.StringParameter{
@@ -338,7 +338,7 @@ func TestWriteStringParameters_MergeMode(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 	pid := "TestPID"
 
 	// Write initial parameters
@@ -379,7 +379,7 @@ func TestWriteAndReadBinaryParameters(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 	pid := "TestPID"
 
 	testData := []byte("<?xml version=\"1.0\"?><root>test</root>")
@@ -423,7 +423,7 @@ func TestBinaryParameterWithEncoding(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 	pid := "TestPID"
 
 	testData := []byte("<?xml version=\"1.0\"?><root>test</root>")
@@ -466,7 +466,7 @@ func TestBinaryParameterWithoutEncoding_NoMetadata(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 	pid := "TestPID"
 
 	testData := []byte("{\"key\": \"value\"}")
@@ -490,7 +490,7 @@ func TestGetLocalPIDs(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 
 	// Create some PID directories
 	pids := []string{"PID001", "PID002", "ZZTEST"}
@@ -516,7 +516,7 @@ func TestGetLocalPIDs_EmptyDirectory(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 
 	localPIDs, err := pd.GetLocalPIDs()
 	require.NoError(t, err)
@@ -524,7 +524,7 @@ func TestGetLocalPIDs_EmptyDirectory(t *testing.T) {
 }
 
 func TestGetLocalPIDs_NonExistentDirectory(t *testing.T) {
-	pd := NewPartnerDirectory("/nonexistent/path")
+	pd := New("/nonexistent/path")
 
 	localPIDs, err := pd.GetLocalPIDs()
 	require.NoError(t, err)
@@ -536,7 +536,7 @@ func TestReadStringParameters_NonExistent(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 
 	params, err := pd.ReadStringParameters("NonExistentPID")
 	require.NoError(t, err)
@@ -548,7 +548,7 @@ func TestReadBinaryParameters_NonExistent(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 
 	params, err := pd.ReadBinaryParameters("NonExistentPID")
 	require.NoError(t, err)
@@ -572,7 +572,7 @@ func TestBinaryParameters_DuplicateHandling(t *testing.T) {
 	err = os.WriteFile(filepath.Join(binaryDir, "config.txt"), testData, 0644)
 	require.NoError(t, err)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 
 	// Read should handle duplicates (only return one)
 	params, err := pd.ReadBinaryParameters(pid)
@@ -588,7 +588,7 @@ func TestWriteStringParameters_Sorted(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	pd := NewPartnerDirectory(tempDir)
+	pd := New(tempDir)
 	pid := "TestPID"
 
 	// Write parameters in random order

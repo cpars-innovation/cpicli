@@ -2,23 +2,15 @@ package cmd
 
 import (
 	"cmp"
-	"context"
-	"encoding/json"
 	"fmt"
-	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/deploy"
-	"github.com/cpars-innovation/cpicli/internal/manifest"
-	"github.com/cpars-innovation/cpicli/internal/models"
 	"github.com/cpars-innovation/cpicli/internal/output"
-	artifactsync "github.com/cpars-innovation/cpicli/internal/sync"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/rs/zerolog/log"
@@ -26,109 +18,36 @@ import (
 	"github.com/spf13/viper"
 )
 
-// OperationMode defines the orchestrator operation mode
-type OperationMode string
-
-const (
-	ModeUpdateAndDeploy OperationMode = "update-and-deploy"
-	ModeUpdateOnly      OperationMode = "update-only"
-	ModeDeployOnly      OperationMode = "deploy-only"
+// The orchestrator runs on pkg/ops (ops.Orchestrator); these names are
+// kept for the command, its result and its tests.
+type (
+	OperationMode   = ops.OrchestratorMode
+	ProcessingStats = ops.OrchestratorStats
+	DraftSkip       = ops.DraftSkip
+	ArtifactStatus  = ops.OrchestratorArtifact
+	PlanItem        = ops.PlanItem
 )
 
-// ProcessingStats tracks processing statistics
-type ProcessingStats struct {
-	PackagesUpdated          int `json:"packagesUpdated"`
-	PackagesDeployed         int `json:"packagesDeployed"`
-	PackagesFailed           int `json:"packagesFailed"`
-	PackagesFiltered         int `json:"packagesFiltered"`
-	ArtifactsTotal           int `json:"artifactsTotal"`
-	ArtifactsDeployedSuccess int `json:"artifactsDeployedSuccess"`
-	ArtifactsDeployedFailed  int `json:"artifactsDeployedFailed"`
-	ArtifactsFiltered        int `json:"artifactsFiltered"`
-	UpdateFailures           int `json:"updateFailures"`
-	DeployFailures           int `json:"deployFailures"`
-	// ArtifactsChanged were created or updated, ArtifactsUnchanged had the
-	// tenant's content already. Existing artifacts were compared with the
-	// snapshot state (ComparedWithSnapshot) or downloaded (DownloadedForComparison).
-	ArtifactsChanged        int `json:"artifactsChanged"`
-	ArtifactsUnchanged      int `json:"artifactsUnchanged"`
-	ComparedWithSnapshot    int `json:"comparedWithSnapshot"`
-	DownloadedForComparison int `json:"downloadedForComparison"`
-	// ArtifactsSkippedDraft were in draft on the tenant (draftHandling SKIP):
-	// not uploaded, not deployed; SkippedDrafts lists them.
-	ArtifactsSkippedDraft     int             `json:"artifactsSkippedDraft"`
-	SkippedDrafts             []DraftSkip     `json:"skippedDrafts"`
-	SuccessfulPackageUpdates  map[string]bool `json:"successfulPackageUpdates"`
-	SuccessfulArtifactUpdates map[string]bool `json:"successfulArtifactUpdates"`
-	SuccessfulArtifactDeploys map[string]bool `json:"successfulArtifactDeploys"`
-	FailedPackageUpdates      map[string]bool `json:"failedPackageUpdates"`
-	FailedArtifactUpdates     map[string]bool `json:"failedArtifactUpdates"`
-	FailedArtifactDeploys     map[string]bool `json:"failedArtifactDeploys"`
-	// changed and redeploy are keyed by the final artifact ID: content
-	// created or updated, and content changed with the running version (to
-	// be deployed with force; the runtime was not undeployed).
-	changed, redeploy map[string]bool
-	// skippedDraft and draftFailed (draftHandling ERROR) are keyed by the
-	// final artifact ID; artifacts holds the status of each.
-	skippedDraft map[string]bool
-	draftFailed  int
-	artifacts    map[string]*ArtifactStatus
-}
-
-// DraftSkip is an artifact left alone because it is in draft on the tenant.
-type DraftSkip struct {
-	ID      string `json:"id"`
-	Package string `json:"package"`
-	// Designtime is what the tenant reports for the draft ("Active"),
-	// Running the deployed version, LocalVersion the repository's
-	// Bundle-Version.
-	Designtime   string `json:"designtime,omitempty"`
-	Running      string `json:"running,omitempty"`
-	LocalVersion string `json:"localVersion,omitempty"`
-}
+const (
+	ModeUpdateAndDeploy = ops.OrchestratorUpdateAndDeploy
+	ModeUpdateOnly      = ops.OrchestratorUpdateOnly
+	ModeDeployOnly      = ops.OrchestratorDeployOnly
+)
 
 // Artifact statuses of the orchestrator.
 const (
-	StatusCreated      = "created"
-	StatusUpdated      = "updated"
-	StatusUnchanged    = "unchanged"
-	StatusFailed       = "failed"
-	StatusSkippedDraft = "skipped-draft"
-	StatusNotUploaded  = "not-uploaded" // deploy only, or sync: false
+	StatusCreated      = ops.ArtifactCreated
+	StatusUpdated      = ops.ArtifactUpdated
+	StatusUnchanged    = ops.ArtifactUnchanged
+	StatusFailed       = ops.ArtifactFailed
+	StatusSkippedDraft = ops.ArtifactSkippedDraft
+	StatusNotUploaded  = ops.ArtifactNotUploaded
 )
-
-// ArtifactStatus is the outcome for one deployed artifact ID.
-type ArtifactStatus struct {
-	ID      string `json:"id"`
-	Package string `json:"package"`
-	// Source is the artifact folder (for deployment copies and prefixes).
-	Source       string `json:"source,omitempty"`
-	Status       string `json:"status"`
-	Designtime   string `json:"designtime,omitempty"`
-	LocalVersion string `json:"localVersion,omitempty"`
-	// Deploy is the deployment result (DEPLOYED, SKIPPED, FAILED, ...);
-	// empty when not deployed.
-	Deploy string `json:"deploy,omitempty"`
-	Reason string `json:"reason,omitempty"`
-}
-
-// status returns the entry of an artifact ID (callers hold the lock).
-func (s *ProcessingStats) status(id, pkg, source string) *ArtifactStatus {
-	if s.artifacts == nil {
-		s.artifacts = map[string]*ArtifactStatus{}
-	}
-	a := s.artifacts[id]
-	if a == nil {
-		a = &ArtifactStatus{ID: id, Package: pkg, Source: source}
-		s.artifacts[id] = a
-	}
-	return a
-}
 
 // draftHandling of the orchestrator.
 const (
-	draftSkip  = "SKIP"
-	draftError = "ERROR"
+	draftSkip  = ops.DraftHandlingSkip
+	draftError = ops.DraftHandlingError
 )
 
 func NewOrchestratorCommand() *cobra.Command {
@@ -322,21 +241,6 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 	packageFilter := parseFilter(packageFilterStr)
 	artifactFilter := parseFilter(artifactFilterStr)
 
-	// Initialize stats
-	stats := ProcessingStats{
-		SuccessfulArtifactUpdates: make(map[string]bool),
-		SuccessfulPackageUpdates:  make(map[string]bool),
-		SuccessfulArtifactDeploys: make(map[string]bool),
-		FailedArtifactUpdates:     make(map[string]bool),
-		FailedPackageUpdates:      make(map[string]bool),
-		FailedArtifactDeploys:     make(map[string]bool),
-		changed:                   make(map[string]bool),
-		redeploy:                  make(map[string]bool),
-		skippedDraft:              make(map[string]bool),
-		artifacts:                 make(map[string]*ArtifactStatus),
-		SkippedDrafts:             []DraftSkip{},
-	}
-
 	// Setup config loader
 	configLoader := deploy.NewConfigLoader()
 	configLoader.Debug = viper.GetBool("debug")
@@ -407,18 +311,25 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 	if draftHandling != draftSkip && draftHandling != draftError {
 		return output.Usagef("--draft-handling %q: SKIP or ERROR", draftHandling)
 	}
-	upload := uploadOptions{versionMode: versionMode, slots: make(chan struct{}, parallel), wg: &sync.WaitGroup{}, mu: &sync.Mutex{},
-		draftError: draftHandling == draftError, drafts: newDraftChecker(cpi.InitHTTPExecuter(serviceDetails))}
+	exe := cpi.InitHTTPExecuter(serviceDetails)
+	opts := ops.OrchestratorOptions{Mode: mode, PackageFilter: packageFilter, ArtifactFilter: artifactFilter,
+		Versioning: versionMode, Host: serviceDetails.Host, DraftHandling: draftHandling, Parallel: parallel, WorkDir: workDir}
 	if plan, _ := cmd.Flags().GetBool("plan"); plan {
-		upload.plan = &planCollector{index: map[string]int{}}
+		opts.Plan = true
 		log.Info().Msg("PLAN: nothing is written to the tenant")
 	}
 	if mode != ModeDeployOnly {
-		if upload.baseline, err = loadBaseline(cmd, packagesDir, serviceDetails.Host); err != nil {
+		if opts.SnapshotState, err = baselinePath(cmd, packagesDir); err != nil {
 			return err
 		}
-		upload.verifyDownload = config.GetBoolWithFallback(cmd, "verify-download", "orchestrator.verifyDownload")
+		opts.VerifyDownload = config.GetBoolWithFallback(cmd, "verify-download", "orchestrator.verifyDownload")
 	}
+	orc, err := ops.NewOrchestrator(exe, packagesDir, opts)
+	if err != nil {
+		return err
+	}
+	defer orc.Close()
+	stats := orc.Stats
 
 	// Collect all deployment tasks (will be executed in phase 2)
 	var deploymentTasks []DeploymentTask
@@ -436,8 +347,7 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 			return output.Usage(fmt.Errorf("failed to merge configs: %w", err))
 		}
 
-		tasks, err := processPackages(mergedConfig, false, mode, packagesDir, workDir,
-			packageFilter, artifactFilter, &stats, serviceDetails, upload)
+		tasks, err := orc.Process(cmd.Context(), mergedConfig)
 		if err != nil {
 			return err
 		}
@@ -455,8 +365,7 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 
 			log.Info().Msgf("Deployment Prefix: %s", configFile.Config.DeploymentPrefix)
 
-			tasks, err := processPackages(configFile.Config, true, mode, packagesDir, workDir,
-				packageFilter, artifactFilter, &stats, serviceDetails, upload)
+			tasks, err := orc.Process(cmd.Context(), configFile.Config)
 			if err != nil {
 				log.Error().Msgf("Failed to process config %s: %v", configFile.FileName, err)
 				continue
@@ -465,14 +374,14 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 		}
 	}
 
-	if deferDeploy, _ := cmd.Flags().GetBool("defer-deploy"); deferDeploy && upload.plan == nil && mode != ModeUpdateOnly {
-		printSummary(&stats)
-		output.SetResult(cmd.Context(), newOrchestratorResult(mode, &stats, []ops.Result{}, nil))
+	if deferDeploy, _ := cmd.Flags().GetBool("defer-deploy"); deferDeploy && !opts.Plan && mode != ModeUpdateOnly {
+		printSummary(stats)
+		output.SetResult(cmd.Context(), newOrchestratorResult(mode, stats, []ops.Result{}, nil))
 		err := deferDeployments(pendingFile(cmd), serviceDetails.Host, deploymentTasks, func(t DeploymentTask) string {
 			switch {
-			case stats.redeploy[t.ArtifactID]:
+			case stats.Redeploy(t.ArtifactID):
 				return "orchestrator: content changed, same version as running"
-			case stats.changed[t.ArtifactID]:
+			case stats.Changed(t.ArtifactID):
 				return "orchestrator: content changed"
 			}
 			return "orchestrator: deploy if the runtime lacks the designtime version"
@@ -480,16 +389,14 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 		if err != nil {
 			return err
 		}
-		return orchestratorErr(&stats)
+		return stats.Err()
 	}
 
-	if upload.plan != nil {
-		if mode != ModeUpdateOnly {
-			planDeployments(deploymentTasks, upload.plan, serviceDetails)
-		}
-		output.SetResult(cmd.Context(), newOrchestratorResult(mode, &stats, []ops.Result{}, upload.plan.items))
-		logSkippedDrafts(&stats)
-		return logPlan(upload.plan.items)
+	if opts.Plan {
+		orc.PlanDeployments(deploymentTasks)
+		output.SetResult(cmd.Context(), newOrchestratorResult(mode, stats, []ops.Result{}, orc.Plan()))
+		logSkippedDrafts(stats)
+		return logPlan(orc.Plan())
 	}
 
 	// Phase 2: Deploy all artifacts in parallel (if not update-only mode)
@@ -503,549 +410,18 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 		log.Info().Msgf("Max concurrent deployments: %d", parallelDeployments)
 		log.Info().Msg("")
 
-		deployments = deployAllArtifactsParallel(cmd.Context(), deploymentTasks, parallelDeployments, deployRetries,
-			deployDelaySeconds, &stats, serviceDetails)
+		// Version comparison is kept from the previous implementation:
+		// artifacts whose runtime version equals the designtime version are
+		// not redeployed.
+		deployments = deployTasks(cmd.Context(), exe, deploymentTasks, true, deployRetries, deployDelaySeconds, parallelDeployments)
+		orc.RecordDeployments(deployments)
 	}
 
 	// Print summary
-	printSummary(&stats)
-	output.SetResult(cmd.Context(), newOrchestratorResult(mode, &stats, deployments, nil))
+	printSummary(stats)
+	output.SetResult(cmd.Context(), newOrchestratorResult(mode, stats, deployments, nil))
 
-	return orchestratorErr(&stats)
-}
-
-// orchestratorErr is the error of a run with failures (partial when
-// anything succeeded).
-func orchestratorErr(stats *ProcessingStats) error {
-	if stats.draftFailed > 0 {
-		return output.Failed(fmt.Errorf("%d artifact(s) in draft on the tenant (--draft-handling ERROR)", stats.draftFailed))
-	}
-	if stats.PackagesFailed > 0 || stats.UpdateFailures > 0 || stats.DeployFailures > 0 {
-		err := fmt.Errorf("deployment completed with failures")
-		if len(stats.SuccessfulArtifactUpdates) > 0 || stats.ArtifactsDeployedSuccess > 0 {
-			return output.Partial(err)
-		}
-		return output.Failed(err)
-	}
-	return nil
-}
-
-func processPackages(config *models.DeployConfig, applyPrefix bool, mode OperationMode,
-	packagesDir, workDir string, packageFilter, artifactFilter []string,
-	stats *ProcessingStats, serviceDetails *cpi.ServiceDetails, upload uploadOptions) ([]DeploymentTask, error) {
-	versionMode := upload.versionMode
-
-	var deploymentTasks []DeploymentTask
-	var collect []func()
-
-	// Phase 1: Update all packages and artifacts
-	if mode != ModeDeployOnly {
-		log.Info().Msg("")
-		log.Info().Msg("═══════════════════════════════════════════════════════════════════════")
-		log.Info().Msg("PHASE 1: UPDATING ALL PACKAGES AND ARTIFACTS")
-		log.Info().Msg("═══════════════════════════════════════════════════════════════════════")
-		log.Info().Msg("")
-	}
-
-	for _, pkg := range config.Packages {
-		// Apply package filter
-		if !shouldInclude(pkg.ID, packageFilter) {
-			log.Debug().Msgf("Skipping package %s (filtered)", pkg.ID)
-			stats.PackagesFiltered++
-			continue
-		}
-
-		if !pkg.Sync && !pkg.Deploy {
-			log.Info().Msgf("Skipping package %s (sync=false, deploy=false)", pkg.ID)
-			continue
-		}
-
-		log.Info().Msgf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		log.Info().Msgf("📦 Package: %s", pkg.ID)
-
-		packageDir := filepath.Join(packagesDir, pkg.PackageDir)
-		if !deploy.DirExists(packageDir) {
-			log.Warn().Msgf("Package directory not found: %s", packageDir)
-			continue
-		}
-
-		// Calculate final package ID and name
-		finalPackageID := pkg.ID
-		finalPackageName := pkg.DisplayName
-		if finalPackageName == "" {
-			finalPackageName = pkg.ID
-		}
-
-		// Apply prefix if needed
-		if applyPrefix && config.DeploymentPrefix != "" {
-			finalPackageID = config.DeploymentPrefix + "" + pkg.ID
-			finalPackageName = config.DeploymentPrefix + " - " + finalPackageName
-		}
-
-		log.Info().Msgf("Package ID: %s", finalPackageID)
-		log.Info().Msgf("Package Name: %s", finalPackageName)
-
-		// Update package metadata
-		if mode != ModeDeployOnly && upload.plan != nil {
-			log.Info().Msgf("[PLAN] package %s would be created or updated", finalPackageID)
-		} else if mode != ModeDeployOnly {
-			err := updatePackage(&pkg, finalPackageID, finalPackageName, workDir, serviceDetails)
-			if err != nil {
-				log.Error().Msgf("Failed to update package %s: %v", pkg.ID, err)
-				stats.FailedPackageUpdates[pkg.ID] = true
-				stats.PackagesFailed++
-				continue
-			}
-			stats.SuccessfulPackageUpdates[pkg.ID] = true
-			stats.PackagesUpdated++
-		}
-
-		// Process artifacts for update
-		if pkg.Sync && mode != ModeDeployOnly {
-			if err := updateArtifacts(&pkg, packageDir, finalPackageID, finalPackageName,
-				config.DeploymentPrefix, workDir, artifactFilter, stats, serviceDetails, upload); err != nil {
-				log.Error().Msgf("Failed to update artifacts for package %s: %v", pkg.ID, err)
-				upload.mu.Lock()
-				stats.UpdateFailures++
-				upload.mu.Unlock()
-			}
-		}
-
-		// Collect deployment tasks (will be executed in phase 2) once the
-		// uploads are done
-		if pkg.Deploy && mode != ModeUpdateOnly {
-			pkg, packageDir, finalPackageID := pkg, packageDir, finalPackageID
-			collect = append(collect, func() {
-				tasks := collectDeploymentTasks(&pkg, packageDir, finalPackageID, config.DeploymentPrefix,
-					artifactFilter, stats, versionMode, upload)
-				deploymentTasks = append(deploymentTasks, tasks...)
-			})
-		}
-	}
-
-	upload.wg.Wait()
-	for _, c := range collect {
-		c()
-	}
-	return deploymentTasks, nil
-}
-
-func updatePackage(pkg *models.Package, finalPackageID, finalPackageName, workDir string,
-	serviceDetails *cpi.ServiceDetails) error {
-
-	if serviceDetails == nil {
-		return fmt.Errorf("serviceDetails is nil - cannot update package")
-	}
-
-	log.Info().Msg("Updating package in tenant...")
-
-	description := pkg.Description
-	if description == "" {
-		description = finalPackageName
-	}
-
-	shortText := pkg.ShortText
-	if shortText == "" {
-		shortText = finalPackageName
-	}
-
-	// Create package JSON
-	packageJSON := map[string]any{
-		"d": map[string]any{
-			"Id":          finalPackageID,
-			"Name":        finalPackageName,
-			"Description": description,
-			"ShortText":   shortText,
-		},
-	}
-
-	jsonData, err := json.MarshalIndent(packageJSON, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal package JSON: %w", err)
-	}
-
-	// Write to temporary file
-	packageJSONPath := filepath.Join(workDir, "modified", fmt.Sprintf("package_%s.json", pkg.ID))
-	if err := os.MkdirAll(filepath.Dir(packageJSONPath), 0755); err != nil {
-		return fmt.Errorf("failed to create package JSON directory: %w", err)
-	}
-
-	if err := os.WriteFile(packageJSONPath, jsonData, 0644); err != nil {
-		return fmt.Errorf("failed to write package JSON: %w", err)
-	}
-
-	// Use internal sync package update function
-	exe := cpi.InitHTTPExecuter(serviceDetails)
-	packageSynchroniser := artifactsync.NewSyncer("tenant", "CPIPackage", exe)
-
-	err = packageSynchroniser.Exec(artifactsync.Request{PackageFile: packageJSONPath})
-	if err != nil {
-		log.Warn().Msgf("Package update warning (may not exist yet): %v", err)
-		// Don't return error - package might not exist yet
-		return nil
-	}
-
-	log.Info().Msg("  ✓ Package metadata updated")
-	return nil
-}
-
-func updateArtifacts(pkg *models.Package, packageDir, finalPackageID, finalPackageName, prefix, workDir string,
-	artifactFilter []string, stats *ProcessingStats, serviceDetails *cpi.ServiceDetails, upload uploadOptions) error {
-	versionMode := upload.versionMode
-
-	log.Info().Msg("Updating artifacts...")
-
-	if serviceDetails == nil {
-		return fmt.Errorf("serviceDetails is nil - cannot initialize HTTP executer")
-	}
-	if serviceDetails.Host == "" {
-		return fmt.Errorf("serviceDetails.Host is empty - check CPI credentials in config file")
-	}
-
-	exe := cpi.InitHTTPExecuter(serviceDetails)
-	locked := func(f func()) {
-		upload.mu.Lock()
-		defer upload.mu.Unlock()
-		f()
-	}
-
-	for _, artifact := range pkg.Artifacts {
-		// Apply artifact filter
-		if !artifactSelected(&artifact, packageDir, artifactFilter) {
-			log.Debug().Msgf("Skipping artifact %s (filtered)", artifact.Id)
-			locked(func() { stats.ArtifactsFiltered++ })
-			continue
-		}
-
-		if !artifact.Sync {
-			log.Debug().Msgf("Skipping artifact %s (sync=false)", artifact.DisplayName)
-			continue
-		}
-
-		locked(func() { stats.ArtifactsTotal++ })
-
-		artifactDir := filepath.Join(packageDir, artifact.ArtifactDir)
-		if !deploy.DirExists(artifactDir) {
-			log.Warn().Msgf("Artifact directory not found: %s", artifactDir)
-			continue
-		}
-
-		// Calculate final artifact ID and name
-		finalArtifactID := artifact.Id
-		finalArtifactName := artifact.DisplayName
-		if finalArtifactName == "" {
-			finalArtifactName = artifact.Id
-		}
-
-		if prefix != "" {
-			finalArtifactID = prefix + "_" + artifact.Id
-		}
-
-		// Uploads run on the shared pool (--parallel), each in its own work
-		// directory with its own synchroniser
-		artifact := artifact
-		upload.wg.Add(1)
-		go func() {
-			defer upload.wg.Done()
-			upload.slots <- struct{}{}
-			defer func() { <-upload.slots }()
-			jobDir := filepath.Join(workDir, "jobs", finalArtifactID)
-			uploadOneArtifact(exe, pkg, &artifact, artifactDir, jobDir, finalPackageID, finalArtifactID, finalArtifactName,
-				versionMode, stats, upload, locked)
-		}()
-	}
-	return nil
-}
-
-// uploadOneArtifact prepares the artifact (final ID and name in the
-// manifest, configOverrides in parameters.prop) in jobDir and uploads it.
-func uploadOneArtifact(exe *httpclnt.HTTPExecuter, pkg *models.Package, artifact *models.Artifact, artifactDir, jobDir,
-	finalPackageID, finalArtifactID, finalArtifactName string, versionMode versioning.Mode,
-	stats *ProcessingStats, upload uploadOptions, locked func(func())) {
-
-	log.Info().Msgf("  Updating: %s", finalArtifactID)
-	localVersion, _ := manifest.Version(artifactDir)
-	fail := func(err error) {
-		log.Error().Msgf("Update failed for %s: %v", finalArtifactName, err)
-		locked(func() {
-			stats.UpdateFailures++
-			stats.FailedArtifactUpdates[artifact.Id] = true
-			st := stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir)
-			st.Status, st.LocalVersion, st.Reason = StatusFailed, localVersion, err.Error()
-		})
-	}
-
-	// Map artifact type for synchroniser (uses simple type names)
-	artifactType := mapArtifactTypeForSync(artifact.Type)
-
-	// Create temp directory for this artifact
-	tempArtifactDir := filepath.Join(jobDir, "artifact")
-	if err := deploy.CopyDir(artifactDir, tempArtifactDir); err != nil {
-		log.Error().Msgf("Failed to copy artifact to temp: %v", err)
-		locked(func() { stats.FailedArtifactUpdates[artifact.Id] = true })
-		return
-	}
-
-	// Update MANIFEST.MF
-	manifestPath := filepath.Join(tempArtifactDir, "META-INF", "MANIFEST.MF")
-	modifiedManifestPath := filepath.Join(jobDir, "modified", "META-INF", "MANIFEST.MF")
-
-	if deploy.FileExists(manifestPath) {
-		if err := deploy.UpdateManifestBundleName(manifestPath, finalArtifactID, finalArtifactName, modifiedManifestPath); err != nil {
-			log.Warn().Msgf("Failed to update MANIFEST.MF: %v", err)
-		}
-	}
-
-	// Handle parameters.prop
-	var modifiedParamsPath string
-	paramsPath := deploy.FindParametersFile(tempArtifactDir)
-
-	if paramsPath != "" && deploy.FileExists(paramsPath) {
-		modifiedParamsPath = filepath.Join(jobDir, "modified", "parameters.prop")
-
-		if len(artifact.ConfigOverrides) > 0 {
-			if err := deploy.MergeParametersFile(paramsPath, artifact.ConfigOverrides, modifiedParamsPath); err != nil {
-				log.Warn().Msgf("Failed to merge parameters: %v", err)
-			} else {
-				log.Debug().Msgf("Applied %d config overrides", len(artifact.ConfigOverrides))
-			}
-		} else {
-			// No overrides, copy to modified location
-			data, err := os.ReadFile(paramsPath)
-			if err == nil {
-				os.MkdirAll(filepath.Dir(modifiedParamsPath), 0755)
-				os.WriteFile(modifiedParamsPath, data, 0644)
-			}
-		}
-	}
-
-	// Copy modified manifest to temp artifact dir for sync
-	if deploy.FileExists(modifiedManifestPath) {
-		targetManifestPath := filepath.Join(tempArtifactDir, "META-INF", "MANIFEST.MF")
-		data, err := os.ReadFile(modifiedManifestPath)
-		if err == nil {
-			os.WriteFile(targetManifestPath, data, 0644)
-		}
-	}
-
-	// Copy modified parameters if exists
-	if modifiedParamsPath != "" && deploy.FileExists(modifiedParamsPath) {
-		// Find the actual parameters location in the artifact
-		actualParamsPath := deploy.FindParametersFile(tempArtifactDir)
-		data, err := os.ReadFile(modifiedParamsPath)
-		if err == nil {
-			os.WriteFile(actualParamsPath, data, 0644)
-		}
-	}
-
-	log.Debug().Msgf("Updating %s (type %s) in package %s", finalArtifactID, artifactType, finalPackageID)
-
-	mode, err := resolveVersioning(artifact.Versioning, pkg.Versioning, versionMode)
-	if err != nil {
-		fail(err)
-		return
-	}
-	synchroniser := artifactsync.New(exe)
-	synchroniser.Baseline, synchroniser.VerifyDownload = upload.baseline, upload.verifyDownload
-	synchroniser.DryRun = upload.plan != nil
-	// a content change with the running version is deployed with force in
-	// phase 2 (or by deploy --pending) instead of undeploying it now
-	synchroniser.KeepRuntime = true
-	synchroniser.Versioning = mode
-	outcome, err := synchroniser.UploadArtifact(finalArtifactID, finalArtifactName, artifactType,
-		finalPackageID, tempArtifactDir, jobDir, "", nil)
-	if artifactsync.IsDraft(err) {
-		running := ""
-		if rt, rerr := cpi.NewRuntime(exe).GetArtifact(finalArtifactID); rerr == nil && rt != nil {
-			running = rt.Version
-		}
-		locked(func() {
-			recordDraft(stats, upload, DraftSkip{ID: finalArtifactID, Package: finalPackageID, Designtime: "Active", Running: running,
-				LocalVersion: localVersion}, artifact.ArtifactDir, artifactType, true)
-			if upload.draftError {
-				stats.UpdateFailures++
-				stats.FailedArtifactUpdates[artifact.Id] = true
-			}
-		})
-		return
-	}
-
-	locked(func() {
-		switch outcome.Compared {
-		case "snapshot":
-			stats.ComparedWithSnapshot++
-		case "download":
-			stats.DownloadedForComparison++
-		}
-		if upload.plan != nil {
-			upload.plan.upsert(finalArtifactID, func(it *PlanItem) {
-				it.Package, it.Type = finalPackageID, artifactType
-				it.Upload = map[string]string{"CREATED": "create", "UPDATED": "update", "UNCHANGED": "unchanged"}[outcome.Action]
-				it.Compared, it.Designtime, it.VersionRule = outcome.Compared, outcome.Version, outcome.VersionRule
-				if err != nil {
-					it.Upload, it.Error = "fails", err.Error()
-				}
-			})
-		}
-		if err != nil {
-			return
-		}
-		st := stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir)
-		st.Status = map[string]string{"CREATED": StatusCreated, "UPDATED": StatusUpdated}[outcome.Action]
-		st.Status = cmp.Or(st.Status, StatusUnchanged)
-		st.Designtime, st.LocalVersion = outcome.Version, localVersion
-		if outcome.Action == "UNCHANGED" {
-			stats.ArtifactsUnchanged++
-		} else {
-			stats.ArtifactsChanged++
-			stats.changed[finalArtifactID] = true
-		}
-		if outcome.Redeploy {
-			stats.redeploy[finalArtifactID] = true
-		}
-		stats.SuccessfulArtifactUpdates[finalArtifactID] = true
-	})
-	if err != nil {
-		fail(err)
-		return
-	}
-	log.Info().Msgf("    ✓ %s: %s", finalArtifactID, strings.ToLower(outcome.Action))
-}
-
-func collectDeploymentTasks(pkg *models.Package, packageDir, finalPackageID, prefix string,
-	artifactFilter []string, stats *ProcessingStats, versionMode versioning.Mode, upload uploadOptions) []DeploymentTask {
-
-	var tasks []DeploymentTask
-
-	for _, artifact := range pkg.Artifacts {
-		// Skip if update failed
-		if stats.FailedArtifactUpdates[artifact.Id] {
-			log.Debug().Msgf("Skipping artifact %s (due to failed update)", artifact.Id)
-			continue
-		}
-
-		// Apply artifact filter
-		if !artifactSelected(&artifact, packageDir, artifactFilter) {
-			log.Debug().Msgf("Skipping artifact %s (filtered)", artifact.Id)
-			continue
-		}
-
-		if !artifact.Deploy {
-			log.Debug().Msgf("Skipping artifact %s (deploy=false)", artifact.DisplayName)
-			continue
-		}
-
-		finalArtifactID := artifact.Id
-		if prefix != "" {
-			finalArtifactID = prefix + "_" + artifact.Id
-		}
-
-		artifactType := artifact.Type
-		if artifactType == "" {
-			artifactType = "IntegrationFlow"
-		}
-		if stats.skippedDraft[finalArtifactID] {
-			log.Debug().Msgf("Skipping deployment of %s (draft on the tenant)", finalArtifactID)
-			continue
-		}
-		if _, uploaded := stats.artifacts[finalArtifactID]; !uploaded && upload.drafts != nil {
-			// deployed without an upload in this run: is it a draft?
-			typ := mapArtifactTypeForSync(artifactType)
-			draft, err := upload.drafts.isDraft(finalPackageID, typ, finalArtifactID)
-			if err != nil {
-				log.Warn().Msgf("Cannot tell whether %s is in draft: %v", finalArtifactID, err)
-			}
-			if draft {
-				localVersion, _ := manifest.Version(filepath.Join(packageDir, artifact.ArtifactDir))
-				running := ""
-				if rt, rerr := cpi.NewRuntime(upload.drafts.exe).GetArtifact(finalArtifactID); rerr == nil && rt != nil {
-					running = rt.Version
-				}
-				recordDraft(stats, upload, DraftSkip{ID: finalArtifactID, Package: finalPackageID, Designtime: "Active", Running: running,
-					LocalVersion: localVersion}, artifact.ArtifactDir, typ, false)
-				if upload.draftError {
-					stats.ArtifactsDeployedFailed++
-					stats.DeployFailures++
-					stats.FailedArtifactDeploys[finalArtifactID] = true
-				}
-				continue
-			}
-			stats.status(finalArtifactID, finalPackageID, artifact.ArtifactDir).Status = StatusNotUploaded
-		}
-
-		mode, err := resolveVersioning(artifact.Versioning, pkg.Versioning, versionMode)
-		if err != nil {
-			log.Error().Msgf("Skipping deployment of %s: %v", artifact.Id, err)
-			stats.ArtifactsDeployedFailed++
-			stats.DeployFailures++
-			stats.FailedArtifactDeploys[artifact.Id] = true
-			continue
-		}
-		// manifest: every variant of the artifact directory deploys exactly
-		// its Bundle-Version
-		expected := ""
-		if mode == versioning.Manifest {
-			v, err := manifest.Version(filepath.Join(packageDir, artifact.ArtifactDir))
-			if err != nil || v == "" {
-				log.Error().Msgf("Skipping deployment of %s: versioning manifest needs Bundle-Version in %s", finalArtifactID, filepath.Join(packageDir, artifact.ArtifactDir, "META-INF", "MANIFEST.MF"))
-				stats.ArtifactsDeployedFailed++
-				stats.DeployFailures++
-				stats.FailedArtifactDeploys[artifact.Id] = true
-				continue
-			}
-			expected = v
-		}
-		tasks = append(tasks, DeploymentTask{
-			ArtifactID:      finalArtifactID,
-			ArtifactType:    artifactType,
-			PackageID:       finalPackageID,
-			DisplayName:     artifact.DisplayName,
-			Force:           stats.redeploy[finalArtifactID],
-			Versioning:      mode,
-			ExpectedVersion: expected,
-		})
-	}
-
-	return tasks
-}
-
-func deployAllArtifactsParallel(ctx context.Context, tasks []DeploymentTask, maxConcurrent int,
-	retries int, delaySeconds int, stats *ProcessingStats, serviceDetails *cpi.ServiceDetails) []ops.Result {
-
-	// Version comparison is kept from the previous implementation: artifacts
-	// whose runtime version equals the designtime version are not redeployed
-	// (the synchroniser undeploys same-version artifacts whose content changed).
-	results := deployTasks(ctx, cpi.InitHTTPExecuter(serviceDetails), tasks, true, retries, delaySeconds, maxConcurrent)
-
-	failedByPackage := make(map[string]int)
-	var packageOrder []string
-	for _, r := range results {
-		if _, seen := failedByPackage[r.PackageID]; !seen {
-			packageOrder = append(packageOrder, r.PackageID)
-			failedByPackage[r.PackageID] = 0
-		}
-		if st := stats.artifacts[r.ID]; st != nil {
-			st.Deploy = string(r.Status)
-		}
-		if r.Status.Succeeded() {
-			stats.ArtifactsDeployedSuccess++
-			stats.SuccessfulArtifactDeploys[r.ID] = true
-		} else {
-			stats.ArtifactsDeployedFailed++
-			stats.DeployFailures++
-			stats.FailedArtifactDeploys[r.ID] = true
-			failedByPackage[r.PackageID]++
-		}
-	}
-	for _, packageID := range packageOrder {
-		if failedByPackage[packageID] == 0 {
-			stats.PackagesDeployed++
-		} else {
-			log.Warn().Msgf("⚠ Package %s: %d artifact deployment(s) failed", packageID, failedByPackage[packageID])
-			stats.PackagesFailed++
-		}
-	}
-	return results
+	return stats.Err()
 }
 
 // orchestratorResult is the JSON result of orchestrator.
@@ -1063,12 +439,11 @@ type orchestratorResult struct {
 }
 
 func newOrchestratorResult(mode OperationMode, stats *ProcessingStats, deployments []ops.Result, plan []PlanItem) orchestratorResult {
-	res := orchestratorResult{Mode: string(mode), Stats: stats, Deployments: deployments, Plan: plan, Artifacts: []ArtifactStatus{},
+	res := orchestratorResult{Mode: string(mode), Stats: stats, Deployments: deployments, Plan: plan, Artifacts: stats.Artifacts(),
 		Counts: map[string]int{"created": 0, "updated": 0, "unchanged": 0, "failed": 0, "skippedDraft": 0, "notUploaded": 0, "deployed": 0, "deployFailed": 0}}
 	key := map[string]string{StatusCreated: "created", StatusUpdated: "updated", StatusUnchanged: "unchanged", StatusFailed: "failed",
 		StatusSkippedDraft: "skippedDraft", StatusNotUploaded: "notUploaded"}
-	for _, a := range stats.artifacts {
-		res.Artifacts = append(res.Artifacts, *a)
+	for _, a := range res.Artifacts {
 		if k := key[a.Status]; k != "" {
 			res.Counts[k]++
 		}
@@ -1080,78 +455,8 @@ func newOrchestratorResult(mode OperationMode, stats *ProcessingStats, deploymen
 			res.Counts["deployFailed"]++
 		}
 	}
-	slices.SortFunc(res.Artifacts, func(a, b ArtifactStatus) int {
-		return cmp.Or(cmp.Compare(a.Package, b.Package), cmp.Compare(a.ID, b.ID))
-	})
 	slices.SortFunc(stats.SkippedDrafts, func(a, b DraftSkip) int { return cmp.Or(cmp.Compare(a.Package, b.Package), cmp.Compare(a.ID, b.ID)) })
 	return res
-}
-
-// recordDraft notes an artifact in draft on the tenant: skipped (SKIP) or
-// failed (ERROR). Callers hold the lock (or run alone).
-func recordDraft(stats *ProcessingStats, upload uploadOptions, d DraftSkip, source, typ string, uploadStep bool) {
-	st := stats.status(d.ID, d.Package, source)
-	st.Designtime, st.LocalVersion = d.Designtime, d.LocalVersion
-	reason := "draft on the tenant: not uploaded, not deployed"
-	if upload.draftError {
-		st.Status, st.Reason = StatusFailed, "draft on the tenant (--draft-handling ERROR): save the version in the Web UI first"
-		stats.draftFailed++
-		log.Error().Msgf("%s is in draft on the tenant (--draft-handling ERROR): save the version in the Web UI first", d.ID)
-	} else {
-		st.Status, st.Reason = StatusSkippedDraft, reason
-		stats.ArtifactsSkippedDraft++
-		if stats.skippedDraft == nil {
-			stats.skippedDraft = map[string]bool{}
-		}
-		stats.skippedDraft[d.ID] = true
-		stats.SkippedDrafts = append(stats.SkippedDrafts, d)
-		log.Warn().Msgf("%s is in draft on the tenant: not uploaded, not deployed", d.ID)
-	}
-	if upload.plan != nil {
-		upload.plan.upsert(d.ID, func(it *PlanItem) {
-			it.Package, it.Type, it.Deploy = d.Package, cmp.Or(it.Type, typ), false
-			it.Designtime, it.Running = d.Designtime, d.Running
-			if upload.draftError {
-				it.Upload, it.Error = "fails", st.Reason
-				if !uploadStep {
-					it.Upload = ""
-				}
-			} else {
-				it.Upload, it.Reason = StatusSkippedDraft, reason
-			}
-		})
-	}
-}
-
-// draftChecker tells whether a designtime artifact is in draft, with one
-// request per package and artifact type.
-type draftChecker struct {
-	exe   *httpclnt.HTTPExecuter
-	mu    sync.Mutex
-	cache map[string]map[string]bool
-}
-
-func newDraftChecker(exe *httpclnt.HTTPExecuter) *draftChecker {
-	return &draftChecker{exe: exe, cache: map[string]map[string]bool{}}
-}
-
-func (d *draftChecker) isDraft(pkg, typ, id string) (bool, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	key := pkg + "\x00" + typ
-	drafts, ok := d.cache[key]
-	if !ok {
-		details, err := cpi.NewIntegrationPackage(d.exe).GetArtifactsData(pkg, typ)
-		if err != nil {
-			return false, err
-		}
-		drafts = map[string]bool{}
-		for _, a := range details {
-			drafts[a.Id] = a.IsDraft
-		}
-		d.cache[key] = drafts
-	}
-	return drafts[id], nil
 }
 
 // logSkippedDrafts lists the artifacts left alone because of drafts.
@@ -1162,113 +467,6 @@ func logSkippedDrafts(stats *ProcessingStats) {
 	log.Warn().Msgf("%d artifact(s) in draft on the tenant, not uploaded and not deployed:", len(stats.SkippedDrafts))
 	for _, d := range stats.SkippedDrafts {
 		log.Warn().Msgf("  - %s (package %s, tenant %s, running %s, repository %s)", d.ID, d.Package, d.Designtime, cmp.Or(d.Running, "-"), cmp.Or(d.LocalVersion, "-"))
-	}
-}
-
-// uploadOptions are the settings of the update phase.
-type uploadOptions struct {
-	versionMode versioning.Mode
-	// baseline is the snapshot state of the target tenant (nil: download
-	// every existing artifact for the comparison).
-	baseline       *artifactsync.SnapshotState
-	verifyDownload bool
-	// plan collects what would be done (--plan); nil: do it.
-	plan *planCollector
-	// draftError fails artifacts in draft on the tenant instead of skipping
-	// them; drafts checks artifacts that are deployed without an upload.
-	draftError bool
-	drafts     *draftChecker
-	// slots limits the uploads running at the same time (--parallel), wg
-	// waits for them, mu guards the statistics and the plan.
-	slots chan struct{}
-	wg    *sync.WaitGroup
-	mu    *sync.Mutex
-}
-
-// PlanItem is what the orchestrator would do with one artifact.
-type PlanItem struct {
-	Package  string `json:"package,omitempty"`
-	Artifact string `json:"artifact"`
-	Type     string `json:"type,omitempty"`
-	// Upload is create, update, unchanged, fails (see error) or empty (not
-	// synchronised).
-	Upload   string `json:"upload,omitempty"`
-	Compared string `json:"compared,omitempty"`
-	// Designtime is the designtime version after the upload.
-	Designtime    string `json:"designtime,omitempty"`
-	VersionRule   string `json:"versionRule,omitempty"`
-	Running       string `json:"running,omitempty"`
-	RuntimeStatus string `json:"runtimeStatus,omitempty"`
-	Deploy        bool   `json:"deploy"`
-	Reason        string `json:"reason,omitempty"`
-	Error         string `json:"error,omitempty"`
-}
-
-type planCollector struct {
-	items []PlanItem
-	index map[string]int
-}
-
-func (p *planCollector) upsert(id string, f func(*PlanItem)) {
-	i, ok := p.index[id]
-	if !ok {
-		i = len(p.items)
-		p.index[id] = i
-		p.items = append(p.items, PlanItem{Artifact: id})
-	}
-	f(&p.items[i])
-}
-
-// planDeployments predicts the deployment of each task (read only).
-func planDeployments(tasks []DeploymentTask, plan *planCollector, serviceDetails *cpi.ServiceDetails) {
-	exe := cpi.InitHTTPExecuter(serviceDetails)
-	rt := cpi.NewRuntime(exe)
-	for _, t := range tasks {
-		plan.upsert(t.ArtifactID, func(it *PlanItem) {
-			it.Package = cmp.Or(it.Package, t.PackageID)
-			if it.Upload == "fails" {
-				it.Reason = "not deployed: the upload fails"
-				return
-			}
-			version := it.Designtime
-			if it.Upload == "" { // not synchronised: the tenant's designtime version
-				typ := mapArtifactTypeForSync(t.ArtifactType)
-				it.Type = cmp.Or(it.Type, typ)
-				v, _, exists, err := cpi.NewDesigntimeArtifact(typ, exe).Get(t.ArtifactID, "active")
-				if err != nil {
-					it.Error = err.Error()
-					return
-				}
-				if !exists {
-					it.Error = "designtime artifact does not exist"
-					return
-				}
-				version = v
-				it.Designtime = v
-			}
-			if ops.IsDraftVersion(version) {
-				it.Deploy, it.Reason = false, ops.DraftReason
-				return
-			}
-			running, err := rt.GetArtifact(t.ArtifactID)
-			if err != nil {
-				it.Error = err.Error()
-				return
-			}
-			if running != nil {
-				it.Running, it.RuntimeStatus = running.Version, running.Status
-			}
-			changed := it.Upload == "create" || it.Upload == "update"
-			var refused bool
-			it.Deploy, it.Reason, refused = ops.DeployDecision(running, version, changed, t.Versioning, t.AllowDowngrade)
-			if refused {
-				it.Error = it.Reason
-			} else if t.Force {
-				it.Deploy, it.Reason = true, "configuration changed: deployed again"
-			} else if t.ExpectedVersion != "" && version != "" && version != t.ExpectedVersion {
-				it.Deploy, it.Error = false, fmt.Sprintf("refused: designtime %s is not the repository's Bundle-Version %s", version, t.ExpectedVersion)
-			}
-		})
 	}
 }
 
@@ -1304,66 +502,37 @@ func logPlan(items []PlanItem) error {
 	return nil
 }
 
-// loadBaseline reads the snapshot state used instead of downloads: the
+// baselinePath is the snapshot state used instead of downloads: the
 // --snapshot-state file, else .cpi/snapshot-state.json in the current
-// directory or a parent of packagesDir. A state of another tenant is not used.
-func loadBaseline(cmd *cobra.Command, packagesDir, host string) (*artifactsync.SnapshotState, error) {
+// directory or a parent of packagesDir ("" for none). A state of another
+// tenant is not used (ops.OrchestratorOptions.Host).
+func baselinePath(cmd *cobra.Command, packagesDir string) (string, error) {
 	path := config.GetStringWithFallback(cmd, "snapshot-state", "orchestrator.snapshotState")
 	if path == "off" {
-		return nil, nil
+		return "", nil
 	}
-	explicit := path != ""
-	if !explicit {
-		candidates := []string{filepath.Join(".cpi", "snapshot-state.json")}
-		if abs, err := filepath.Abs(packagesDir); err == nil {
-			for dir := abs; ; dir = filepath.Dir(dir) {
-				candidates = append(candidates, filepath.Join(dir, ".cpi", "snapshot-state.json"))
-				if filepath.Dir(dir) == dir {
-					break
-				}
-			}
+	if path != "" {
+		if !deploy.FileExists(path) {
+			return "", output.Usagef("--snapshot-state %s does not exist", path)
 		}
-		for _, c := range candidates {
-			if deploy.FileExists(c) {
-				path = c
+		return path, nil
+	}
+	candidates := []string{filepath.Join(".cpi", "snapshot-state.json")}
+	if abs, err := filepath.Abs(packagesDir); err == nil {
+		for dir := abs; ; dir = filepath.Dir(dir) {
+			candidates = append(candidates, filepath.Join(dir, ".cpi", "snapshot-state.json"))
+			if filepath.Dir(dir) == dir {
 				break
 			}
 		}
-		if path == "" {
-			log.Info().Msg("No snapshot state found: existing artifacts are downloaded for the comparison (run snapshot first to skip that)")
-			return nil, nil
+	}
+	for _, c := range candidates {
+		if deploy.FileExists(c) {
+			return c, nil
 		}
 	}
-	if explicit && !deploy.FileExists(path) {
-		return nil, output.Usagef("--snapshot-state %s does not exist", path)
-	}
-	state, err := artifactsync.LoadSnapshotState(path)
-	if err != nil {
-		return nil, output.Usagef("cannot read the snapshot state %s: %v", path, err)
-	}
-	if tenant := cpi.TenantID(host); state.Tenant != tenant {
-		log.Warn().Msgf("Snapshot state %s is of tenant %q, not %s: existing artifacts are downloaded for the comparison", path, state.Tenant, tenant)
-		return nil, nil
-	}
-	log.Info().Msgf("Comparing with the snapshot state %s (%d artifacts) instead of downloading", path, len(state.Artifacts))
-	return state, nil
-}
-
-// mapArtifactTypeForSync maps artifact types for synchroniser (NewDesigntimeArtifact)
-func mapArtifactTypeForSync(artifactType string) string {
-	switch strings.ToLower(artifactType) {
-	case "integrationflow", "integration flow", "iflow":
-		return "Integration"
-	case "valuemapping", "value mapping":
-		return "ValueMapping"
-	case "messagemapping", "message mapping":
-		return "MessageMapping"
-	case "scriptcollection", "script collection":
-		return "ScriptCollection"
-	default:
-		// Default to integration flow
-		return "Integration"
-	}
+	log.Info().Msg("No snapshot state found: existing artifacts are downloaded for the comparison (run snapshot first to skip that)")
+	return "", nil
 }
 
 func parseFilter(filterStr string) []string {
@@ -1379,28 +548,6 @@ func parseFilter(filterStr string) []string {
 		}
 	}
 	return result
-}
-
-// artifactSelected applies --artifact-filter to a deploy config entry: an
-// entry matches by its artifactId, its artifactDir (the folder name, as
-// change detection passes it) or the source ID of that folder
-// (Bundle-SymbolicName), so a folder or source ID selects every ID deployed
-// from the folder. A copy's own ID selects only the copy.
-func artifactSelected(a *models.Artifact, packageDir string, filter []string) bool {
-	if len(filter) == 0 || slices.Contains(filter, a.Id) {
-		return true
-	}
-	dir := cmp.Or(a.ArtifactDir, a.Id)
-	if slices.Contains(filter, dir) || slices.Contains(filter, filepath.Base(dir)) {
-		return true
-	}
-	if data, err := os.ReadFile(filepath.Join(packageDir, dir, "META-INF", "MANIFEST.MF")); err == nil {
-		source, _, _ := strings.Cut(manifest.Parse(data)["Bundle-SymbolicName"], ";")
-		if source = strings.TrimSpace(source); source != "" && slices.Contains(filter, source) {
-			return true
-		}
-	}
-	return false
 }
 
 func shouldInclude(id string, filter []string) bool {
@@ -1450,7 +597,7 @@ func printSummary(stats *ProcessingStats) {
 		}
 	}
 
-	if stats.UpdateFailures == 0 && stats.DeployFailures == 0 && stats.draftFailed == 0 {
+	if stats.UpdateFailures == 0 && stats.DeployFailures == 0 && stats.DraftFailures() == 0 {
 		log.Info().Msg("✓ All operations completed successfully!")
 	}
 

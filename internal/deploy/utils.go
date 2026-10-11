@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cpars-innovation/cpicli/internal/manifest"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
 )
 
 // FileExists checks if a file exists

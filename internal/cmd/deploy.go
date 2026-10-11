@@ -151,10 +151,9 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 			strings.Join(p.Artifacts[t.ArtifactID].Reasons, "; "))
 	}
 	if planOnly {
-		collector := &planCollector{index: map[string]int{}}
-		planDeployments(tasks, collector, serviceDetails)
-		output.SetResult(cmd.Context(), planResult{Plan: collector.items})
-		return logPlan(collector.items)
+		items := ops.PlanDeployments(exe, tasks)
+		output.SetResult(cmd.Context(), planResult{Plan: items})
+		return logPlan(items)
 	}
 	results := deployTasks(cmd.Context(), exe, tasks, true, maxChecks, delaySeconds, parallel)
 	logResults(results)

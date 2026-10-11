@@ -4,13 +4,11 @@ import (
 	"context"
 	"time"
 
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/rs/zerolog/log"
 )
 
-// DeploymentTask represents an artifact ready for deployment
 // Deployment defaults shared by deploy, undeploy, orchestrator, configure
 // and the MCP server: a status check every 10 s for up to 5 minutes; a
 // failed deployment ends at its first check.
@@ -20,22 +18,8 @@ const (
 	defaultParallelDeployments = 5
 )
 
-type DeploymentTask struct {
-	ArtifactID   string
-	ArtifactType string
-	PackageID    string
-	DisplayName  string
-	// Force deploys even when the runtime already has the designtime
-	// version (configuration changes do not change the version).
-	Force bool
-	// AllowDowngrade, ModifiedAt and Versioning are passed to ops.Artifact.
-	AllowDowngrade bool
-	ModifiedAt     *time.Time
-	Versioning     versioning.Mode
-	// ExpectedVersion is the repository's Bundle-Version (versioning
-	// manifest): the deployment refuses any other designtime version.
-	ExpectedVersion string
-}
+// DeploymentTask is an artifact ready for deployment.
+type DeploymentTask = ops.DeploymentTask
 
 // deployTasks deploys the tasks of configure and orchestrator through the
 // shared deployer. Packages are processed one after another (in the order in
@@ -55,7 +39,7 @@ func deployTasks(ctx context.Context, exe *httpclnt.HTTPExecuter, tasks []Deploy
 			g = &group{}
 			byPackage[t.PackageID] = g
 		}
-		a := ops.Artifact{ID: t.ArtifactID, Type: mapArtifactTypeForSync(t.ArtifactType), PackageID: t.PackageID,
+		a := ops.Artifact{ID: t.ArtifactID, Type: ops.DesigntimeType(t.ArtifactType), PackageID: t.PackageID,
 			AllowDowngrade: t.AllowDowngrade, ModifiedAt: t.ModifiedAt, Versioning: t.Versioning, ExpectedVersion: t.ExpectedVersion}
 		if t.Force || !compareVersions {
 			g.forced = append(g.forced, a)

@@ -74,6 +74,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
   postings have a trace and an attachment (scripts calling `addAttachmentAsString` get one);
   data stores and log files are empty lists with `--seed empty` too (were 404).
 
+- Go API (docs/go-api.md): logic that was only reachable through the CLI is public.
+  - Deploy configs and orchestrator plans: `ops.LoadDeployConfig`, `ops.PlanOrchestration`
+    (the code of `orchestrator --plan`), `ops.NewOrchestrator` for full runs,
+    `ops.PlanDeployments`, `lint.DeploymentCopiesOf`; the deploy and configure file models
+    moved to `pkg/models`.
+  - `pkg/versioning`, `pkg/manifest` and `pkg/pdrepo` (local Partner Directory files, now
+    `pdrepo.New`) moved out of `internal`; `ops.PDSnapshot` is the code of `pd-snapshot`.
+  - `ops.NewLogLevelReverter` (`Schedule`, `RunDue`, `RevertAll`), used by the MCP server.
+  - `ops.ListArtifacts` reports `ModifiedBy` and `ModifiedAt`.
+
 ## 0.9.1
 
 - Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with

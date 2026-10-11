@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cpars-innovation/cpicli/internal/manifest"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
 )
 
 // IFlowFacts are the facts discovered about one integration flow: what it is
