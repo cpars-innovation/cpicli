@@ -43,6 +43,14 @@ type Server struct {
 	tools        []Tool
 	// dynamic is set in dynamic toolset mode (UseDynamicToolsets).
 	dynamic *dynamicState
+	// Removed are the tools the mode or filters removed, with the reason. A
+	// call to one gets an error result (errorCategory usage) instead of the
+	// JSON-RPC error of an unknown tool.
+	Removed map[string]string
+	// Redactor rewrites every tool result before it is sent (masking, payload
+	// redaction, root-relative paths); NewServer sets one with the default
+	// masking.
+	Redactor *Redactor
 
 	writeMu sync.Mutex
 	out     io.Writer
@@ -53,7 +61,8 @@ type Server struct {
 
 // NewServer returns a server exposing tools.
 func NewServer(name, version, instructions string, tools []Tool) *Server {
-	return &Server{Name: name, Version: version, Instructions: instructions, tools: tools, calls: map[string]context.CancelFunc{}}
+	return &Server{Name: name, Version: version, Instructions: instructions, tools: tools, calls: map[string]context.CancelFunc{},
+		Redactor: &Redactor{}}
 }
 
 type request struct {
@@ -228,6 +237,19 @@ func Category(code int) string {
 	return "error"
 }
 
+// categorizer is an error with its own errorCategory (such as
+// loop_required), finer than the category of its exit code.
+type categorizer interface{ ErrorCategory() string }
+
+// errorCategory returns the errorCategory of a tool error.
+func errorCategory(err error) string {
+	var c categorizer
+	if errors.As(err, &c) {
+		return c.ErrorCategory()
+	}
+	return Category(output.ExitCode(err))
+}
+
 func (s *Server) callTool(ctx context.Context, id json.RawMessage, params json.RawMessage) (any, *rpcError) {
 	var p struct {
 		Name      string          `json:"name"`
@@ -237,6 +259,12 @@ func (s *Server) callTool(ctx context.Context, id json.RawMessage, params json.R
 		return nil, &rpcError{Code: codeInvalidParams, Message: "invalid tools/call params: " + err.Error()}
 	}
 	idx := slices.IndexFunc(s.tools, func(t Tool) bool { return t.Name == p.Name })
+	if reason, ok := s.Removed[p.Name]; ok && idx < 0 {
+		// a tool of cpictl that this server does not offer: a normal error
+		// result, so that the agent reads why
+		err := output.Usagef("tool %s is not available on this server: %s", p.Name, reason)
+		return s.result(ToolResult{ExitCode: exitcode.Usage, ErrorCategory: Category(exitcode.Usage), Error: err.Error()})
+	}
 	if idx < 0 {
 		return nil, &rpcError{Code: codeInvalidParams, Message: "unknown tool: " + p.Name}
 	}
@@ -261,13 +289,26 @@ func (s *Server) callTool(ctx context.Context, id json.RawMessage, params json.R
 	elapsed := time.Since(begin)
 	code := output.ExitCode(err)
 	stats.Record(p.Name, stats.SourceMCP, code, elapsed)
-	res := ToolResult{OK: err == nil, ExitCode: code, ErrorCategory: Category(code), DurationMs: elapsed.Milliseconds(), Result: value}
+	res := ToolResult{OK: err == nil, ExitCode: code, DurationMs: elapsed.Milliseconds(), Result: value}
+	if s.Redactor != nil {
+		res.Result = s.Redactor.Apply(p.Name, value)
+	}
 	if err != nil {
+		res.ErrorCategory = errorCategory(err)
 		res.Error = err.Error()
+		if s.Redactor != nil {
+			res.Error = s.Redactor.relativeText(res.Error)
+		}
 		log.Warn().Str("tool", p.Name).Int("exitCode", code).Int64("durationMs", res.DurationMs).Msg(err.Error())
 	} else {
 		log.Info().Str("tool", p.Name).Int64("durationMs", res.DurationMs).Msg("Tool call finished")
 	}
+	return s.result(res)
+}
+
+// result encodes a tool call result: the text content and the structured
+// content carry the same JSON.
+func (s *Server) result(res ToolResult) (any, *rpcError) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false) // keep XML payloads readable
@@ -279,7 +320,7 @@ func (s *Server) callTool(ctx context.Context, id json.RawMessage, params json.R
 	return map[string]any{
 		"content":           []map[string]any{{"type": "text", "text": string(text)}},
 		"structuredContent": res,
-		"isError":           err != nil,
+		"isError":           !res.OK,
 	}, nil
 }
 

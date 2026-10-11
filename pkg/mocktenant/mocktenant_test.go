@@ -32,3 +32,14 @@ func TestSeedDir(t *testing.T) {
 	assert.Empty(t, m.MessageLogs())
 	assert.Error(t, mocktenant.SeedDir(m, dir, "prod", time.Now()))
 }
+
+func TestAuth(t *testing.T) {
+	m := mocktenant.Start()
+	defer m.Close()
+	m.Auth = &mocktenant.Auth{APIUser: "user", APIPassword: "secret", Runtime: mocktenant.Client{ID: "rt", Secret: "rt"}}
+	_, err := ops.ListPackages(m.Executer())
+	require.NoError(t, err, "the API user")
+	m.Auth.APIPassword = "other"
+	_, err = ops.ListPackages(m.Executer())
+	assert.Error(t, err, "a wrong password")
+}

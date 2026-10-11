@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Value mappings: the mock reads the schemas and value pairs from the
@@ -225,6 +226,7 @@ func (m *Tenant) handleValMap(w http.ResponseWriter, r *http.Request, path strin
 			return true
 		}
 		a.Uploads++
+		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r)
 		w.WriteHeader(http.StatusAccepted)
 
 	default:

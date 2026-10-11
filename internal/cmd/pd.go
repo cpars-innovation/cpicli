@@ -5,9 +5,9 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -61,7 +61,7 @@ would delete it). Exit code 7 when a PID could not be read locally.`,
 		Example:      `  cpictl pd diff --resources-path ./partner-directory --pids ONE_OMS`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := ops.PDDiff(cpi.NewPartnerDirectory(tenantExecuter(cmd)), repo.NewPartnerDirectory(config.GetString(cmd, "resources-path")),
+			res, err := ops.PDDiff(cpi.NewPartnerDirectory(tenantExecuter(cmd)), pdrepo.New(config.GetString(cmd, "resources-path")),
 				config.GetStringSlice(cmd, "pids"))
 			if res != nil {
 				output.SetResult(cmd.Context(), res)

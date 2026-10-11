@@ -56,6 +56,7 @@ type DriftResult struct {
 // that edits made on the tenant are not overwritten. The tenant is only read;
 // parallel artifacts are compared at the same time (0: 8).
 func Drift(ctx context.Context, exe *httpclnt.HTTPExecuter, dir, packageID string, parallel int) (*DriftResult, error) {
+	exe = exe.WithContext(ctx)
 	if parallel <= 0 {
 		parallel = 8
 	}

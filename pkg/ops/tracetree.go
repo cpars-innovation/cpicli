@@ -88,6 +88,7 @@ var traceIDPattern32 = regexp.MustCompile(`^[0-9a-f]{32}$`)
 // span (or, without them, by PredecessorMessageGuid); children are ordered by
 // start time.
 func TraceTreeFor(ctx context.Context, exe *httpclnt.HTTPExecuter, q TraceTreeQuery) (*TraceTree, error) {
+	exe = exe.WithContext(ctx)
 	q.TraceID = strings.ToLower(strings.TrimSpace(q.TraceID))
 	if !traceIDPattern32.MatchString(q.TraceID) {
 		return nil, output.Usagef("trace_id must be 32 hex characters")
@@ -277,6 +278,7 @@ type MessagePathQuery struct {
 // predecessor message, else by start time (link inferred). Without a
 // correlation ID the path is the message alone.
 func MessagePathFor(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessagePathQuery) (*TraceTree, error) {
+	exe = exe.WithContext(ctx)
 	guid := strings.TrimSpace(q.MessageGuid)
 	if guid == "" {
 		return nil, output.Usagef("message_guid is required")
@@ -291,6 +293,9 @@ func MessagePathFor(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessagePa
 	l, err := cpi.NewMessageLogs(exe).Get(guid)
 	if err != nil {
 		return nil, err
+	}
+	if l == nil {
+		return nil, output.Usagef("message %s not found", guid)
 	}
 	tree := &TraceTree{CorrelationID: l.CorrelationId, Source: "correlation_id", Roots: []*TraceNode{}}
 	logs := []MessageLog{toMessageLog(*l)}

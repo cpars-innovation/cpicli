@@ -28,6 +28,7 @@ type UsageError struct{ Err error }
 
 func (e *UsageError) Error() string { return e.Err.Error() }
 func (e *UsageError) Unwrap() error { return e.Err }
+func (e *UsageError) ExitCode() int { return exitcode.Usage }
 
 // Usagef returns a UsageError.
 func Usagef(format string, args ...any) error {
@@ -47,6 +48,7 @@ type PartialError struct{ Err error }
 
 func (e *PartialError) Error() string { return e.Err.Error() }
 func (e *PartialError) Unwrap() error { return e.Err }
+func (e *PartialError) ExitCode() int { return exitcode.Partial }
 
 // Partial wraps err as a PartialError (nil stays nil).
 func Partial(err error) error {
@@ -62,6 +64,7 @@ type FailedError struct{ Err error }
 
 func (e *FailedError) Error() string { return e.Err.Error() }
 func (e *FailedError) Unwrap() error { return e.Err }
+func (e *FailedError) ExitCode() int { return exitcode.DeployFailed }
 
 // Failed wraps err as a FailedError (nil stays nil).
 func Failed(err error) error {
@@ -133,12 +136,46 @@ func TransportExitCode(err error, fallback int) int {
 	return fallback
 }
 
+// Category names an exit code for machines: the errorCategory of MCP tool
+// results and of the CLI's JSON envelope ("" for success).
+func Category(code int) string {
+	switch code {
+	case exitcode.OK:
+		return ""
+	case exitcode.Usage:
+		return "usage"
+	case exitcode.Auth:
+		return "auth"
+	case exitcode.TenantHTTP:
+		return "tenant_http"
+	case exitcode.DeployFailed:
+		return "failed"
+	case exitcode.Timeout:
+		return "timeout"
+	case exitcode.Partial:
+		return "partial"
+	case exitcode.Stopped:
+		return "stopped"
+	}
+	return "error"
+}
+
+// SchemaVersion is the version of the JSON envelope and the result shapes.
+// It changes only when a field is removed or changes meaning; new fields do
+// not change it.
+const SchemaVersion = 1
+
 // Envelope is the single JSON document written to stdout with --output json.
 type Envelope struct {
 	Command  string `json:"command"`
 	OK       bool   `json:"ok"`
 	ExitCode int    `json:"exitCode"`
-	Error    string `json:"error,omitempty"`
+	// ErrorCategory names ExitCode (usage, auth, tenant_http, failed,
+	// timeout, partial, stopped, error), as in MCP tool results.
+	ErrorCategory string `json:"errorCategory,omitempty"`
+	Error         string `json:"error,omitempty"`
+	// SchemaVersion is the envelope's SchemaVersion.
+	SchemaVersion int `json:"schemaVersion"`
 	// DurationMs is the time the command took, in milliseconds.
 	DurationMs int64 `json:"durationMs"`
 	Result     any   `json:"result"`

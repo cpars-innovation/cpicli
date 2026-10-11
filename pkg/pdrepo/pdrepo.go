@@ -1,4 +1,6 @@
-package repo
+// Package pdrepo reads and writes the local files of the Partner Directory
+// (pd-snapshot, pd-deploy, pd-diff).
+package pdrepo
 
 import (
 	"encoding/base64"
@@ -34,20 +36,21 @@ var supportedContentTypes = map[string]bool{
 	"crt":  true,
 }
 
-// PartnerDirectory handles Partner Directory file operations
-type PartnerDirectory struct {
+// Repo is a local Partner Directory: one folder per PID with
+// String.properties and Binary/ (see docs/partner-directory.md).
+type Repo struct {
 	ResourcesPath string
 }
 
-// NewPartnerDirectory creates a new Partner Directory repository
-func NewPartnerDirectory(resourcesPath string) *PartnerDirectory {
-	return &PartnerDirectory{
+// New returns the Partner Directory files under resourcesPath.
+func New(resourcesPath string) *Repo {
+	return &Repo{
 		ResourcesPath: resourcesPath,
 	}
 }
 
 // GetLocalPIDs returns all PIDs that have local directories
-func (pd *PartnerDirectory) GetLocalPIDs() ([]string, error) {
+func (pd *Repo) GetLocalPIDs() ([]string, error) {
 	entries, err := os.ReadDir(pd.ResourcesPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -68,7 +71,7 @@ func (pd *PartnerDirectory) GetLocalPIDs() ([]string, error) {
 }
 
 // WriteStringParameters writes string parameters to a properties file
-func (pd *PartnerDirectory) WriteStringParameters(pid string, params []cpi.StringParameter, replace bool) error {
+func (pd *Repo) WriteStringParameters(pid string, params []cpi.StringParameter, replace bool) error {
 	pidDir := filepath.Join(pd.ResourcesPath, pid)
 	if err := os.MkdirAll(pidDir, 0755); err != nil {
 		return fmt.Errorf("failed to create PID directory: %w", err)
@@ -93,7 +96,7 @@ func (pd *PartnerDirectory) WriteStringParameters(pid string, params []cpi.Strin
 }
 
 // WriteBinaryParameters writes binary parameters to files
-func (pd *PartnerDirectory) WriteBinaryParameters(pid string, params []cpi.BinaryParameter, replace bool) error {
+func (pd *Repo) WriteBinaryParameters(pid string, params []cpi.BinaryParameter, replace bool) error {
 	pidDir := filepath.Join(pd.ResourcesPath, pid)
 	binaryDir := filepath.Join(pidDir, binaryDirName)
 
@@ -126,7 +129,7 @@ func (pd *PartnerDirectory) WriteBinaryParameters(pid string, params []cpi.Binar
 }
 
 // ReadStringParameters reads string parameters from a properties file
-func (pd *PartnerDirectory) ReadStringParameters(pid string) ([]cpi.StringParameter, error) {
+func (pd *Repo) ReadStringParameters(pid string) ([]cpi.StringParameter, error) {
 	propertiesFile := filepath.Join(pd.ResourcesPath, pid, stringPropertiesFile)
 
 	// Only a file that definitely does not exist means "no string parameters".
@@ -147,7 +150,7 @@ func (pd *PartnerDirectory) ReadStringParameters(pid string) ([]cpi.StringParame
 }
 
 // ReadBinaryParameters reads binary parameters from files
-func (pd *PartnerDirectory) ReadBinaryParameters(pid string) ([]cpi.BinaryParameter, error) {
+func (pd *Repo) ReadBinaryParameters(pid string) ([]cpi.BinaryParameter, error) {
 	files, err := pd.ReadBinaryFiles(pid)
 	if err != nil {
 		return nil, err
@@ -170,7 +173,7 @@ type BinaryFile struct {
 }
 
 // ReadBinaryFiles reads the binary parameters of a PID with their files.
-func (pd *PartnerDirectory) ReadBinaryFiles(pid string) ([]BinaryFile, error) {
+func (pd *Repo) ReadBinaryFiles(pid string) ([]BinaryFile, error) {
 	binaryDir := filepath.Join(pd.ResourcesPath, pid, binaryDirName)
 
 	// See ReadStringParameters: only a missing directory means "no parameters".

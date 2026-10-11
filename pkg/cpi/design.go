@@ -243,7 +243,7 @@ func getData(id string, version string, artifactType string, exe *httpclnt.HTTPE
 	callType := fmt.Sprintf("Get %v designtime artifact", artifactType)
 	resp, err := readOnlyCall(urlPath, callType, exe)
 	if err != nil {
-		if err.Error() == fmt.Sprintf("%v call failed with response code = 404", callType) {
+		if httpclnt.StatusCode(err) == http.StatusNotFound {
 			return nil, false, nil
 		}
 		return nil, false, err

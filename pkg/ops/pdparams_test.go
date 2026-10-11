@@ -9,8 +9,8 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,7 +59,7 @@ func writeLocalPD(t *testing.T) string {
 func TestPDDiff(t *testing.T) {
 	_, api := pdTenant(t)
 	dir := writeLocalPD(t)
-	res, err := PDDiff(api, repo.NewPartnerDirectory(dir), nil)
+	res, err := PDDiff(api, pdrepo.New(dir), nil)
 	require.NoError(t, err)
 	changes := map[string]string{}
 	for _, it := range res.Items {
@@ -71,7 +71,7 @@ func TestPDDiff(t *testing.T) {
 	}, changes)
 	assert.Equal(t, 2, res.Summary[PDRemoteOnly])
 
-	_, err = PDDiff(api, repo.NewPartnerDirectory(dir), []string{"MISSING"})
+	_, err = PDDiff(api, pdrepo.New(dir), []string{"MISSING"})
 	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
 }
 
@@ -82,7 +82,7 @@ func TestPDDiffUnreadablePIDIsAnError(t *testing.T) {
 	props := filepath.Join(dir, "ONE_OMS", "String.properties")
 	require.NoError(t, os.Remove(props))
 	require.NoError(t, os.Mkdir(props, 0o755))
-	res, err := PDDiff(api, repo.NewPartnerDirectory(dir), nil)
+	res, err := PDDiff(api, pdrepo.New(dir), nil)
 	require.Error(t, err)
 	assert.Equal(t, exitcode.Partial, output.ExitCode(err))
 	for _, it := range res.Items {
@@ -94,7 +94,7 @@ func TestPDDiffUnreadablePIDIsAnError(t *testing.T) {
 func TestPDDeployKeys(t *testing.T) {
 	mock, api := pdTenant(t)
 	dir := writeLocalPD(t)
-	local := repo.NewPartnerDirectory(dir)
+	local := pdrepo.New(dir)
 
 	res, err := PDDeploy(api, local, PDDeployOptions{Keys: []string{"ONE_OMS:fresh", "ONE_OMS:endpoint", "ONE_OMS:now_email"}})
 	require.NoError(t, err)

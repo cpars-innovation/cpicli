@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
@@ -23,7 +24,10 @@ type HTTPExecuter struct {
 	httpClient    *http.Client
 	AuthType      string
 	showLogs      bool
-	csrf          csrf
+	// csrf is shared by the copies WithContext returns.
+	csrf *csrf
+	// ctx cancels the requests of this executer (nil: never).
+	ctx context.Context
 	// csrfPath is where CSRF tokens are fetched (default CSRFFetchPath);
 	// csrfOnDemand disables the up-front fetch for Basic Auth.
 	csrfPath     string
@@ -57,43 +61,88 @@ func (e *HTTPExecuter) ForEndpoint(path string) *HTTPExecuter {
 	return e
 }
 
+// DefaultTimeout limits one request (including the OAuth token request) when
+// Options.HTTPClient is not set.
+const DefaultTimeout = 30 * time.Second
+
+// Options configure an executer (see NewWithOptions).
+type Options struct {
+	// Host, Scheme and Port of the tenant (e.g. "x.hana.ondemand.com",
+	// "https", 443).
+	Host   string
+	Scheme string
+	Port   int
+	// OAuthHost and OAuthPath name the token endpoint (same scheme and
+	// port as the tenant); with OAuthHost set, OAuth client credentials are
+	// used, else Basic Auth.
+	OAuthHost, OAuthPath       string
+	ClientID, ClientSecret     string
+	BasicUserID, BasicPassword string
+	// HTTPClient is the client requests go through (its Transport, Timeout
+	// and Jar); with OAuth it also fetches the tokens. Nil: a client with
+	// DefaultTimeout.
+	HTTPClient *http.Client
+	// ShowLogs writes debug logs of requests.
+	ShowLogs bool
+}
+
 // New returns an initialised HTTPExecuter instance.
 func New(oauthHost string, oauthPath string, clientId string, clientSecret string, userId string, password string, host string, scheme string, port int, showLogs bool) *HTTPExecuter {
-	e := new(HTTPExecuter)
-	e.host = host
-	e.scheme = scheme
-	e.port = port
-	e.showLogs = showLogs
-	if oauthHost != "" {
-		if showLogs {
+	return NewWithOptions(Options{Host: host, Scheme: scheme, Port: port, OAuthHost: oauthHost, OAuthPath: oauthPath,
+		ClientID: clientId, ClientSecret: clientSecret, BasicUserID: userId, BasicPassword: password, ShowLogs: showLogs})
+}
+
+// NewWithOptions returns an executer configured by o.
+func NewWithOptions(o Options) *HTTPExecuter {
+	e := &HTTPExecuter{host: o.Host, scheme: o.Scheme, port: o.Port, showLogs: o.ShowLogs, csrf: &csrf{}}
+	base := o.HTTPClient
+	if base == nil {
+		base = &http.Client{Timeout: DefaultTimeout}
+	}
+	if o.OAuthHost != "" {
+		if e.showLogs {
 			log.Debug().Msg("Initialising HTTP client with OAuth 2.0")
 		}
-
-		tokenURL := fmt.Sprintf("%v://%v:%d%v", scheme, oauthHost, port, oauthPath)
-		if showLogs {
+		tokenURL := fmt.Sprintf("%v://%v:%d%v", o.Scheme, o.OAuthHost, o.Port, o.OAuthPath)
+		if e.showLogs {
 			log.Debug().Msgf("Setting up OAuth 2.0 client with token URL %v", tokenURL)
 		}
-
 		// Reference https://pkg.go.dev/golang.org/x/oauth2/clientcredentials#pkg-overview
-		conf := &clientcredentials.Config{
-			ClientID:     clientId,
-			ClientSecret: clientSecret,
-			TokenURL:     tokenURL,
-		}
-
-		ctx := context.Background()
-		e.httpClient = conf.Client(ctx)
+		conf := &clientcredentials.Config{ClientID: o.ClientID, ClientSecret: o.ClientSecret, TokenURL: tokenURL}
+		// the token requests go through base (and its timeout); so do the
+		// API requests, which carry the token
+		client := conf.Client(context.WithValue(context.Background(), oauth2.HTTPClient, base))
+		client.Timeout, client.Jar = base.Timeout, base.Jar
+		e.httpClient = client
 		e.AuthType = "OAUTH"
 	} else {
-		if showLogs {
+		if e.showLogs {
 			log.Debug().Msg("Initialising HTTP client with Basic Authentication")
 		}
-		e.httpClient = &http.Client{Timeout: 30 * time.Second}
-		e.basicUserId = userId
-		e.basicPassword = password
+		e.httpClient = base
+		e.basicUserId = o.BasicUserID
+		e.basicPassword = o.BasicPassword
 		e.AuthType = "BASIC"
 	}
 	return e
+}
+
+// WithContext returns a copy of the executer whose requests are cancelled
+// with ctx (also the waits between retries). The copy shares the session:
+// CSRF token, cookies, OAuth token and retry settings. Use one per request
+// or job: exe.WithContext(r.Context()).
+func (e *HTTPExecuter) WithContext(ctx context.Context) *HTTPExecuter {
+	c := *e
+	c.ctx = ctx
+	return &c
+}
+
+// Context is the executer's context (context.Background without one).
+func (e *HTTPExecuter) Context() context.Context {
+	if e.ctx == nil {
+		return context.Background()
+	}
+	return e.ctx
 }
 
 // Exec sends a request to the tenant. Modifying requests (POST, PUT, PATCH,
@@ -116,7 +165,9 @@ func (e *HTTPExecuter) Exec(method string, path string, body io.Reader, headers 
 			}
 			_, _ = e.ReadRespBody(resp)
 			log.Debug().Msgf("%v %v answered %d, retrying in %v", method, path, resp.StatusCode, delay)
-			time.Sleep(delay)
+			if err := sleepCtx(e.Context(), delay); err != nil {
+				return nil, err
+			}
 			wait *= 2
 			resp, err = e.send(method, path, payload, headers, nil)
 		}
@@ -166,7 +217,7 @@ func (e *HTTPExecuter) send(method string, path string, payload []byte, headers 
 	if len(payload) > 0 {
 		body = bytes.NewReader(payload)
 	}
-	req, err := http.NewRequest(method, url, body)
+	req, err := http.NewRequestWithContext(e.Context(), method, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +231,18 @@ func (e *HTTPExecuter) send(method string, path string, payload []byte, headers 
 		req.AddCookie(cookie)
 	}
 	return e.httpClient.Do(req)
+}
+
+// sleepCtx waits d or until ctx ends (then it returns ctx's error).
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (e *HTTPExecuter) ExecGetRequest(path string, headers map[string]string) (resp *http.Response, err error) {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,4 +115,30 @@ func TestCompareVersions(t *testing.T) {
 	assert.Equal(t, -1, CompareVersions("1.13", "1.14.0"))
 	assert.Equal(t, 0, CompareVersions("2.0", "2.0.0"))
 	assert.Equal(t, -1, CompareVersions("", "1.0"))
+}
+
+// Each source keeps its own date: learning later does not make the editor
+// metadata look fresh.
+func TestSourceDates(t *testing.T) {
+	day1 := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	day2 := day1.AddDate(0, 0, 9)
+	defer func(f func() time.Time) { now = f }(now)
+
+	now = func() time.Time { return day1 }
+	c := importFixture(t)
+	assert.Equal(t, map[string]time.Time{SourceEditor: day1}, c.SourceDates)
+
+	now = func() time.Time { return day2 }
+	c.Learn([]Use{{URI: "ctype::FlowstepVariant/cname::XmlModifier/version::1.0.0"}})
+	assert.Equal(t, day1, c.SourceDates[SourceEditor], "unchanged by learning")
+	assert.Equal(t, day2, c.SourceDates[SourceLearned])
+
+	c.Learn([]Use{{URI: "ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2"}}) // known to the editor: nothing learned
+	assert.Equal(t, day2, c.SourceDates[SourceLearned])
+
+	file := filepath.Join(t.TempDir(), "components.json")
+	require.NoError(t, c.Save(file))
+	back, err := Load(file)
+	require.NoError(t, err)
+	assert.Equal(t, c.SourceDates, back.SourceDates)
 }

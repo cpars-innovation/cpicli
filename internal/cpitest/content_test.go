@@ -10,10 +10,10 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/file"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

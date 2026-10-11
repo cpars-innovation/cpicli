@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cpars-innovation/cpicli/internal/models"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )

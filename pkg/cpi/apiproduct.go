@@ -3,6 +3,7 @@ package cpi
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -273,7 +274,7 @@ func (a *APIProduct) Exists(id string) (bool, error) {
 	callType := "Get APIProduct"
 	_, err := readOnlyCall(urlPath, callType, a.exe)
 	if err != nil {
-		if err.Error() == fmt.Sprintf("%v call failed with response code = 404", callType) {
+		if httpclnt.StatusCode(err) == http.StatusNotFound {
 			return false, nil
 		} else {
 			return false, err
@@ -326,7 +327,7 @@ func (a *APIResource) Exists(id string) (bool, error) {
 	callType := "Get APIResource"
 	_, err := readOnlyCall(urlPath, callType, a.exe)
 	if err != nil {
-		if err.Error() == fmt.Sprintf("%v call failed with response code = 404", callType) {
+		if httpclnt.StatusCode(err) == http.StatusNotFound {
 			return false, nil
 		} else {
 			return false, err

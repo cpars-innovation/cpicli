@@ -2195,7 +2195,22 @@ Limit the tools per server, e.g. for a QA or production tenant:
   --mode discover|operate|develop|full presets (combined with the above, the most
                                   restrictive wins)
 Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS. Disabled tools are not
-listed and cannot be called; a pattern that matches no tool is an error.
+listed; a call to one is an error result (errorCategory usage) that says why; a
+pattern that matches no tool is an error.
+
+Loop policy (the model cannot change it):
+  --loop-required                 tenant tools are refused (errorCategory loop_required)
+                                  until loop_start opened a loop
+  --loop-max-iterations, --loop-max-deploys, --loop-max-same-errors, --loop-max-minutes
+                                  the highest limits loop_start accepts (higher: usage error);
+                                  they also lower the defaults
+
+Masking: values of sensitive names (authorization, cookie, password, secret, token,
+credential, API key) in all name/value lists of results are masked as ***;
+--mask-pattern adds name patterns, --redact-payloads replaces message bodies with
+a placeholder, size and sha256. Local paths in results are relative to --root.
+All flags can also be set in cpictl.yaml (e.g. loop-required: true) or as
+CPICTL_* environment variables.
 ```
 
 **Usage:** `cpictl mcp [flags]`
@@ -2206,10 +2221,17 @@ listed and cannot be called; a pattern that matches no tool is an error.
       --cache-ttl int                       Seconds list_packages and list_artifacts results are reused (0: no cache); any tool that changes the tenant clears them (default 60)
       --disable-tools strings               Do not offer these tools (names or patterns); wins over --tools
       --dynamic-toolsets                    List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start
+      --loop-max-deploys int                Highest max_deploys loop_start accepts (0: no cap); also lowers the default
+      --loop-max-iterations int             Highest max_iterations loop_start accepts (0: no cap); also lowers the default
+      --loop-max-minutes int                Highest wall_clock_minutes loop_start accepts (0: no cap); also lowers the default
+      --loop-max-same-errors int            Highest same_error_limit loop_start accepts (0: no cap); also lowers the default
+      --loop-required                       Refuse tools that change the tenant or trigger processing (errorCategory loop_required) while no loop is open (loop_start)
+      --mask-pattern stringArray            Also mask the values of names (headers, properties, attributes, parameters) matching this regular expression (case-insensitive; repeatable)
       --max-checks int                      Default maximum number of deploy/undeploy status checks (default 30)
       --mode string                         Preset: discover (read-only), operate (read tools + set_log_level), develop (all tools, no pd_deploy full_sync), full (all tools, no restrictions)
       --poll-interval int                   Default seconds between deploy/undeploy status checks (default 10)
       --read-only                           Offer only tools that do not change the tenant or trigger processing
+      --redact-payloads                     Replace message bodies in results (test message responses, attachments, message store entries, trace payloads, data store entries, variables) with a placeholder, size and sha256
       --root string                         Directory that local paths of tool calls are confined to (default ".")
       --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
       --runtime-oauth-clientsecret string   OAuth client secret for runtime endpoints
@@ -2238,8 +2260,16 @@ Run an in-memory SAP CPI tenant for local development and tests (never a real te
 Serve an in-memory mock of the SAP CPI APIs that cpictl uses: packages,
 artifacts (download, upload, deploy, undeploy), parameters, runtime status,
 endpoints, message processing logs with custom headers, steps and errors,
-credentials, keystore and Partner Directory. Any credentials are accepted
-(Basic Auth with CSRF, or OAuth client credentials at /oauth/token).
+credentials, keystore and Partner Directory. Basic Auth (with CSRF) and OAuth
+client credentials (token at /oauth/token) are accepted.
+
+--credentials any (default) accepts any credentials everywhere. --credentials
+strict checks them like a Cloud Foundry tenant with two service keys: the API
+user and client (--api-*) manage content through /api/v1, the runtime client
+(--runtime-client-*, plan integration-flow) calls the flows' endpoints
+(/http/..., /cxf/...). The other key is refused with 403, wrong credentials with
+401. The credentials are printed at start; cpictl send takes the runtime client
+as CPICTL_RUNTIME_OAUTH_*.
 
 --seed demo loads a demo landscape for --tier dev|test|prod:
   Orders_In -> (ProcessDirect) Orders_Route -> (JMS) Billing_In -> (ProcessDirect)
@@ -2273,17 +2303,24 @@ SSL_CERT_FILE.
 **Flags:**
 
 ```
-      --addr string              Listen address (default "127.0.0.1:8081")
-      --admin-token string       Bearer token for the /_mock admin API (default: a random token, printed at start)
-      --ca-out string            With --tls: file the generated CA certificate is written to (PEM)
-      --live-traffic float       Keep generating the landscape's traffic in real time at this speed (1: as in landscape.yaml, 60: an hour per minute; 0: off)
-      --log-retention duration   How long message logs are kept (older ones are dropped; at most 100000 are kept; 0: no age limit) (default 168h0m0s)
-      --public-url string        Base URL of the flows' runtime endpoints as clients reach the mock, e.g. https://mock-dev:8443 (default: the listen address)
-      --seed string              Content: demo or empty (default "demo")
-      --seed-dir string          Landscape directory to load instead of --seed (landscape.yaml + packages/)
-      --tier string              Tier of the landscape (demo: dev, test, prod) (default "dev")
-      --tls                      Serve HTTPS with a generated certificate (for access from other containers)
-      --tls-hosts strings        Host names and IPs of the generated certificate (default [localhost,127.0.0.1])
+      --addr string                    Listen address (default "127.0.0.1:8081")
+      --admin-token string             Bearer token for the /_mock admin API (default: a random token, printed at start)
+      --api-client-id string           OAuth client ID of the API key (plan api) (default "mock")
+      --api-client-secret string       OAuth client secret of the API key (default "mock")
+      --api-password string            Password of --api-user (default "mock")
+      --api-user string                Basic Auth user of the API (default "mock")
+      --ca-out string                  With --tls: file the generated CA certificate is written to (PEM)
+      --credentials string             Credential check: any (accept all) or strict (API key on /api/v1, runtime key on runtime endpoints, like a tenant) (default "any")
+      --live-traffic float             Keep generating the landscape's traffic in real time at this speed (1: as in landscape.yaml, 60: an hour per minute; 0: off)
+      --log-retention duration         How long message logs are kept (older ones are dropped; at most 100000 are kept; 0: no age limit) (default 168h0m0s)
+      --public-url string              Base URL of the flows' runtime endpoints as clients reach the mock, e.g. https://mock-dev:8443 (default: the listen address)
+      --runtime-client-id string       OAuth client ID of the runtime key (plan integration-flow), for runtime endpoints (default "mock-rt")
+      --runtime-client-secret string   OAuth client secret of the runtime key (default "mock-rt")
+      --seed string                    Content: demo or empty (default "demo")
+      --seed-dir string                Landscape directory to load instead of --seed (landscape.yaml + packages/)
+      --tier string                    Tier of the landscape (demo: dev, test, prod) (default "dev")
+      --tls                            Serve HTTPS with a generated certificate (for access from other containers)
+      --tls-hosts strings              Host names and IPs of the generated certificate (default [localhost,127.0.0.1])
 ```
 
 **Examples:**
@@ -2291,6 +2328,7 @@ SSL_CERT_FILE.
 ```
   cpictl mock-tenant --tier dev --addr 127.0.0.1:8081
   cpictl mock-tenant --seed-dir ./landscapes/retail-b --tier prod-eu --addr 127.0.0.1:8084
+  cpictl mock-tenant --tier dev --credentials strict --runtime-client-id rt-client --runtime-client-secret rt-secret
   cpictl mock-tenant --tier prod --addr 0.0.0.0:8443 --tls --tls-hosts mock-prod,localhost --ca-out /certs/mock-ca.pem
 ```
 

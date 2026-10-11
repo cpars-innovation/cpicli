@@ -11,9 +11,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/cpars-innovation/cpicli/internal/manifest"
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 )
 
 // BumpOptions select the artifacts whose Bundle-Version is raised.

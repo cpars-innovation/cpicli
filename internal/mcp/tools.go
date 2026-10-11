@@ -17,14 +17,14 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/repo"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 	"github.com/cpars-innovation/cpicli/pkg/lint"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 )
 
 // Instructions is sent to the client on initialize.
@@ -487,11 +487,11 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					minutes = *a.RevertAfter
 				}
 				if minutes > 0 && res.Level != "INFO" {
-					at := reverter.now().UTC().Add(time.Duration(minutes) * time.Minute).Truncate(time.Second)
+					at := reverter.Now().UTC().Add(time.Duration(minutes) * time.Minute).Truncate(time.Second)
 					res.RevertsAt = &at
-					reverter.schedule(req, at)
+					reverter.Schedule(req, at)
 				} else {
-					reverter.schedule(req, time.Time{})
+					reverter.Schedule(req, time.Time{})
 				}
 				return res, nil
 			},
@@ -1426,7 +1426,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if a.DryRun != nil {
 					opts.DryRun = *a.DryRun
 				}
-				return ops.PDDeploy(cpi.NewPartnerDirectory(cfg.Exe), repo.NewPartnerDirectory(dir), opts)
+				return ops.PDDeploy(cpi.NewPartnerDirectory(cfg.Exe), pdrepo.New(dir), opts)
 			},
 		},
 		{
@@ -1477,7 +1477,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if err != nil {
 					return nil, err
 				}
-				return ops.PDDiff(cpi.NewPartnerDirectory(cfg.Exe), repo.NewPartnerDirectory(dir), a.PIDs)
+				return ops.PDDiff(cpi.NewPartnerDirectory(cfg.Exe), pdrepo.New(dir), a.PIDs)
 			},
 		},
 		{

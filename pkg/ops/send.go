@@ -113,6 +113,7 @@ func ResolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url string) (string
 // answer is returned together with an error: 401/403 as an authentication
 // error, anything else as failed (exit code 5).
 func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe EndpointExecuterFunc, m TestMessage) (*SentMessage, error) {
+	exe = exe.WithContext(ctx)
 	if m.ArtifactID == "" {
 		return nil, output.Usagef("artifact ID is required")
 	}

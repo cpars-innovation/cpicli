@@ -229,6 +229,8 @@ func TestExitCodes(t *testing.T) {
 			assert.False(t, dec.More(), "stdout must contain exactly one JSON document")
 			assert.Equal(t, res.code, env.ExitCode)
 			assert.Equal(t, res.code == 0, env.OK)
+			assert.Equal(t, output.Category(res.code), env.ErrorCategory, "errorCategory names the exit code")
+			assert.Equal(t, output.SchemaVersion, env.SchemaVersion)
 
 			// stderr: JSON lines only
 			for line := range strings.SplitSeq(strings.TrimSpace(res.stderr), "\n") {

@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/file"
-	"github.com/cpars-innovation/cpicli/internal/manifest"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/content"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 	"github.com/rs/zerolog/log"
 )
 

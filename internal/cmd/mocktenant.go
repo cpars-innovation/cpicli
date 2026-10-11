@@ -29,8 +29,16 @@ func NewMockTenantCommand() *cobra.Command {
 		Long: `Serve an in-memory mock of the SAP CPI APIs that cpictl uses: packages,
 artifacts (download, upload, deploy, undeploy), parameters, runtime status,
 endpoints, message processing logs with custom headers, steps and errors,
-credentials, keystore and Partner Directory. Any credentials are accepted
-(Basic Auth with CSRF, or OAuth client credentials at /oauth/token).
+credentials, keystore and Partner Directory. Basic Auth (with CSRF) and OAuth
+client credentials (token at /oauth/token) are accepted.
+
+--credentials any (default) accepts any credentials everywhere. --credentials
+strict checks them like a Cloud Foundry tenant with two service keys: the API
+user and client (--api-*) manage content through /api/v1, the runtime client
+(--runtime-client-*, plan integration-flow) calls the flows' endpoints
+(/http/..., /cxf/...). The other key is refused with 403, wrong credentials with
+401. The credentials are printed at start; cpictl send takes the runtime client
+as CPICTL_RUNTIME_OAUTH_*.
 
 --seed demo loads a demo landscape for --tier dev|test|prod:
   Orders_In -> (ProcessDirect) Orders_Route -> (JMS) Billing_In -> (ProcessDirect)
@@ -59,6 +67,7 @@ for --tls-hosts, the CA is written to --ca-out; point the client at it with
 SSL_CERT_FILE.`,
 		Example: `  cpictl mock-tenant --tier dev --addr 127.0.0.1:8081
   cpictl mock-tenant --seed-dir ./landscapes/retail-b --tier prod-eu --addr 127.0.0.1:8084
+  cpictl mock-tenant --tier dev --credentials strict --runtime-client-id rt-client --runtime-client-secret rt-secret
   cpictl mock-tenant --tier prod --addr 0.0.0.0:8443 --tls --tls-hosts mock-prod,localhost --ca-out /certs/mock-ca.pem`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
@@ -71,6 +80,25 @@ SSL_CERT_FILE.`,
 			useTLS, _ := cmd.Flags().GetBool("tls")
 			if seed != "demo" && seed != "empty" {
 				return output.Usagef("--seed %q: demo or empty", seed)
+			}
+			mode, _ := cmd.Flags().GetString("credentials")
+			if mode != "any" && mode != "strict" {
+				return output.Usagef("--credentials %q: any or strict", mode)
+			}
+			auth := &cpitest.Auth{}
+			auth.APIUser, _ = cmd.Flags().GetString("api-user")
+			auth.APIPassword, _ = cmd.Flags().GetString("api-password")
+			auth.APIClient.ID, _ = cmd.Flags().GetString("api-client-id")
+			auth.APIClient.Secret, _ = cmd.Flags().GetString("api-client-secret")
+			auth.Runtime.ID, _ = cmd.Flags().GetString("runtime-client-id")
+			auth.Runtime.Secret, _ = cmd.Flags().GetString("runtime-client-secret")
+			if mode == "strict" {
+				if auth.APIUser == "" || auth.APIClient.ID == "" || auth.Runtime.ID == "" {
+					return output.Usagef("--credentials strict needs --api-user, --api-client-id and --runtime-client-id")
+				}
+				if auth.Runtime.ID == auth.APIClient.ID || auth.Runtime.ID == auth.APIUser {
+					return output.Usagef("--runtime-client-id must differ from --api-client-id and --api-user")
+				}
 			}
 			var landscape *cpitest.Landscape
 			if seedDir != "" {
@@ -104,6 +132,9 @@ SSL_CERT_FILE.`,
 			m := cpitest.Serve(l, tlsConfig)
 			defer m.Close()
 			m.Live, m.OAuth, m.FilterMessageLogs = true, true, true
+			if mode == "strict" {
+				m.Auth = auth
+			}
 			m.AdminToken, _ = cmd.Flags().GetString("admin-token")
 			m.LogRetention, _ = cmd.Flags().GetDuration("log-retention")
 			if m.LogRetention < 0 {
@@ -140,8 +171,14 @@ SSL_CERT_FILE.`,
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Mock CPI tenant (%s, seed %s) on %s://%s\n\n", tier, seed, scheme, host)
-			fmt.Fprintf(out, "CPICTL_TMN_HOST=%s://%s\nCPICTL_TMN_USERID=mock\nCPICTL_TMN_PASSWORD=mock\n", scheme, host)
-			fmt.Fprintf(out, "# or OAuth: CPICTL_OAUTH_HOST=%s CPICTL_OAUTH_CLIENTID=mock CPICTL_OAUTH_CLIENTSECRET=mock\n", host)
+			fmt.Fprintf(out, "CPICTL_TMN_HOST=%s://%s\nCPICTL_TMN_USERID=%s\nCPICTL_TMN_PASSWORD=%s\n", scheme, host, auth.APIUser, auth.APIPassword)
+			fmt.Fprintf(out, "# or OAuth: CPICTL_OAUTH_HOST=%s CPICTL_OAUTH_CLIENTID=%s CPICTL_OAUTH_CLIENTSECRET=%s\n", host, auth.APIClient.ID, auth.APIClient.Secret)
+			fmt.Fprintf(out, "CPICTL_RUNTIME_OAUTH_HOST=%s\nCPICTL_RUNTIME_OAUTH_CLIENTID=%s\nCPICTL_RUNTIME_OAUTH_CLIENTSECRET=%s\n", host, auth.Runtime.ID, auth.Runtime.Secret)
+			if mode == "strict" {
+				fmt.Fprintln(out, "# credentials strict: the API user or client on /api/v1, the runtime client on /http and /cxf")
+			} else {
+				fmt.Fprintln(out, "# credentials any: every credential is accepted (--credentials strict checks them like a tenant)")
+			}
 			if useTLS {
 				caOut, _ := cmd.Flags().GetString("ca-out")
 				fmt.Fprintf(out, "SSL_CERT_FILE=%s\n", caOut)
@@ -165,6 +202,13 @@ SSL_CERT_FILE.`,
 	c.Flags().String("public-url", "", "Base URL of the flows' runtime endpoints as clients reach the mock, e.g. https://mock-dev:8443 (default: the listen address)")
 	c.Flags().Duration("log-retention", 168*time.Hour, "How long message logs are kept (older ones are dropped; at most 100000 are kept; 0: no age limit)")
 	c.Flags().String("admin-token", "", "Bearer token for the /_mock admin API (default: a random token, printed at start)")
+	c.Flags().String("credentials", "any", "Credential check: any (accept all) or strict (API key on /api/v1, runtime key on runtime endpoints, like a tenant)")
+	c.Flags().String("api-user", "mock", "Basic Auth user of the API")
+	c.Flags().String("api-password", "mock", "Password of --api-user")
+	c.Flags().String("api-client-id", "mock", "OAuth client ID of the API key (plan api)")
+	c.Flags().String("api-client-secret", "mock", "OAuth client secret of the API key")
+	c.Flags().String("runtime-client-id", "mock-rt", "OAuth client ID of the runtime key (plan integration-flow), for runtime endpoints")
+	c.Flags().String("runtime-client-secret", "mock-rt", "OAuth client secret of the runtime key")
 	c.Flags().Bool("tls", false, "Serve HTTPS with a generated certificate (for access from other containers)")
 	c.Flags().StringSlice("tls-hosts", []string{"localhost", "127.0.0.1"}, "Host names and IPs of the generated certificate")
 	c.Flags().String("ca-out", "", "With --tls: file the generated CA certificate is written to (PEM)")

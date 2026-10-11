@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 )
 
 // PDString is a string parameter of the Partner Directory.
@@ -119,7 +119,7 @@ type PDDiffResult struct {
 
 // PDDiff compares the local tree (layout of pd-snapshot) with the tenant.
 // remote_only items are what pd_deploy with full_sync would delete.
-func PDDiff(api *cpi.PartnerDirectory, local *repo.PartnerDirectory, pids []string) (*PDDiffResult, error) {
+func PDDiff(api *cpi.PartnerDirectory, local *pdrepo.Repo, pids []string) (*PDDiffResult, error) {
 	localPIDs, err := local.GetLocalPIDs()
 	if err != nil {
 		return nil, output.Usagef("cannot read %s: %v", local.ResourcesPath, err)
@@ -150,7 +150,7 @@ func PDDiff(api *cpi.PartnerDirectory, local *repo.PartnerDirectory, pids []stri
 	return res, nil
 }
 
-func diffPID(api *cpi.PartnerDirectory, local *repo.PartnerDirectory, pid string) ([]PDDiffItem, error) {
+func diffPID(api *cpi.PartnerDirectory, local *pdrepo.Repo, pid string) ([]PDDiffItem, error) {
 	localStrs, err := local.ReadStringParameters(pid)
 	if err != nil {
 		return nil, err
@@ -254,7 +254,7 @@ type PDKeyResult struct {
 
 // pdDeployKeys creates or updates only the given "<pid>:<id>" parameters
 // (merge: nothing is deleted).
-func pdDeployKeys(api *cpi.PartnerDirectory, local *repo.PartnerDirectory, keys []string, dryRun bool) ([]PDKeyResult, error) {
+func pdDeployKeys(api *cpi.PartnerDirectory, local *pdrepo.Repo, keys []string, dryRun bool) ([]PDKeyResult, error) {
 	type want struct{ pid, id string }
 	var wanted []want
 	byPID := map[string][]string{}

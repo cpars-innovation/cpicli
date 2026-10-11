@@ -5,6 +5,85 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Component catalogue: `sourceDates` records when the editor metadata was imported and when
+  versions were last learned (`generatedAt` changes with every write); `components list` prints
+  the editor metadata's age.
+
+- Cancellation and injectable HTTP client for Go callers: `exe.WithContext(ctx)` returns a copy
+  of an executer whose requests (and retry waits) end with ctx and that shares the session (CSRF
+  token, cookies, OAuth token). `httpclnt.NewWithOptions(httpclnt.Options{…, HTTPClient})` and
+  `cpi.ServiceDetails.HTTPClient` set the client (transport, proxy, timeout). The OAuth token
+  request had no timeout; it now uses the client's (default 30 s). `pkg/ops` functions that take
+  a context cancel their tenant calls with it, and the CLI's requests end on Ctrl+C.
+
+- Typed errors for Go callers: `ops.ErrorCategory(err)` and `ops.ExitCode(err)` with exported
+  constants (`ops.CategoryUsage`, …, `ops.ExitUsage`, …); the usage, partial and failed errors
+  implement `ExitCode() int`, so `errors.As` with an `ExitCode` interface works everywhere.
+- The CLI's JSON envelope has `errorCategory` (as MCP tool results) and `schemaVersion` (1).
+- `doctor`: every check has `category` (`auth` or `tenant_http` when it is not ok) and
+  `httpStatus`.
+
+- Fix: `MessagePathFor` (`logs tree --message`, `get_trace_tree message_guid`) panicked for an
+  unknown message GUID; it is a usage error now.
+- Fix: data race on the batch boundary counter when batches were built concurrently.
+- Fix: "does not exist" checks for packages, designtime artifacts, API proxies and products
+  compared error texts; they use the HTTP status now.
+- Fix: `config-generate` creates the output file's directory.
+
+- MCP loop policy: `cpictl mcp --loop-required` refuses tools that change the tenant or trigger
+  processing while no loop is open (`errorCategory: "loop_required"`, exit code 2);
+  `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors` and `--loop-max-minutes`
+  cap the limits `loop_start` accepts (a higher value is a usage error naming the cap; omitted
+  limits get the default lowered to the cap). Also as `cpictl.yaml` keys and `CPICTL_LOOP_*`.
+- MCP loops: `deploy` with `dry_run: true` no longer counts against `max_deploys`; only failures
+  that belong to the loop (message after `loop_start`, or of an artifact uploaded, deployed or
+  sent to in the loop) count toward `same_error_limit`, so reading older failures while
+  diagnosing no longer stops the loop.
+- MCP masking in one place for every tool result: values of sensitive names (authorization,
+  cookie, password, secret, token, credential, API key) are masked in all name/value lists
+  (custom header properties, adapter attributes, step properties, trace headers and properties,
+  `get_trace_tree` keys, the `find_messages_by_header` filter); `--mask-pattern` adds name
+  patterns; `--redact-payloads` replaces message bodies (test responses, attachments, message
+  store entries, trace payloads, data store entries, variables) with a placeholder, size and
+  sha256.
+- MCP results use root-relative, slash-separated paths (also in error texts).
+- MCP `help`: every tool has a `class` (`read`, `local`, `write`, `deploy`, `process`, `log`,
+  `destructive`) next to its `effect`; toolsets carry each tool's effect and class
+  (`toolEffects`) and an `other` toolset lists tools in no toolset. `help {"topic": "server"}`
+  reports the effective `readOnly`, the toolsets, the loop policy and the masking options.
+- MCP: a call to a tool the mode or filters removed returns an error result (`isError: true`,
+  `errorCategory: "usage"`, the reason) instead of a JSON-RPC error.
+
+- Mock tenant: `validate` checks component versions against the runtime profile
+  (`integrationcell`) like a tenant: a channel with version 1.0 of an adapter that has a newer one
+  (or without `componentVersion`, which the tenant reads as 1.0) fails with `This component HTTP
+  with version 1.0 is not supported in integrationcell profile.`, a variant URI the tenant does
+  not know with `Enter adapter details for channel`, and adapters or steps newer than the tenant
+  offers fail too. The versions come from a built-in component catalogue (SAP's editor metadata of
+  an integrationcell tenant); `landscape.yaml` can bring its own (`components:`, also per tier).
+- Mock tenant: `--credentials strict` checks credentials like a tenant with two service keys: the
+  API user or client (`--api-user`, `--api-password`, `--api-client-id`, `--api-client-secret`)
+  on `/api/v1`, the runtime client (`--runtime-client-id`, `--runtime-client-secret`, default
+  `mock-rt`) on `/http/...` and `/cxf/...`; the other key gets 403, wrong credentials 401, and the
+  token endpoint issues a token per client. The default `--credentials any` accepts any
+  credentials as before. The start output prints `CPICTL_RUNTIME_OAUTH_*` for `cpictl send`.
+- Mock tenant: uploads set `ModifiedAt` and `ModifiedBy` (the API user or OAuth client of the
+  request) on every save, also outside the live mode and for value mappings; the artifact itself
+  reports `ModifiedBy` too.
+- Mock tenant: the demo's `Billing_Post` script writes an `Invoice` attachment, so failed
+  postings have a trace and an attachment (scripts calling `addAttachmentAsString` get one);
+  data stores and log files are empty lists with `--seed empty` too (were 404).
+
+- Go API (docs/go-api.md): logic that was only reachable through the CLI is public.
+  - Deploy configs and orchestrator plans: `ops.LoadDeployConfig`, `ops.PlanOrchestration`
+    (the code of `orchestrator --plan`), `ops.NewOrchestrator` for full runs,
+    `ops.PlanDeployments`, `lint.DeploymentCopiesOf`; the deploy and configure file models
+    moved to `pkg/models`.
+  - `pkg/versioning`, `pkg/manifest` and `pkg/pdrepo` (local Partner Directory files, now
+    `pdrepo.New`) moved out of `internal`; `ops.PDSnapshot` is the code of `pd-snapshot`.
+  - `ops.NewLogLevelReverter` (`Schedule`, `RunDue`, `RevertAll`), used by the MCP server.
+  - `ops.ListArtifacts` reports `ModifiedBy` and `ModifiedAt`.
+
 - Go API: the snapshot is public as `pkg/snapshot`: `snapshot.Take(ctx, exe, dir, Options)`
   with a progress callback per artifact, `Result` (items, counts, changed `Paths`, state),
   `State`/`ArtifactState`/`LoadState`, `Commit`. `cpictl snapshot` runs it (one implementation).

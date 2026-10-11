@@ -31,6 +31,12 @@ type Check struct {
 	// Needed lists what does not work without it.
 	Needed string `json:"needed,omitempty"`
 	Ms     int64  `json:"ms,omitempty"`
+	// Category classifies a check that is not ok, with the names of
+	// ErrorCategory: auth (401, 403, token) or tenant_http (no connection,
+	// API missing, other HTTP errors).
+	Category string `json:"category,omitempty"`
+	// HTTPStatus is the tenant's answer (0: no answer).
+	HTTPStatus int `json:"httpStatus,omitempty"`
 }
 
 // DoctorResult lists the checks; OK is false when the tenant cannot be used
@@ -67,6 +73,7 @@ var apiProbes = []apiProbe{
 // Doctor checks the connection and which API areas the credentials can
 // read. Only GET requests are sent.
 func Doctor(ctx context.Context, exe *httpclnt.HTTPExecuter) *DoctorResult {
+	exe = exe.WithContext(ctx)
 	res := &DoctorResult{Checks: make([]Check, len(apiProbes))}
 
 	// the first probe also proves authentication and connectivity; run it
@@ -99,16 +106,17 @@ func probe(exe *httpclnt.HTTPExecuter, p apiProbe) (c Check, err error) {
 	resp, err := exe.ExecGetRequest(p.path, map[string]string{"Accept": "application/json"})
 	c.Ms = time.Since(started).Milliseconds()
 	if err != nil {
-		c.Status = CheckFailed
+		c.Status, c.HTTPStatus = CheckFailed, httpclnt.StatusCode(err)
 		switch output.TransportExitCode(err, 0) {
 		case exitcode.Auth:
-			c.Detail = "authentication failed: " + err.Error()
+			c.Detail, c.Category = "authentication failed: "+err.Error(), CategoryAuth
 			return c, output.WithExitCode(err, exitcode.Auth)
 		default:
-			c.Detail = "no connection: " + err.Error()
+			c.Detail, c.Category = "no connection: "+err.Error(), CategoryTenantHTTP
 		}
 		return c, output.WithExitCode(err, exitcode.TenantHTTP)
 	}
+	c.HTTPStatus = resp.StatusCode
 	body, _ := exe.ReadRespBody(resp)
 	switch {
 	case resp.StatusCode < 300:
@@ -124,6 +132,12 @@ func probe(exe *httpclnt.HTTPExecuter, p apiProbe) (c Check, err error) {
 		c.Status, c.Detail = CheckMissing, "501: the tenant does not offer this API (e.g. a trial or another environment)"
 	default:
 		c.Status, c.Detail = CheckWarn, fmt.Sprintf("HTTP %d", resp.StatusCode)
+	}
+	if c.Status != CheckOK {
+		c.Category = CategoryTenantHTTP
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			c.Category = CategoryAuth
+		}
 	}
 	if msg := apiErrorMessage(body); msg != "" && c.Status != CheckOK {
 		c.Detail += ": " + msg

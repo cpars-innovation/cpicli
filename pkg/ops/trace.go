@@ -160,6 +160,11 @@ var traceIDPattern = regexp.MustCompile(`^[0-9]+$`)
 
 var sensitiveName = regexp.MustCompile(`(?i)authorization|cookie|password|passwd|secret|token|credential|apikey|api-key`)
 
+// SensitiveName reports whether the value of a header or property with this
+// name is masked in results: authorization, cookies, tokens, passwords,
+// secrets, credentials and API keys.
+func SensitiveName(name string) bool { return sensitiveName.MatchString(name) }
+
 // GetTraceMessage returns the payload (truncated to max bytes), headers and
 // exchange properties of a trace message. Values of headers and properties
 // whose names look sensitive (authorization, cookies, tokens, passwords) are
@@ -186,7 +191,7 @@ func GetTraceMessage(exe *httpclnt.HTTPExecuter, traceID string, max int) (*Trac
 	}
 	for _, list := range [][]cpi.NameValue{d.Headers, d.ExchangeProperties} {
 		for i := range list {
-			if sensitiveName.MatchString(list[i].Name) {
+			if SensitiveName(list[i].Name) {
 				list[i].Value = "***"
 			}
 		}

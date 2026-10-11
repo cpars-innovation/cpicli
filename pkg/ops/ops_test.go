@@ -30,7 +30,7 @@ func TestGetRuntimeStatus(t *testing.T) {
 
 func TestListPackagesAndArtifacts(t *testing.T) {
 	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{
-		"Flow1": {Type: "Integration", DesignVersion: "1.0.0", Package: "P1", Name: "Flow One"},
+		"Flow1": {Type: "Integration", DesignVersion: "1.0.0", Package: "P1", Name: "Flow One", ModifiedBy: "jane", ModifiedAt: t1},
 		"Map1":  {Type: "MessageMapping", DesignVersion: "1.0.1", Package: "P1"},
 		"Other": {Type: "Integration", DesignVersion: "1", Package: "P2"},
 	})
@@ -43,7 +43,7 @@ func TestListPackagesAndArtifacts(t *testing.T) {
 	arts, err := ListArtifacts(mock.Executer(), "P1")
 	require.NoError(t, err)
 	assert.Equal(t, []DesigntimeArtifact{
-		{ID: "Flow1", Name: "Flow One", Type: "Integration", Version: "1.0.0"},
+		{ID: "Flow1", Name: "Flow One", Type: "Integration", Version: "1.0.0", ModifiedBy: "jane", ModifiedAt: &t1},
 		{ID: "Map1", Type: "MessageMapping", Version: "1.0.1"},
 	}, arts)
 }

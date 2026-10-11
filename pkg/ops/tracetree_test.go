@@ -195,6 +195,8 @@ func TestMessagePath(t *testing.T) {
 	assert.Equal(t, []string{"Orders_In>Orders_Route predecessor", "Orders_Route>Orders_Audit inferred"}, hopList(tree))
 	require.Len(t, tree.Roots, 1)
 	assert.Nil(t, tree.FirstFailure)
+	_, err = MessagePathFor(ctx, mock.Executer(), MessagePathQuery{MessageGuid: "unknown"})
+	assert.ErrorContains(t, err, "message unknown not found", "an unknown GUID is a usage error, no panic")
 	fromStart, err := MessagePathFor(ctx, mock.Executer(), MessagePathQuery{MessageGuid: "O1"})
 	require.NoError(t, err)
 	assert.Equal(t, tree.PathKey, fromStart.PathKey, "same route, same key")

@@ -148,6 +148,7 @@ func (e *TimeoutError) ExitCode() int { return exitcode.Timeout }
 // until timeout. Use Since = the time a test message was sent. On timeout the
 // last result is returned together with a *TimeoutError.
 func WaitForMessageLogs(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessageLogQuery, timeout, interval time.Duration) (*MessageLogList, error) {
+	exe = exe.WithContext(ctx)
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}

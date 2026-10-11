@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/file"
-	"github.com/cpars-innovation/cpicli/internal/models"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -482,6 +482,9 @@ func (g *ConfigGenerator) writeConfigFile(outputPath string, cfg *models.DeployC
 
 `
 
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return err
+	}
 	return os.WriteFile(outputPath, []byte(header+string(data)), 0644)
 }
 

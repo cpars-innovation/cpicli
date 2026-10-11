@@ -14,8 +14,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// tenantExecuter connects to the tenant of the command's flags and profile;
+// its requests end with the command (Ctrl+C, SIGTERM).
 func tenantExecuter(cmd *cobra.Command) *httpclnt.HTTPExecuter {
-	return cpi.InitHTTPExecuter(serviceDetails(cmd))
+	return cpi.InitHTTPExecuter(serviceDetails(cmd)).WithContext(cmd.Context())
 }
 
 func NewStatusCommand() *cobra.Command {
