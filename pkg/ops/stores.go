@@ -99,6 +99,16 @@ func ListQueues(exe *httpclnt.HTTPExecuter, prefix string) ([]cpi.Queue, error) 
 		return nil, err
 	}
 	queues = slices.DeleteFunc(queues, func(q cpi.Queue) bool { return !strings.HasPrefix(q.Name, prefix) })
+	if len(queues) > 0 {
+		// optional: which flows use the queue
+		flows, err := cpi.NewStores(exe).QueueFlows()
+		if err != nil && httpclnt.IsAuthError(err) {
+			return nil, err
+		}
+		for i := range queues {
+			queues[i].Flows = flows[queues[i].Name]
+		}
+	}
 	slices.SortStableFunc(queues, func(a, b cpi.Queue) int { return int(b.Messages - a.Messages) })
 	if queues == nil {
 		queues = []cpi.Queue{}

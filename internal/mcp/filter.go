@@ -38,6 +38,8 @@ var toolEffects = map[string]Effect{
 	"list_data_stores": EffectRead, "list_data_store_entries": EffectRead, "get_data_store_entry": EffectRead,
 	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "unlock_artifact": EffectTenant, "list_variables": EffectRead, "get_variable": EffectRead,
 	"list_jms_queues": EffectRead, "get_jms_broker": EffectRead, "list_number_ranges": EffectRead,
+	"list_jms_messages": EffectRead, "find_messages_by_header": EffectRead,
+	"retry_jms_messages": EffectTenant, "move_jms_messages": EffectTenant, "delete_jms_messages": EffectTenant, "set_jms_queue_state": EffectTenant,
 	"list_log_files": EffectRead, "get_log_file": EffectRead, "list_idempotent_entries": EffectRead, "list_id_mappings": EffectRead,
 	"drift": EffectRead, "doctor": EffectRead, "lint": EffectRead, "compare": EffectRead, "message_summary": EffectRead, "transport_check": EffectRead,
 	"graph_search": EffectRead, "help": EffectRead, "list_toolsets": EffectRead, "enable_toolset": EffectRead, "graph_neighbors": EffectRead, "graph_path": EffectRead,
@@ -50,9 +52,13 @@ var toolEffects = map[string]Effect{
 	"send_test_message": EffectTenant, "set_log_level": EffectTenant,
 }
 
+// operateTenantTools are the tenant tools of mode operate: operations as in
+// the Web UI's Monitor, no content changes.
+var operateTenantTools = []string{"set_log_level", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state"}
+
 // optInTools are offered only when the user's --tools names them exactly
 // (not by a pattern), whatever the mode: they can destroy someone else's work.
-var optInTools = []string{"unlock_artifact"}
+var optInTools = []string{"unlock_artifact", "delete_jms_messages"}
 
 // ToolFilter limits the tools a server offers.
 type ToolFilter struct {
@@ -130,7 +136,7 @@ var Modes = []string{"discover", "operate", "develop", "full"}
 
 // ModeFilter returns the tool filter of a mode ("" = no preset):
 //   - discover: read-only (no tenant changes, no messages sent)
-//   - operate: read tools, local files and set_log_level
+//   - operate: read tools, local files, set_log_level and JMS retry/move/queue state
 //   - develop: all tools; pd_deploy refuses full_sync (see Config.DenyFullSync)
 //   - full: all tools without restrictions (as without a mode)
 func ModeFilter(mode string) (ToolFilter, error) {
@@ -142,7 +148,7 @@ func ModeFilter(mode string) (ToolFilter, error) {
 	case "operate":
 		var allow []string
 		for name, e := range toolEffects {
-			if e != EffectTenant || name == "set_log_level" {
+			if e != EffectTenant || slices.Contains(operateTenantTools, name) {
 				allow = append(allow, name)
 			}
 		}
@@ -197,11 +203,11 @@ func ModeInstructions(mode string) string {
 	case "discover":
 		return "\n\nMode: discover. Read-only: inspect content, logs and configuration; no changes, no test messages."
 	case "operate":
-		return "\n\nMode: operate. Monitoring and diagnosis: read tools and set_log_level; no content changes or deployments."
+		return "\n\nMode: operate. Monitoring and diagnosis: read tools, set_log_level, retry_jms_messages, move_jms_messages and set_jms_queue_state; no content changes or deployments."
 	case "develop":
 		return "\n\nMode: develop. Build loop on a development tenant; pd_deploy full_sync is refused, undeploy needs confirm. Open a loop with loop_start before changing anything."
 	case "full":
-		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy and delete_data_store_entry still need confirm; unlock_artifact only when --tools names it."
+		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy and delete_data_store_entry still need confirm; unlock_artifact and delete_jms_messages only when --tools names them."
 	}
 	return ""
 }
@@ -217,14 +223,14 @@ var Toolsets = map[string][]string{
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifact", "upload_artifacts", "validate_artifact", "check_guidelines",
 		"deploy", "get_runtime_status", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors", "list_credentials",
 		"list_locks", "loop_start", "loop_status", "loop_end"},
-	"test": {"send_test_message", "list_service_endpoints", "list_message_logs", "get_message_log", "get_message_steps",
+	"test": {"send_test_message", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
 		"get_message_attachment", "get_message_store_entry", "get_trace_tree", "set_log_level", "get_message_trace",
 		"get_trace_message", "get_runtime_status", "loop_start", "loop_status", "loop_end"},
-	"monitor": {"message_summary", "list_message_logs", "get_message_log", "get_message_steps", "get_message_attachment",
+	"monitor": {"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps", "get_message_attachment",
 		"get_message_store_entry", "get_trace_tree", "get_message_trace", "get_trace_message", "set_log_level",
 		"list_runtime_artifacts", "get_runtime_status", "list_log_files", "get_log_file", "list_data_stores",
 		"list_data_store_entries", "get_data_store_entry", "list_variables", "get_variable", "list_jms_queues", "get_jms_broker",
-		"list_number_ranges", "list_idempotent_entries", "list_id_mappings", "list_keystore", "graph_neighbors"},
+		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state", "list_number_ranges", "list_idempotent_entries", "list_id_mappings", "list_keystore", "graph_neighbors"},
 	"promote": {"compare", "transport_check", "drift", "list_artifacts", "get_parameters", "config_diff", "list_credentials",
 		"list_keystore", "pd_dependencies", "pd_diff", "get_runtime_status", "list_runtime_artifacts", "graph_neighbors"},
 	"improve": {"lint", "lint_fix", "layout_iflow", "graph_search", "graph_neighbors", "graph_path", "drift", "compare",
@@ -238,7 +244,7 @@ var ToolsetDescriptions = map[string]string{
 	"inspect":           "understand content: packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare",
 	"build":             "change flows on a development tenant: download, copy, layout, upload, validate, guidelines, parameters, deploy, lint, loop tools",
 	"test":              "send test messages and diagnose them: message logs, steps, attachments, traces, log level, loop tools",
-	"monitor":           "operations: message summary, message logs and traces, runtime status, log files, data stores, variables, JMS, number ranges, keystore",
+	"monitor":           "operations: message summary, message logs and traces, header search, runtime status, log files, data stores, variables, JMS queues and messages (retry, move), number ranges, keystore",
 	"promote":           "move content between tiers: compare, transport_check, drift, config_diff, credentials, keystore, Partner Directory dependencies",
 	"improve":           "quality: lint, lint_fix, layout_iflow, graph, drift, compare, bump_versions",
 	"partner-directory": "Partner Directory parameters: read, diff, dependencies, deploy",

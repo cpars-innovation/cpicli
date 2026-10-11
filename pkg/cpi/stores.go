@@ -185,6 +185,46 @@ type Queue struct {
 	Messages  int64  `json:"messages"`
 	Active    bool   `json:"active"`
 	Exclusive bool   `json:"exclusive"`
+	// Flows are the integration flows that use the queue (from Queues with
+	// $expand=Artifacts), if the tenant reports them.
+	Flows []QueueFlow `json:"flows,omitempty"`
+}
+
+// QueueFlow is an integration flow that reads from or writes to a queue
+// (JmsArtifact). Direction is the tenant's code, passed on as is: what its
+// values mean is not documented.
+type QueueFlow struct {
+	Name      string `json:"name"`
+	ID        string `json:"id,omitempty"`
+	Direction int64  `json:"direction"`
+}
+
+// QueueFlows returns the integration flows per queue name
+// (/api/v1/Queues?$expand=Artifacts; the JmsArtifacts entity set itself
+// answers 404 on Cloud Foundry).
+func (s *Stores) QueueFlows() (map[string][]QueueFlow, error) {
+	var rows []struct {
+		Name      string
+		Artifacts *struct {
+			Results []struct {
+				Name, Id  string
+				Direction flexInt
+			} `json:"results"`
+		}
+	}
+	if err := getResults(s.exe, "/api/v1/Queues?$expand=Artifacts", "Get JMS queue flows", &rows); err != nil {
+		return nil, err
+	}
+	out := map[string][]QueueFlow{}
+	for _, r := range rows {
+		if r.Artifacts == nil {
+			continue
+		}
+		for _, a := range r.Artifacts.Results {
+			out[r.Name] = append(out[r.Name], QueueFlow{Name: a.Name, ID: a.Id, Direction: int64(a.Direction)})
+		}
+	}
+	return out, nil
 }
 
 // Queues lists the JMS queues (MessagingQueues).

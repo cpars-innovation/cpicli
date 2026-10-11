@@ -210,6 +210,12 @@ func (x *executor) run(id string, msg message, start time.Time, predecessor stri
 		l.Status = "FAILED"
 		if fi.jmsConsumer {
 			l.Status = "RETRY"
+			for _, snd := range fi.fm.Senders {
+				if snd.Adapter == "JMS" && snd.Address != "" {
+					l.End = t
+					x.m.addJMSRetry(resolve(snd.Address, a.Parameters), l)
+				}
+			}
 		}
 	}
 	l.End = t

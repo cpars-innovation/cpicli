@@ -178,9 +178,12 @@ func hopList(tree *TraceTree) []string {
 	return out
 }
 
+// TestMessagePath runs against a tenant without the custom header entity
+// set: key headers are found by scanning the scope.
 func TestMessagePath(t *testing.T) {
 	mock := cpitest.NewTenant(t, nil)
 	mock.FilterMessageLogs = true
+	mock.NoCustomHeaderSearch = true
 	mock.MessageLogSteps = [][]cpitest.MessageLog{pathLogs()}
 	ctx := context.Background()
 
@@ -228,10 +231,34 @@ func TestTraceTreeHops(t *testing.T) {
 func TestMessagePathFromTheReturningRun(t *testing.T) {
 	mock := cpitest.NewTenant(t, nil)
 	mock.FilterMessageLogs = true
+	mock.NoCustomHeaderSearch = true
 	mock.MessageLogSteps = [][]cpitest.MessageLog{pathLogs()}
 	scope := ScanScope{ArtifactIDs: []string{"Orders_In", "Billing_In"}, Since: time.Now().Add(-time.Hour)}
 	tree, err := MessagePathFor(context.Background(), mock.Executer(), MessagePathQuery{MessageGuid: "B2", KeyHeaders: []string{"OrderNo"}, Scope: scope})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"Orders_In>Orders_Route predecessor", "Orders_Route>Orders_Audit inferred",
 		"Orders_Audit>Billing_In header", "Billing_In>Billing_Post predecessor"}, hopList(tree), "header only where the correlation ID changes")
+}
+
+// Key headers are looked up through MessageProcessingLogCustomHeaderProperties
+// when the tenant has it: no scope, no scan.
+func TestMessagePathByHeaderSearch(t *testing.T) {
+	mock := cpitest.NewTenant(t, nil)
+	mock.FilterMessageLogs = true
+	mock.MessageLogSteps = [][]cpitest.MessageLog{pathLogs()}
+	tree, err := MessagePathFor(context.Background(), mock.Executer(), MessagePathQuery{MessageGuid: "O2", KeyHeaders: []string{"OrderNo"}})
+	require.NoError(t, err)
+	assert.Equal(t, "correlation_id+header", tree.Source)
+	assert.Equal(t, 5, tree.Messages)
+	assert.Zero(t, tree.Scanned, "nothing scanned")
+	assert.Equal(t, []string{"Orders_In>Orders_Route predecessor", "Orders_Route>Orders_Audit inferred",
+		"Orders_Audit>Billing_In header", "Billing_In>Billing_Post predecessor"}, hopList(tree))
+	assert.Equal(t, 1, mock.Count("GET /api/v1/MessageProcessingLogCustomHeaderProperties"))
+	assert.Contains(t, mock.LastMessageLogQuery, "C2", "the rest of the returning run by its correlation ID")
+
+	// a scope still narrows: Billing_In is outside it
+	tree, err = MessagePathFor(context.Background(), mock.Executer(), MessagePathQuery{MessageGuid: "O2", KeyHeaders: []string{"OrderNo"},
+		Scope: ScanScope{ArtifactIDs: []string{"Orders_In"}}})
+	require.NoError(t, err)
+	assert.Equal(t, 3, tree.Messages)
 }

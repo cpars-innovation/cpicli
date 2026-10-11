@@ -9,6 +9,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -94,6 +95,8 @@ func TestGetMessageLog(t *testing.T) {
 	assert.Equal(t, "4711", d.CustomHeaderProperties[0].Value)
 	assert.Equal(t, "payload.xml", d.Attachments[0].Name)
 	assert.Equal(t, "HTTPS", d.AdapterAttributes[0].Adapter)
+	require.NotNil(t, d.ErrorInformation)
+	assert.Equal(t, "MessageMapping_2", d.ErrorInformation.LastErrorModelStepID, "where it failed, from MessageProcessingLogs('g1')/ErrorInformation")
 
 	_, err = GetMessageLog(m.Executer(), "nope", 0)
 	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
@@ -141,4 +144,20 @@ func TestNewContent(t *testing.T) {
 	assert.Equal(t, "/wD+", bin.Base64)
 
 	assert.False(t, NewContent([]byte("abc"), -1).Truncated)
+}
+
+func TestMessageStepProperties(t *testing.T) {
+	now := time.Now()
+	m := mplMock(t, []cpitest.MessageLog{{Guid: "g1", Artifact: "A", Status: "COMPLETED", Start: now, End: now,
+		Steps: []cpitest.Step{{StepID: "s1", ModelStepID: "CallActivity_1", Activity: "Request Reply", Status: "COMPLETED",
+			Properties: map[string]string{"Address": "https://erp.example.com/orders"}}}}})
+
+	plain, err := GetMessageSteps(m.Executer(), "g1")
+	require.NoError(t, err)
+	assert.Nil(t, plain.Runs[0].Steps[0].Properties)
+
+	res, err := GetMessageStepsWith(m.Executer(), "g1", true)
+	require.NoError(t, err)
+	assert.Equal(t, []cpi.NameValue{{Name: "Address", Value: "https://erp.example.com/orders"}}, res.Runs[0].Steps[0].Properties)
+	assert.Contains(t, m.Requests(), "GET /api/v1/MessageProcessingLogRuns('run-g1')/RunSteps")
 }

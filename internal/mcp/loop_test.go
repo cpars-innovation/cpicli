@@ -129,6 +129,8 @@ func TestModes(t *testing.T) {
 	assert.Contains(t, names, "list_message_logs")
 	assert.NotContains(t, names, "deploy")
 	assert.NotContains(t, names, "send_test_message")
+	assert.Contains(t, names, "retry_jms_messages", "operations as in the Web UI's Monitor")
+	assert.NotContains(t, names, "delete_jms_messages", "opt-in")
 
 	// the most restrictive wins, and naming a tool the mode removes is fine
 	kept, _, err = ApplyFilters(all, "operate", ToolFilter{Deny: []string{"set_log_level", "deploy"}})

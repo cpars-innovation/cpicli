@@ -61,6 +61,10 @@ list_service_endpoints; runtime data: list_data_stores, list_data_store_entries,
 get_data_store_entry, delete_data_store_entry (confirm), list_variables, get_variable,
 list_jms_queues, get_jms_broker, list_number_ranges, list_log_files / get_log_file (adapter errors
 without a message log), list_idempotent_entries (skipped duplicates), list_id_mappings.
+find_messages_by_header finds messages by a business key the flows write (e.g. an order number).
+JMS: list_jms_messages shows the messages of a queue (failed ones wait for a retry);
+retry_jms_messages, move_jms_messages (confirm) and set_jms_queue_state act on them;
+delete_jms_messages (confirm; offered only when the server's --tools names it) loses them for good.
 Locks: list_locks shows artifacts open for editing (an update fails while someone holds the
 lock). unlock_artifact (confirm; offered only when the server's --tools names it) discards the
 lock holder's unsaved changes: only on the user's explicit request.
@@ -131,7 +135,7 @@ func Tools(cfg Config) []Tool {
 	}
 	reverter := cfg.LogLevels
 	cache := newReadCache(cfg.CacheTTL)
-	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), graphTools(cfg))
+	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), operateTools(cfg, readOnly), graphTools(cfg))
 	for i := range tools {
 		inner := tools[i].Handler
 		changesTenant := toolEffects[tools[i].Name] == EffectTenant
@@ -283,7 +287,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			Description: "Message processing logs (newest first) filtered by artifact, status, time and IDs, with the error text of failed messages. " +
 				"Use it to see how an iFlow behaved at runtime: call with artifact_id, since=<time before the messages> and wait_seconds to wait until the messages reached a final status. " +
 				"After send_test_message prefer its wait_seconds, which already returns the log of that message. " +
-				"custom_header {name, value} finds messages by a custom header property; the tenant cannot filter on it, so it scans (needs artifact_id or package_id, and since; at most top*10, max 500 messages; see scanned/truncated).",
+				"custom_header {name, value} finds messages by a custom header property (as find_messages_by_header; tenants without that search are scanned: needs artifact_id or package_id, and since; at most top*10, max 500 messages; see scanned/truncated).",
 			InputSchema: object(props{
 				"artifact_id":            str("Integration flow ID"),
 				"statuses":               map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": cpi.MessageLogStatuses}, "description": "Only these statuses"},
@@ -296,7 +300,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"include_errors":         boolean("Include the error text of failed messages (default true)"),
 				"wait_seconds":           map[string]any{"type": "integer", "minimum": 0, "maximum": 600, "description": "Wait up to this long until at least one message matches and all matches are final"},
 				"package_id":             str("Messages of all integration flows of this package (needs since)"),
-				"custom_header": map[string]any{"type": "object", "description": "Only messages with this custom header property value (client-side scan)", "additionalProperties": false,
+				"custom_header": map[string]any{"type": "object", "description": "Only messages with this custom header property value", "additionalProperties": false,
 					"properties": map[string]any{"name": str("Property name"), "value": str("Property value")}, "required": []string{"name", "value"}},
 			}),
 			Annotations: readOnly,
@@ -341,7 +345,8 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					if a.CustomHeader == nil {
 						return ops.QueryPackageMessageLogs(cfg.Exe, scope, a.Top)
 					}
-					return ops.QueryMessageLogsByHeader(ctx, cfg.Exe, scope, *a.CustomHeader, a.Top, q.IncludeErrors)
+					return ops.SearchMessagesByHeader(ctx, cfg.Exe, ops.HeaderSearchQuery{Header: *a.CustomHeader, ArtifactIDs: scope.ArtifactIDs, PackageID: a.PackageID,
+						Since: since, Until: until, Statuses: a.Statuses, Top: a.Top, IncludeErrors: q.IncludeErrors})
 				}
 				if a.WaitSeconds > 0 {
 					if a.WaitSeconds > 600 {
@@ -354,7 +359,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "get_message_log", Title: "Get one message processing log",
-			Description: "Details of one message: status, full error text, custom header properties, adapter attributes, attachments and persisted messages. Next: get_message_steps for the failing step, get_message_attachment / get_message_store_entry for payloads.",
+			Description: "Details of one message: status, full error text, errorInformation (lastErrorModelStepId: the .iflw element where it failed), custom header properties, adapter attributes (e.g. HTTP status), attachments and persisted messages. Next: get_message_steps for the failing step, get_message_attachment / get_message_store_entry for payloads.",
 			InputSchema: object(props{"message_guid": str("Message GUID from list_message_logs")}, "message_guid"),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -369,17 +374,18 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "get_message_steps", Title: "Get processing steps of a message",
-			Description: "Step-level trace of a message (runs and steps with status and error) and the first failing step. Use it for FAILED messages: modelStepId is the id of the element in the .iflw model to fix.",
-			InputSchema: object(props{"message_guid": str("Message GUID")}, "message_guid"),
+			Description: "Step-level trace of a message (runs and steps with status and error) and the first failing step. Use it for FAILED messages: modelStepId is the id of the element in the .iflw model to fix. properties=true adds each step's properties (e.g. adapter addresses).",
+			InputSchema: object(props{"message_guid": str("Message GUID"), "properties": boolean("Include the properties of each step")}, "message_guid"),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
 				var a struct {
 					MessageGuid string `json:"message_guid"`
+					Properties  bool   `json:"properties"`
 				}
 				if err := decode(raw, &a); err != nil {
 					return nil, err
 				}
-				return ops.GetMessageSteps(cfg.Exe, a.MessageGuid)
+				return ops.GetMessageStepsWith(cfg.Exe, a.MessageGuid, a.Properties)
 			},
 		},
 		{
@@ -552,13 +558,13 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			Name: "get_trace_tree", Title: "Get the path of a message or trace across flows",
 			Description: "The call tree across flows, the hops from flow to flow, a pathKey (the same for every message taking the same route) and firstFailure, the earliest failed message. Give trace_id or message_guid. " +
 				"trace_id (traceId of send_test_message, or trace-id custom header): messages by ApplicationMessageId first; otherwise scans the scope (artifact_ids or package_id, and since) for the trace-id custom header, at most max_scan messages. " +
-				"message_guid (any message, e.g. a failed one): all messages with its correlation ID; with key_headers (custom header properties the flows write, such as an order number) messages of the scope with the same value join, " +
-				"with the rest of their run, so the path continues when the message left the tenant and came back (scans the scope). " +
+				"message_guid (any message, e.g. a failed one): all messages with its correlation ID; with key_headers (custom header properties the flows write, such as an order number) messages with the same value join, " +
+				"with the rest of their run, so the path continues when the message left the tenant and came back (found by the custom header search; a scope narrows it; tenants without that search scan the scope). " +
 				"Hop links: span, predecessor, inferred (same correlation ID, by start time), header (joined by a key header). Next: get_message_steps for firstFailure.messageGuid.",
 			InputSchema: object(props{
 				"trace_id":     str("32 hex characters"),
 				"message_guid": str("A message GUID: follow its correlation ID across flows"),
-				"key_headers":  strArray("With message_guid: custom header properties that join runs with the same value (needs a scope)"),
+				"key_headers":  strArray("With message_guid: custom header properties that join runs with the same value"),
 				"artifact_ids": strArray("Scope of the fallback scan"),
 				"package_id":   str("Scope of the fallback scan: all flows of this package"),
 				"since":        str("Start of the scan window: RFC 3339 or duration back from now (30m, 2h)"),

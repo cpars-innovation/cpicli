@@ -181,6 +181,8 @@ type MessageLog struct {
 // Step is a processing step of a message (one run per message).
 type Step struct {
 	StepID, ModelStepID, Activity, Status, Error string
+	// Properties are the step's properties (RunStepProperties, $expand only).
+	Properties map[string]string
 	// Traces are the trace messages of the step (log level TRACE).
 	Traces []Trace
 }
@@ -248,6 +250,14 @@ type Tenant struct {
 
 	// Locks are the edit locks (artifacts open for editing in the Web UI).
 	Locks []Lock
+
+	// Queues are the JMS queues by name. Queues that running flows read from
+	// are created on demand; failed runs of JMS consumers leave their message
+	// in the queue (status RETRY).
+	Queues map[string]*JMSQueue
+	// NoCustomHeaderSearch answers 404 for
+	// MessageProcessingLogCustomHeaderProperties (a tenant without it).
+	NoCustomHeaderSearch bool
 
 	mu        sync.Mutex
 	Artifacts map[string]*Artifact
@@ -920,6 +930,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if m.handleJMS(w, r, path) {
+		return
+	}
+
 	switch {
 	case rePDCollection.MatchString(path) || rePDEntity.MatchString(path):
 		m.handlePD(w, r)
@@ -998,6 +1012,18 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		switch mm[2] {
 		case "":
 			writeJSON(w, map[string]any{"d": mplJSON(*l)})
+		case "/ErrorInformation":
+			if l.ErrorText == "" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			info := map[string]any{"MessageGuid": l.Guid, "Type": "MPL"}
+			for _, st := range l.Steps {
+				if st.Error != "" {
+					info["LastErrorModelStepId"] = st.ModelStepID
+				}
+			}
+			writeJSON(w, map[string]any{"d": info})
 		case "/ErrorInformation/$value":
 			if l.ErrorText == "" {
 				w.WriteHeader(http.StatusNoContent)
@@ -1068,8 +1094,16 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		rows := []map[string]any{}
 		for i, st := range l.Steps {
-			rows = append(rows, map[string]any{"StepId": st.StepID, "ModelStepId": st.ModelStepID, "Activity": st.Activity, "ChildCount": i,
-				"Status": st.Status, "Error": st.Error, "StepStart": odataDate(l.Start), "StepStop": odataDate(l.End)})
+			row := map[string]any{"StepId": st.StepID, "ModelStepId": st.ModelStepID, "Activity": st.Activity, "ChildCount": i,
+				"Status": st.Status, "Error": st.Error, "StepStart": odataDate(l.Start), "StepStop": odataDate(l.End)}
+			if r.URL.Query().Get("$expand") == "RunStepProperties" {
+				props := []map[string]any{}
+				for _, k := range sortedKeys(st.Properties) {
+					props = append(props, map[string]any{"RunId": "run-" + l.Guid, "ChildCount": i, "Name": k, "Value": st.Properties[k]})
+				}
+				row["RunStepProperties"] = map[string]any{"results": props}
+			}
+			rows = append(rows, row)
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
 

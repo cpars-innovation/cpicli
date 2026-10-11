@@ -5,6 +5,29 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- JMS message management, as Manage Message Queues in the Web UI: `cpictl jms messages --queue Q
+  [--failed-only]`, `jms retry|move|delete --queue Q (--id ID ... | --all [--failed-only]) --confirm`
+  (`move --to T`), `jms activate|deactivate --queue Q`; `jms queues` shows the flows using a queue
+  (`Queues?$expand=Artifacts`). Messages are read through `MessagingQueues('Q')/MessagingMessages`
+  (verified on a Cloud Foundry tenant; an unknown queue name is a usage error, the tenant would
+  list nothing). Retry and move post `RetryMessagingMessages` / `MoveMessagingMessages` with a JSON
+  body, delete removes `MessagingMessages(jmsMessageId,queueName)`: these calls are not verified on
+  a tenant yet. MCP: `list_jms_messages` (`monitor`), `retry_jms_messages`, `move_jms_messages`
+  (`confirm: true`), `set_jms_queue_state` (also in mode `operate`) and `delete_jms_messages`
+  (`confirm: true`, **opt-in** like `unlock_artifact`). The mock tenant keeps the message of a
+  failed JMS consumer in its queue (demo: `Orders_Billing`).
+- Messages by custom header value without a scan: `cpictl logs search --header OrderNo=4711
+  [--since ...]`, MCP `find_messages_by_header`, through
+  `MessageProcessingLogCustomHeaderProperties` with `$filter` on `Name`/`Value` and `$expand=Log`
+  (one call, tenant-wide; flow, package, time and status narrow it). `logs --header`,
+  `list_message_logs custom_header` and `logs tree --message --key-header` (`get_trace_tree
+  key_headers`) use it too and need no scope any more; tenants without the entity set fall back
+  to the scoped scan. The mock serves the entity set.
+- Message details: `logs get` / `get_message_log` add `errorInformation` (error type and
+  `lastErrorModelStepId`, the `.iflw` element where the message failed) and print adapter
+  attributes; `logs steps --properties` / `get_message_steps properties` add each step's
+  properties (`RunSteps?$expand=RunStepProperties`, the only way the tenant serves them).
+
 - `cpictl locks list` / `locks unlock --artifact-id X --confirm`: edit locks of artifacts (who holds
   one, since when) and removing one, as Unlock in the Web UI (the holder's unsaved changes are
   lost). Uses `/api/v1/IntegrationDesigntimeLocks`; verified on a real tenant. MCP: `list_locks`

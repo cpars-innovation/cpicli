@@ -31,6 +31,7 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
   cpictl logs --artifact-id OrderIntake --status FAILED --errors --output json
   cpictl logs --artifact-id OrderIntake --since 2m --wait 60s --errors
   cpictl logs --package-id Orders --since 1h --header OrderId=4711
+  cpictl logs search --header OrderNo=4711
   cpictl logs get --message-guid AFq478Bblxi4wCjBcDb_G0vAGGZG
   cpictl logs tree --trace-id 0af7651916cd43dd8448eb211c80319c`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -53,7 +54,8 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 					if !ok {
 						return output.Usagef("invalid --header %q, expected name=value", header)
 					}
-					res, err = ops.QueryMessageLogsByHeader(cmd.Context(), exe, scope, ops.CustomHeaderFilter{Name: name, Value: value}, q.Top, q.IncludeErrors)
+					res, err = ops.SearchMessagesByHeader(cmd.Context(), exe, ops.HeaderSearchQuery{Header: ops.CustomHeaderFilter{Name: name, Value: value},
+						ArtifactIDs: scope.ArtifactIDs, PackageID: pkg, Since: q.Since, Until: q.Until, Statuses: q.Statuses, Top: q.Top, IncludeErrors: q.IncludeErrors})
 				}
 			} else if wait, _ := cmd.Flags().GetDuration("wait"); wait > 0 {
 				res, err = ops.WaitForMessageLogs(cmd.Context(), exe, q, wait, 5*time.Second)
@@ -89,11 +91,11 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 	f.Bool("errors", false, "Include the error text of failed messages")
 	f.Duration("wait", 0, "Wait up to this long for final messages (e.g. 60s)")
 	f.String("package-id", "", "Messages of all integration flows of this package (needs --since)")
-	f.String("header", "", "Only messages with this custom header property, name=value (client-side scan; needs --artifact-id or --package-id, and --since)")
+	f.String("header", "", "Only messages with this custom header property, name=value (as 'logs search'; tenants without the custom header search are scanned: needs --artifact-id or --package-id, and --since)")
 
 	get := &cobra.Command{
 		Use:          "get",
-		Short:        "Show one message: status, error text, custom headers, attachments",
+		Short:        "Show one message: status, error text and step, custom headers, adapter attributes, attachments",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			guid := config.GetString(cmd, "message-guid")
@@ -109,6 +111,12 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 			for _, h := range d.CustomHeaderProperties {
 				log.Info().Msgf("Header %s = %s", h.Name, h.Value)
 			}
+			if d.ErrorInformation != nil && d.ErrorInformation.LastErrorModelStepID != "" {
+				log.Info().Msgf("Failed at model step %s", d.ErrorInformation.LastErrorModelStepID)
+			}
+			for _, h := range d.AdapterAttributes {
+				log.Info().Msgf("Adapter %s: %s = %s", h.Adapter, h.Name, h.Value)
+			}
 			for _, a := range d.Attachments {
 				log.Info().Msgf("Attachment %s (%s, %d bytes)", a.Name, a.ContentType, a.Size)
 			}
@@ -122,7 +130,8 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 		Short:        "Show the processing steps of a message and the step that failed",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := ops.GetMessageSteps(tenantExecuter(cmd), config.GetString(cmd, "message-guid"))
+			props, _ := cmd.Flags().GetBool("properties")
+			res, err := ops.GetMessageStepsWith(tenantExecuter(cmd), config.GetString(cmd, "message-guid"), props)
 			if err != nil {
 				return err
 			}
@@ -130,6 +139,9 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 			for _, r := range res.Runs {
 				for _, st := range r.Steps {
 					log.Info().Msgf("%-10s %-30s %s%s", st.Status, st.ModelStepID, st.Activity, errSuffix(st.Error))
+					for _, p := range st.Properties {
+						log.Info().Msgf("%-10s   %s = %s", "", p.Name, p.Value)
+					}
 				}
 			}
 			if res.FailedStep != nil {
@@ -139,6 +151,66 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 		},
 	}
 	steps.Flags().String("message-guid", "", "Message GUID")
+	steps.Flags().Bool("properties", false, "Include the properties of each step (e.g. adapter addresses)")
+
+	search := &cobra.Command{
+		Use:   "search",
+		Short: "Find messages by a custom header property value (e.g. an order number)",
+		Long: `Find messages by a custom header property that flows write
+(messageLog.addCustomHeaderProperty), such as an order number, newest first.
+
+The tenant searches MessageProcessingLogCustomHeaderProperties: no scope is
+needed. --artifact-id, --package-id, --since, --until and --status narrow the
+result. Tenants without that entity set are scanned instead, which needs
+--artifact-id or --package-id, and --since.`,
+		Example: `  cpictl logs search --header OrderNo=4711
+  cpictl logs search --header OrderNo=4711 --since 2d --status FAILED --errors`,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			now := time.Now()
+			since, err := ops.ParseTimeArg(config.GetString(cmd, "since"), now)
+			if err != nil {
+				return output.Usagef("invalid --since: %v", err)
+			}
+			until, err := ops.ParseTimeArg(config.GetString(cmd, "until"), now)
+			if err != nil {
+				return output.Usagef("invalid --until: %v", err)
+			}
+			name, value, ok := strings.Cut(config.GetString(cmd, "header"), "=")
+			if !ok || name == "" {
+				return output.Usagef("--header name=value is required")
+			}
+			errs, _ := cmd.Flags().GetBool("errors")
+			q := ops.HeaderSearchQuery{Header: ops.CustomHeaderFilter{Name: name, Value: value}, PackageID: config.GetString(cmd, "package-id"),
+				Since: since, Until: until, Statuses: config.GetStringSlice(cmd, "status"), Top: config.GetInt(cmd, "top"), IncludeErrors: errs}
+			if id := config.GetString(cmd, "artifact-id"); id != "" {
+				q.ArtifactIDs = []string{id}
+			}
+			res, err := ops.SearchMessagesByHeader(cmd.Context(), tenantExecuter(cmd), q)
+			if err != nil {
+				return err
+			}
+			output.SetResult(cmd.Context(), res)
+			for _, l := range res.Logs {
+				end := ""
+				if l.LogEnd != nil {
+					end = l.LogEnd.Local().Format(time.DateTime)
+				}
+				log.Info().Str("messageGuid", l.MessageGuid).Msgf("%s  %-10s %s  %s%s", end, l.Status, l.ArtifactID, l.MessageGuid, errSuffix(firstLine(l.ErrorText)))
+			}
+			log.Info().Msgf("%d of %d message(s) with %s", len(res.Logs), res.Total, res.Filter)
+			return nil
+		},
+	}
+	sf0 := search.Flags()
+	sf0.String("header", "", "Custom header property, name=value")
+	sf0.String("artifact-id", "", "Only messages of this integration flow")
+	sf0.String("package-id", "", "Only messages of this package's integration flows")
+	sf0.String("since", "", "Only messages that ended after this time (duration like 1h or RFC 3339)")
+	sf0.String("until", "", "Only messages that started before this time")
+	sf0.StringSlice("status", nil, "Only these statuses, e.g. FAILED,RETRY")
+	sf0.Int("top", 20, "Maximum number of messages (max 200)")
+	sf0.Bool("errors", false, "Include the error text of failed messages")
 
 	attachment := &cobra.Command{
 		Use:          "attachment",
@@ -228,10 +300,11 @@ ApplicationMessageId = trace ID, otherwise by scanning the scope (--artifact-ids
 --package-id, and --since) for the trace-id custom header.
 
 --message (a message GUID): all messages with its correlation ID. With --key-header
-(custom header properties your flows write, e.g. OrderNo), messages of the scope with
-the same value join the path, with the rest of their run: the path continues when the
-message left the tenant and came back with a new correlation ID. The tenant cannot
-filter by custom headers, so the scope is scanned (at most --max-scan messages).
+(custom header properties your flows write, e.g. OrderNo), messages with the same
+value join the path, with the rest of their run: the path continues when the message
+left the tenant and came back with a new correlation ID. They are found with the
+custom header search (as 'logs search'; a scope narrows it); tenants without it scan
+the scope (--artifact-ids or --package-id, and --since; at most --max-scan messages).
 
 Nodes are linked by span-id / parent-span-id (names configurable), else by the
 predecessor message, else (--message only) by start time ("inferred", or "header"
@@ -290,7 +363,7 @@ is the same for every message taking the same route.`,
 	tf := tree.Flags()
 	tf.String("trace-id", "", "Trace ID (32 hex characters)")
 	tf.String("message", "", "Message GUID: follow its correlation ID (and --key-header) across flows")
-	tf.StringSlice("key-header", nil, "With --message: custom header properties that join runs with the same value (scans the scope)")
+	tf.StringSlice("key-header", nil, "With --message: custom header properties that join runs with the same value")
 	tf.Int("max-messages", 200, "With --message: maximum messages of the path")
 	tf.StringSlice("artifact-ids", nil, "Scope of the fallback scan")
 	tf.String("package-id", "", "Scope of the fallback scan: all flows of this package")
@@ -368,7 +441,7 @@ first and last occurrence. Reads at most --max-messages, newest first.`,
 	sf.Int("max-messages", 5000, "Messages read at most, newest first")
 	sf.Int("error-samples", 50, "Error texts read for fingerprints (one request each)")
 
-	c.AddCommand(get, steps, attachment, payload, trace, traceMessage, tree, summary)
+	c.AddCommand(get, search, steps, attachment, payload, trace, traceMessage, tree, summary)
 	return c
 }
 

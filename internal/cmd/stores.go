@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/config"
@@ -144,9 +145,26 @@ func NewVariablesCommand() *cobra.Command {
 }
 
 func NewJMSCommand() *cobra.Command {
-	c := &cobra.Command{Use: "jms", Short: "JMS queues and broker capacity"}
+	c := &cobra.Command{
+		Use:   "jms",
+		Short: "JMS queues, their messages (retry, move, delete) and broker capacity",
+		Long: `JMS queues and their messages, as Manage Message Queues in the Web UI.
+
+A message whose processing failed stays in its queue (status RETRY) until a
+retry succeeds or it expires. retry processes messages again now, move hands
+them to another queue (e.g. from an error queue back to the queue of the
+flow that processes them), delete removes them: they are not processed any
+more. Select messages with --id (repeatable) or --all (--failed-only: only
+failed ones). retry, move and delete need --confirm.`,
+		Example: `  cpictl jms queues
+  cpictl jms messages --queue Orders_Billing --failed-only
+  cpictl jms retry --queue Orders_Billing --id ID:abc --confirm
+  cpictl jms move --queue Orders_Billing_Error --to Orders_Billing --all --confirm
+  cpictl jms delete --queue Orders_Billing --id ID:abc --confirm
+  cpictl jms deactivate --queue Orders_Billing`,
+	}
 	queues := &cobra.Command{
-		Use: "queues", Short: "List JMS queues, fullest first", SilenceUsage: true,
+		Use: "queues", Short: "List JMS queues, fullest first, with the flows that use them", SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			qs, err := ops.ListQueues(tenantExecuter(cmd), config.GetString(cmd, "prefix"))
 			if err != nil {
@@ -154,12 +172,107 @@ func NewJMSCommand() *cobra.Command {
 			}
 			output.SetResult(cmd.Context(), map[string]any{"queues": qs})
 			for _, q := range qs {
-				log.Info().Msgf("%-50s %6d messages active=%v", q.Name, q.Messages, q.Active)
+				flows := []string{}
+				for _, f := range q.Flows {
+					flows = append(flows, f.Name)
+				}
+				log.Info().Msgf("%-50s %6d messages active=%v %s", q.Name, q.Messages, q.Active, strings.Join(flows, ","))
 			}
 			return nil
 		},
 	}
 	queues.Flags().String("prefix", "", "Only queues whose name starts with this")
+
+	messages := &cobra.Command{
+		Use: "messages", Short: "List the messages of a queue (failed ones wait for a retry)", SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			failed, _ := cmd.Flags().GetBool("failed-only")
+			res, err := ops.ListQueueMessages(tenantExecuter(cmd), config.GetString(cmd, "queue"), failed, config.GetInt(cmd, "top"))
+			if err != nil {
+				return err
+			}
+			output.SetResult(cmd.Context(), res)
+			for _, m := range res.Messages {
+				created := ""
+				if m.CreatedAt != nil {
+					created = m.CreatedAt.Local().Format(time.DateTime)
+				}
+				log.Info().Msgf("%-45s %s failed=%-5v retries=%d %s", m.ID, created, m.Failed, m.RetryCount, m.MessageGuid)
+			}
+			log.Info().Msgf("%d of %d message(s), %d failed", len(res.Messages), res.Total, res.Failed)
+			return nil
+		},
+	}
+	messages.Flags().String("queue", "", "Queue name")
+	messages.Flags().Bool("failed-only", false, "Only messages whose processing failed")
+	messages.Flags().Int("top", 100, "Maximum messages")
+
+	selection := func(cmd *cobra.Command) ops.JMSSelection {
+		all, _ := cmd.Flags().GetBool("all")
+		failed, _ := cmd.Flags().GetBool("failed-only")
+		return ops.JMSSelection{Queue: config.GetString(cmd, "queue"), IDs: nonEmpty(config.GetStringSlice(cmd, "id")), All: all, FailedOnly: failed}
+	}
+	action := func(use, short, warning string, run func(cmd *cobra.Command, sel ops.JMSSelection) (*ops.JMSActionResult, error)) *cobra.Command {
+		a := &cobra.Command{
+			Use: use, Short: short + " (requires --confirm)", SilenceUsage: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				if ok, _ := cmd.Flags().GetBool("confirm"); !ok {
+					return output.Usagef("%s; add --confirm", warning)
+				}
+				res, err := run(cmd, selection(cmd))
+				if res != nil {
+					output.SetResult(cmd.Context(), res)
+					to := ""
+					if res.TargetQueue != "" {
+						to = " to " + res.TargetQueue
+					}
+					log.Info().Msgf("%s: %d message(s) of %s%s %s", res.Action, len(res.MessageIDs), res.Queue, to, res.Response)
+				}
+				return err
+			},
+		}
+		a.Flags().String("queue", "", "Queue name")
+		a.Flags().StringSlice("id", nil, "JMS message IDs (from 'jms messages')")
+		a.Flags().Bool("all", false, "All messages of the queue")
+		a.Flags().Bool("failed-only", false, "With --all: only failed messages")
+		a.Flags().Bool("confirm", false, "Confirm the action")
+		return a
+	}
+	retry := action("retry", "Process messages of a queue again now", "retrying processes the messages again (receivers are called again)",
+		func(cmd *cobra.Command, sel ops.JMSSelection) (*ops.JMSActionResult, error) {
+			return ops.RetryQueueMessages(tenantExecuter(cmd), sel)
+		})
+	move := action("move", "Move messages to another queue", "moving hands the messages to the flow that reads the target queue",
+		func(cmd *cobra.Command, sel ops.JMSSelection) (*ops.JMSActionResult, error) {
+			return ops.MoveQueueMessages(tenantExecuter(cmd), sel, config.GetString(cmd, "to"))
+		})
+	move.Flags().String("to", "", "Target queue")
+	del := action("delete", "Delete messages from a queue", "deleted messages are not processed any more and cannot be restored",
+		func(cmd *cobra.Command, sel ops.JMSSelection) (*ops.JMSActionResult, error) {
+			return ops.DeleteQueueMessages(tenantExecuter(cmd), sel)
+		})
+
+	state := func(use string, active bool) *cobra.Command {
+		short := "Deactivate a queue: messages are kept but not handed to its consumer flow"
+		if active {
+			short = "Activate a queue: its consumer flow receives messages again"
+		}
+		s := &cobra.Command{
+			Use: use, SilenceUsage: true, Short: short,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				res, err := ops.SetQueueState(tenantExecuter(cmd), config.GetString(cmd, "queue"), active)
+				if err != nil {
+					return err
+				}
+				output.SetResult(cmd.Context(), res)
+				log.Info().Msgf("%s active=%v %s", res.Queue, res.Active, res.Response)
+				return nil
+			},
+		}
+		s.Flags().String("queue", "", "Queue name")
+		return s
+	}
+
 	broker := &cobra.Command{
 		Use: "broker", Short: "Show JMS broker capacity and usage", SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -172,7 +285,7 @@ func NewJMSCommand() *cobra.Command {
 			return nil
 		},
 	}
-	c.AddCommand(queues, broker)
+	c.AddCommand(queues, messages, retry, move, del, state("activate", true), state("deactivate", false), broker)
 	return c
 }
 

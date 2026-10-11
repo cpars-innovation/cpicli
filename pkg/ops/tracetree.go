@@ -263,8 +263,10 @@ type MessagePathQuery struct {
 	// KeyHeaders are custom header properties that flows write (business
 	// keys such as an order number). Messages of the scope with the same
 	// value join the path, also when they have another correlation ID (the
-	// message left the tenant and came back). The tenant cannot filter by
-	// custom headers: Scope is scanned, at most MaxScan messages (default 200).
+	// message left the tenant and came back). They are looked up through
+	// MessageProcessingLogCustomHeaderProperties (Scope narrows the matches);
+	// tenants without it scan Scope, at most MaxScan messages (default 200),
+	// and then need Scope.
 	KeyHeaders []string
 	Scope      ScanScope
 	MaxScan    int
@@ -291,9 +293,6 @@ func MessagePathFor(ctx context.Context, exe *httpclnt.HTTPExecuter, q MessagePa
 		return nil, err
 	}
 	tree := &TraceTree{CorrelationID: l.CorrelationId, Source: "correlation_id", Roots: []*TraceNode{}}
-	if len(q.KeyHeaders) > 0 && ((len(q.Scope.ArtifactIDs) == 0 && q.Scope.PackageID == "") || q.Scope.Since.IsZero()) {
-		return nil, errScopeRequired()
-	}
 	logs := []MessageLog{toMessageLog(*l)}
 	if l.CorrelationId != "" {
 		logs = nil
@@ -348,17 +347,7 @@ func joinByKeyHeaders(ctx context.Context, exe *httpclnt.HTTPExecuter, tree *Tra
 	if len(keys) == 0 {
 		return nil
 	}
-	if q.MaxScan <= 0 {
-		q.MaxScan = 200
-	}
-	res, err := ScanByHeaders(ctx, exe, q.Scope, q.MaxScan, func(h []cpi.NameValue) bool {
-		for name, v := range keys {
-			if headerValue(h, name) == v {
-				return true
-			}
-		}
-		return false
-	})
+	res, err := keyHeaderMatches(ctx, exe, keys, q)
 	if err != nil {
 		return err
 	}
@@ -403,6 +392,57 @@ func joinByKeyHeaders(ctx context.Context, exe *httpclnt.HTTPExecuter, tree *Tra
 		tree.Source += "+header"
 	}
 	return nil
+}
+
+// keyHeaderMatches finds the messages carrying one of the key values:
+// through MessageProcessingLogCustomHeaderProperties (one query per key, no
+// scope needed; a scope given still narrows), else by scanning the scope.
+func keyHeaderMatches(ctx context.Context, exe *httpclnt.HTTPExecuter, keys map[string]string, q MessagePathQuery) (*ScanResult, error) {
+	var logs []MessageLog
+	seen := map[string]bool{}
+	for _, name := range sortedKeys(keys) {
+		found, ok, err := findByHeader(exe, HeaderSearchQuery{Header: CustomHeaderFilter{Name: name, Value: keys[name]},
+			ArtifactIDs: q.Scope.ArtifactIDs, PackageID: q.Scope.PackageID, Since: q.Scope.Since, Until: q.Scope.Until, Statuses: q.Scope.Statuses})
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return scanKeyHeaders(ctx, exe, keys, q)
+		}
+		for _, l := range found {
+			if !seen[l.MessageGuid] {
+				seen[l.MessageGuid] = true
+				logs = append(logs, l)
+			}
+		}
+	}
+	res := &ScanResult{}
+	if len(logs) > q.MaxMessages {
+		logs, res.Truncated = logs[:q.MaxMessages], true
+	}
+	// headers carry the span IDs used for linking
+	matches, err := withHeaders(ctx, exe, logs)
+	if err != nil {
+		return nil, err
+	}
+	res.Matches = matches
+	return res, nil
+}
+
+// scanKeyHeaders is the fallback of keyHeaderMatches: a client-side scan of
+// the scope (at most MaxScan messages).
+func scanKeyHeaders(ctx context.Context, exe *httpclnt.HTTPExecuter, keys map[string]string, q MessagePathQuery) (*ScanResult, error) {
+	if q.MaxScan <= 0 {
+		q.MaxScan = 200
+	}
+	return ScanByHeaders(ctx, exe, q.Scope, q.MaxScan, func(h []cpi.NameValue) bool {
+		for name, v := range keys {
+			if headerValue(h, name) == v {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 func sortByStart(nodes []*TraceNode) {
