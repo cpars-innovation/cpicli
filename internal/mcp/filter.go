@@ -60,6 +60,63 @@ var toolEffects = map[string]Effect{
 	"create_authorized_user": EffectTenant, "delete_authorized_user": EffectTenant,
 }
 
+// Class is a finer classification of what a tool does than Effect, for
+// approval routing in clients: read and local as the effect; tenant tools
+// are write, deploy, process, log or destructive.
+type Class string
+
+const (
+	ClassRead  Class = "read"
+	ClassLocal Class = "local"
+	// ClassWrite changes designtime content or configuration (packages,
+	// artifacts, parameters, value mappings, security material, partners).
+	ClassWrite Class = "write"
+	// ClassDeploy starts or stops runtime artifacts: deploy, undeploy, pd_deploy.
+	ClassDeploy Class = "deploy"
+	// ClassProcess triggers message processing: test messages, JMS retry,
+	// move and queue state.
+	ClassProcess Class = "process"
+	// ClassLog changes the log level of a flow.
+	ClassLog Class = "log"
+	// ClassDestructive deletes or unlocks: what cannot be undone.
+	ClassDestructive Class = "destructive"
+)
+
+// tenantClasses classifies every tenant tool. TestEveryToolHasAClass fails
+// for a tenant tool missing here.
+var tenantClasses = map[string]Class{
+	"create_package": ClassWrite, "upload_artifact": ClassWrite, "upload_artifacts": ClassWrite, "set_parameters": ClassWrite,
+	"set_value_mapping": ClassWrite, "generate_key_pair": ClassWrite, "upload_certificate_chain": ClassWrite,
+	"create_access_policy": ClassWrite, "add_artifact_reference": ClassWrite, "create_alternative_partner": ClassWrite,
+	"create_authorized_user": ClassWrite,
+
+	"deploy": ClassDeploy, "undeploy": ClassDeploy, "pd_deploy": ClassDeploy,
+
+	"send_test_message": ClassProcess, "retry_jms_messages": ClassProcess, "move_jms_messages": ClassProcess, "set_jms_queue_state": ClassProcess,
+
+	"set_log_level": ClassLog,
+
+	"delete_data_store_entry": ClassDestructive, "delete_artifact": ClassDestructive, "delete_package": ClassDestructive,
+	"delete_jms_messages": ClassDestructive, "delete_keystore_entry": ClassDestructive, "delete_access_policy": ClassDestructive,
+	"delete_artifact_reference": ClassDestructive, "delete_alternative_partner": ClassDestructive, "delete_authorized_user": ClassDestructive,
+	"unlock_artifact": ClassDestructive,
+}
+
+// ClassOf returns the class of a tool; unknown tenant tools count as
+// destructive.
+func ClassOf(name string) Class {
+	switch EffectOf(name) {
+	case EffectRead:
+		return ClassRead
+	case EffectLocal:
+		return ClassLocal
+	}
+	if c, ok := tenantClasses[name]; ok {
+		return c
+	}
+	return ClassDestructive
+}
+
 // operateTenantTools are the tenant tools of mode operate: operations as in
 // the Web UI's Monitor, no content changes.
 var operateTenantTools = []string{"set_log_level", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state"}
@@ -172,17 +229,38 @@ func ModeFilter(mode string) (ToolFilter, error) {
 // restrictive wins. User patterns are validated against all tools, so naming
 // a tool the mode removes anyway is not an error.
 func ApplyFilters(tools []Tool, mode string, user ToolFilter) (kept []Tool, removed []string, err error) {
+	kept, reasons, err := ApplyFiltersWithReasons(tools, mode, user)
+	for _, r := range reasons {
+		removed = append(removed, r.Name)
+	}
+	return kept, removed, err
+}
+
+// RemovedTool is a tool the server does not offer, and why.
+type RemovedTool struct {
+	Name string `json:"name"`
+	// Reason names what removed it: the mode, --read-only, --tools /
+	// --toolset, --disable-tools, or the opt-in rule.
+	Reason string `json:"reason"`
+}
+
+// ApplyFiltersWithReasons is ApplyFilters, with the reason for each removed
+// tool (for the error result of a call to it).
+func ApplyFiltersWithReasons(tools []Tool, mode string, user ToolFilter) (kept []Tool, removed []RemovedTool, err error) {
 	modeFilter, err := ModeFilter(mode)
 	if err != nil {
 		return nil, nil, err
 	}
-	kept, removed, err = Filter(tools, user)
+	kept, names, err := Filter(tools, user)
 	if err != nil {
 		return nil, nil, err
 	}
+	for _, n := range names {
+		removed = append(removed, RemovedTool{Name: n, Reason: userFilterReason(n, user)})
+	}
 	kept = slices.DeleteFunc(kept, func(t Tool) bool {
 		if slices.Contains(optInTools, t.Name) && !slices.Contains(user.Allow, t.Name) {
-			removed = append(removed, t.Name)
+			removed = append(removed, RemovedTool{Name: t.Name, Reason: "opt-in: offered only when --tools names it exactly (it can destroy content or someone else's work)"})
 			return true
 		}
 		return false
@@ -204,7 +282,25 @@ func ApplyFilters(tools []Tool, mode string, user ToolFilter) (kept []Tool, remo
 	if err != nil {
 		return nil, nil, err
 	}
-	return kept, append(removed, more...), nil
+	for _, n := range more {
+		reason := "not offered in mode " + mode
+		if modeFilter.ReadOnly {
+			reason += " (read-only)"
+		}
+		removed = append(removed, RemovedTool{Name: n, Reason: reason})
+	}
+	return kept, removed, nil
+}
+
+// userFilterReason says which part of the user's filter removed a tool.
+func userFilterReason(name string, f ToolFilter) string {
+	switch {
+	case slices.ContainsFunc(f.Deny, func(p string) bool { return match(p, name) }):
+		return "disabled by --disable-tools"
+	case f.ReadOnly && EffectOf(name) == EffectTenant:
+		return "the server is read-only (--read-only) and the tool changes the tenant or triggers processing"
+	}
+	return "not selected by --tools / --toolset"
 }
 
 // ModeInstructions describes the mode for the server instructions.

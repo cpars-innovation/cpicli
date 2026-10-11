@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,54 @@ type LoopLimits struct {
 
 // DefaultLoopLimits apply to omitted limits.
 var DefaultLoopLimits = LoopLimits{MaxIterations: 5, SameErrorLimit: 2, WallClockMinutes: 60, MaxDeploys: 15}
+
+// LoopPolicy is the server's loop policy (cpictl mcp --loop-*): the model
+// cannot change it.
+type LoopPolicy struct {
+	// Required refuses tenant tools while no loop is open (errorCategory
+	// loop_required).
+	Required bool
+	// Caps are the highest limits loop_start accepts (0: no cap). Omitted
+	// limits get the default, lowered to the cap; a higher value is a usage
+	// error naming the cap.
+	Caps LoopLimits
+}
+
+// LoopRequiredError refuses a tenant call because no loop is open
+// (LoopPolicy.Required). Exit code usage, errorCategory loop_required.
+type LoopRequiredError struct{ Tool string }
+
+func (e *LoopRequiredError) Error() string {
+	return "loop required: " + e.Tool + " changes the tenant; this server only allows that inside a loop: call loop_start first"
+}
+
+// ExitCode implements output.ExitCoder.
+func (e *LoopRequiredError) ExitCode() int { return exitcode.Usage }
+
+// ErrorCategory is the errorCategory of the tool result.
+func (e *LoopRequiredError) ErrorCategory() string { return "loop_required" }
+
+// LoopPolicyInstructions describes the loop policy for the server
+// instructions.
+func LoopPolicyInstructions(p LoopPolicy) string {
+	var b strings.Builder
+	if p.Required {
+		b.WriteString("\n\nLoop required: tools that change the tenant or trigger processing are refused (errorCategory loop_required) until loop_start opened a loop.")
+	}
+	var caps []string
+	for _, c := range []struct {
+		name string
+		cap  int
+	}{{"max_iterations", p.Caps.MaxIterations}, {"same_error_limit", p.Caps.SameErrorLimit}, {"wall_clock_minutes", p.Caps.WallClockMinutes}, {"max_deploys", p.Caps.MaxDeploys}} {
+		if c.cap > 0 {
+			caps = append(caps, fmt.Sprintf("%s %d", c.name, c.cap))
+		}
+	}
+	if len(caps) > 0 {
+		b.WriteString("\n\nLoop limits are capped by the server: " + strings.Join(caps, ", ") + "; loop_start refuses higher values.")
+	}
+	return b.String()
+}
 
 // LoopCall is one tool call recorded in a loop.
 type LoopCall struct {
@@ -64,6 +113,9 @@ type loop struct {
 	// failedSinceDeploy is set by a failed test result; the next deploy is
 	// then a new iteration.
 	failedSinceDeploy bool
+	// touched are the artifacts uploaded, deployed or sent to in the loop:
+	// their failures count toward same_error_limit whatever their time.
+	touched map[string]bool
 }
 
 // StoppedError refuses a tenant call because a loop limit was reached.
@@ -78,6 +130,10 @@ func (e *StoppedError) ExitCode() int { return exitcode.Stopped }
 
 // Ledger tracks the open loop of a server (at most one at a time).
 type Ledger struct {
+	// Policy is the server's loop policy; set it before Wrap (the loop_start
+	// schema shows the caps).
+	Policy LoopPolicy
+
 	mu    sync.Mutex
 	root  string
 	now   func() time.Time
@@ -102,22 +158,32 @@ func (l *Ledger) start(goal string, limits LoopLimits) (*LoopStatus, error) {
 		return nil, output.Usagef("goal is required")
 	}
 	d := DefaultLoopLimits
-	if limits.MaxIterations > 0 {
-		d.MaxIterations = limits.MaxIterations
-	}
-	if limits.SameErrorLimit > 0 {
-		d.SameErrorLimit = limits.SameErrorLimit
-	}
-	if limits.WallClockMinutes > 0 {
-		d.WallClockMinutes = limits.WallClockMinutes
-	}
-	if limits.MaxDeploys > 0 {
-		d.MaxDeploys = limits.MaxDeploys
+	caps := l.Policy.Caps
+	for _, f := range []struct {
+		value     *int
+		requested int
+		cap       int
+		param     string
+		flag      string
+	}{
+		{&d.MaxIterations, limits.MaxIterations, caps.MaxIterations, "max_iterations", "--loop-max-iterations"},
+		{&d.SameErrorLimit, limits.SameErrorLimit, caps.SameErrorLimit, "same_error_limit", "--loop-max-same-errors"},
+		{&d.WallClockMinutes, limits.WallClockMinutes, caps.WallClockMinutes, "wall_clock_minutes", "--loop-max-minutes"},
+		{&d.MaxDeploys, limits.MaxDeploys, caps.MaxDeploys, "max_deploys", "--loop-max-deploys"},
+	} {
+		if f.requested > 0 {
+			if f.cap > 0 && f.requested > f.cap {
+				return nil, output.Usagef("%s %d exceeds this server's cap of %d (%s); use at most %d", f.param, f.requested, f.cap, f.flag, f.cap)
+			}
+			*f.value = f.requested
+		} else if f.cap > 0 && *f.value > f.cap {
+			*f.value = f.cap
+		}
 	}
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	now := l.now().UTC()
-	lp := &loop{LoopStatus: LoopStatus{ID: now.Format("20060102-150405") + "-" + hex.EncodeToString(b), Goal: goal, Limits: d, Started: now, Errors: map[string]int{}}}
+	lp := &loop{LoopStatus: LoopStatus{ID: now.Format("20060102-150405") + "-" + hex.EncodeToString(b), Goal: goal, Limits: d, Started: now, Errors: map[string]int{}}, touched: map[string]bool{}}
 	if err := os.MkdirAll(l.dir(), 0o755); err != nil {
 		return nil, err
 	}
@@ -159,7 +225,13 @@ func (l *Ledger) before(tool string, args json.RawMessage) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	lp := l.open
-	if lp == nil || EffectOf(tool) != EffectTenant {
+	if EffectOf(tool) != EffectTenant {
+		return nil
+	}
+	if lp == nil {
+		if l.Policy.Required {
+			return &LoopRequiredError{Tool: tool}
+		}
 		return nil
 	}
 	l.checkClock(lp)
@@ -179,20 +251,42 @@ func (l *Ledger) before(tool string, args json.RawMessage) error {
 	return nil
 }
 
-// isDeployCall reports deployments that count against the limits:
-// deploy, and pd_deploy unless it is a dry run.
+// isDeployCall reports deployments that count against the limits: deploy
+// unless it is a dry run, and pd_deploy unless it is a dry run (its
+// default).
 func isDeployCall(tool string, args json.RawMessage) bool {
-	switch tool {
-	case "deploy":
-		return true
-	case "pd_deploy":
-		var a struct {
-			DryRun *bool `json:"dry_run"`
-		}
-		_ = json.Unmarshal(args, &a)
-		return a.DryRun != nil && !*a.DryRun
+	return (tool == "deploy" || tool == "pd_deploy") && !isDryRun(tool, args)
+}
+
+// isDryRun reports a call that only predicts and changes nothing: dry_run
+// true, or for pd_deploy dry_run omitted.
+func isDryRun(tool string, args json.RawMessage) bool {
+	var a struct {
+		DryRun *bool `json:"dry_run"`
 	}
-	return false
+	_ = json.Unmarshal(args, &a)
+	if a.DryRun == nil {
+		return tool == "pd_deploy"
+	}
+	return *a.DryRun
+}
+
+// touchedArtifacts returns the artifacts a tenant call works on: artifact_id,
+// artifact_ids and artifacts[].artifact_id of its arguments.
+func touchedArtifacts(args json.RawMessage) []string {
+	var a struct {
+		ArtifactID  string   `json:"artifact_id"`
+		ArtifactIDs []string `json:"artifact_ids"`
+		Artifacts   []struct {
+			ArtifactID string `json:"artifact_id"`
+		} `json:"artifacts"`
+	}
+	_ = json.Unmarshal(args, &a)
+	ids := append([]string{a.ArtifactID}, a.ArtifactIDs...)
+	for _, x := range a.Artifacts {
+		ids = append(ids, x.ArtifactID)
+	}
+	return slices.DeleteFunc(ids, func(id string) bool { return id == "" })
 }
 
 // after records a tool call of the open loop.
@@ -210,10 +304,15 @@ func (l *Ledger) after(tool string, args json.RawMessage, value any, err error) 
 	}
 	call := LoopCall{Time: l.now().UTC(), Tool: tool, OK: err == nil}
 	if err != nil {
-		call.Category = Category(output.ExitCode(err))
+		call.Category = errorCategory(err)
 		call.Summary = firstLine(err.Error())
 	}
 	if !refused && EffectOf(tool) == EffectTenant {
+		if !isDryRun(tool, args) {
+			for _, id := range touchedArtifacts(args) {
+				lp.touched[id] = true
+			}
+		}
 		lp.Steps++
 		if isDeployCall(tool, args) {
 			lp.Deploys++
@@ -223,7 +322,7 @@ func (l *Ledger) after(tool string, args json.RawMessage, value any, err error) 
 			}
 		}
 	}
-	if fp, failed := failureFingerprint(tool, value, err); failed && stopped == nil {
+	if fp, failed := lp.failureFingerprint(value, err); failed && stopped == nil {
 		lp.failedSinceDeploy = true
 		if fp != "" {
 			lp.Errors[fp]++
@@ -250,13 +349,17 @@ func fingerprint(artifactID, modelStepID, errorText string) string {
 }
 
 // failureFingerprint reports whether a test or diagnosis result shows a
-// failed message, and its fingerprint.
-func failureFingerprint(tool string, value any, err error) (string, bool) {
+// failed message that belongs to the loop, and its fingerprint. A message
+// belongs to the loop when it started or ended after loop_start, or when its
+// artifact was uploaded, deployed or sent to in the loop; older failures of
+// other artifacts (a diagnosis reading history) do not count.
+func (lp *loop) failureFingerprint(value any, err error) (string, bool) {
 	switch v := value.(type) {
 	case *ops.SentMessage:
 		if err == nil || v == nil {
 			return "", false
 		}
+		lp.touched[v.ArtifactID] = true // sent in the loop
 		text := err.Error()
 		if v.Log != nil && v.Log.ErrorText != "" {
 			text = v.Log.ErrorText
@@ -266,18 +369,50 @@ func failureFingerprint(tool string, value any, err error) (string, bool) {
 		if v == nil || v.FirstFailure == nil {
 			return "", false
 		}
-		return fingerprint(v.FirstFailure.ArtifactID, "", v.FirstFailure.ErrorText), true
+		f := v.FirstFailure
+		start, end := traceNodeTimes(v.Roots, f.MessageGuid)
+		if !lp.belongs(f.ArtifactID, start, end) {
+			return "", false
+		}
+		return fingerprint(f.ArtifactID, "", f.ErrorText), true
 	case *ops.MessageLogList:
 		if v == nil {
 			return "", false
 		}
 		for _, m := range v.Logs {
-			if m.Status == "FAILED" || m.Status == "ESCALATED" {
+			if (m.Status == "FAILED" || m.Status == "ESCALATED") && lp.belongs(m.ArtifactID, m.LogStart, m.LogEnd) {
 				return fingerprint(m.ArtifactID, "", m.ErrorText), true
 			}
 		}
 	}
 	return "", false
+}
+
+// belongs reports whether a message belongs to the loop (see
+// failureFingerprint).
+func (lp *loop) belongs(artifactID string, start, end *time.Time) bool {
+	if lp.touched[artifactID] {
+		return true
+	}
+	for _, t := range []*time.Time{end, start} {
+		if t != nil && !t.Before(lp.Started) {
+			return true
+		}
+	}
+	return false
+}
+
+// traceNodeTimes returns the start and end of a message of a trace tree.
+func traceNodeTimes(nodes []*ops.TraceNode, guid string) (start, end *time.Time) {
+	for _, n := range nodes {
+		if n.MessageGuid == guid {
+			return n.LogStart, n.LogEnd
+		}
+		if s, e := traceNodeTimes(n.Children, guid); s != nil || e != nil {
+			return s, e
+		}
+	}
+	return nil, nil
 }
 
 func firstLine(s string) string {
@@ -347,19 +482,35 @@ func (l *Ledger) Wrap(tools []Tool) []Tool {
 	return append(out, l.tools()...)
 }
 
+// limitSchema is the schema of a loop_start limit: at most the server's cap.
+func limitSchema(max, def, cap int, desc string) map[string]any {
+	if cap > 0 {
+		max, def = min(max, cap), min(def, cap)
+		desc += fmt.Sprintf(", default %d, at most %d on this server", def, max)
+	} else {
+		desc += fmt.Sprintf(", default %d", def)
+	}
+	return map[string]any{"type": "integer", "minimum": 1, "maximum": max, "description": desc}
+}
+
 func (l *Ledger) tools() []Tool {
+	caps, d := l.Policy.Caps, DefaultLoopLimits
+	description := "Open a build/test/fix loop before changing anything on the tenant. While it is open, the server counts tenant calls and refuses further changes " +
+		"(errorCategory stopped) when max_iterations (deploys after a failed test), same_error_limit (the same failure of this loop seen again), wall_clock_minutes or max_deploys is reached. " +
+		"Read tools keep working. Returns loop_id; finish with loop_end."
+	if l.Policy.Required {
+		description += " This server refuses tenant tools without an open loop (errorCategory loop_required)."
+	}
 	return []Tool{
 		{
 			Name: "loop_start", Title: "Start a build loop with limits",
-			Description: "Open a build/test/fix loop before changing anything on the tenant. While it is open, the server counts tenant calls and refuses further changes " +
-				"(errorCategory stopped) when max_iterations (deploys after a failed test), same_error_limit (the same failure seen again), wall_clock_minutes or max_deploys is reached. " +
-				"Read tools keep working. Returns loop_id; finish with loop_end.",
+			Description: description,
 			InputSchema: object(props{
 				"goal":               str("What the loop should achieve"),
-				"max_iterations":     map[string]any{"type": "integer", "minimum": 1, "maximum": 50, "description": "Deploys after a failed test, default 5"},
-				"same_error_limit":   map[string]any{"type": "integer", "minimum": 1, "maximum": 20, "description": "Stop when the same error was seen this often, default 2"},
-				"wall_clock_minutes": map[string]any{"type": "integer", "minimum": 1, "maximum": 480, "description": "Maximum duration, default 60"},
-				"max_deploys":        map[string]any{"type": "integer", "minimum": 1, "maximum": 100, "description": "Maximum deploy / pd_deploy calls, default 15"},
+				"max_iterations":     limitSchema(50, d.MaxIterations, caps.MaxIterations, "Deploys after a failed test"),
+				"same_error_limit":   limitSchema(20, d.SameErrorLimit, caps.SameErrorLimit, "Stop when the same error of this loop was seen this often"),
+				"wall_clock_minutes": limitSchema(480, d.WallClockMinutes, caps.WallClockMinutes, "Maximum duration in minutes"),
+				"max_deploys":        limitSchema(100, d.MaxDeploys, caps.MaxDeploys, "Maximum deploy / pd_deploy calls (dry runs do not count)"),
 			}, "goal"),
 			Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {

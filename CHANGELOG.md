@@ -5,6 +5,30 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- MCP loop policy: `cpictl mcp --loop-required` refuses tools that change the tenant or trigger
+  processing while no loop is open (`errorCategory: "loop_required"`, exit code 2);
+  `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors` and `--loop-max-minutes`
+  cap the limits `loop_start` accepts (a higher value is a usage error naming the cap; omitted
+  limits get the default lowered to the cap). Also as `cpictl.yaml` keys and `CPICTL_LOOP_*`.
+- MCP loops: `deploy` with `dry_run: true` no longer counts against `max_deploys`; only failures
+  that belong to the loop (message after `loop_start`, or of an artifact uploaded, deployed or
+  sent to in the loop) count toward `same_error_limit`, so reading older failures while
+  diagnosing no longer stops the loop.
+- MCP masking in one place for every tool result: values of sensitive names (authorization,
+  cookie, password, secret, token, credential, API key) are masked in all name/value lists
+  (custom header properties, adapter attributes, step properties, trace headers and properties,
+  `get_trace_tree` keys, the `find_messages_by_header` filter); `--mask-pattern` adds name
+  patterns; `--redact-payloads` replaces message bodies (test responses, attachments, message
+  store entries, trace payloads, data store entries, variables) with a placeholder, size and
+  sha256.
+- MCP results use root-relative, slash-separated paths (also in error texts).
+- MCP `help`: every tool has a `class` (`read`, `local`, `write`, `deploy`, `process`, `log`,
+  `destructive`) next to its `effect`; toolsets carry each tool's effect and class
+  (`toolEffects`) and an `other` toolset lists tools in no toolset. `help {"topic": "server"}`
+  reports the effective `readOnly`, the toolsets, the loop policy and the masking options.
+- MCP: a call to a tool the mode or filters removed returns an error result (`isError: true`,
+  `errorCategory: "usage"`, the reason) instead of a JSON-RPC error.
+
 ## 0.9.1
 
 - Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with

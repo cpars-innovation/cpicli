@@ -22,11 +22,19 @@ type CommandInfo struct {
 // HelpInfo is what the help tool reports: the tools of this server after
 // filtering, and the CLI.
 type HelpInfo struct {
-	Tools    []Tool
-	Removed  []string
+	Tools   []Tool
+	Removed []string
+	// Reasons say why each removed tool is not offered (optional).
+	Reasons  map[string]string
 	Mode     string
 	ReadOnly bool
 	Commands []CommandInfo
+	// Loop is the server's loop policy.
+	Loop LoopPolicy
+	// MaskPatterns and RedactPayloads are the masking options of the server
+	// (see Redactor).
+	MaskPatterns   []string
+	RedactPayloads bool
 }
 
 // Workflow is a task with the skill and tools for it.
@@ -66,27 +74,48 @@ var workflows = []Workflow{
 		Tools: []string{"get_parameters", "set_parameters", "config_diff", "pd_dependencies", "pd_diff", "pd_deploy"}, Docs: "partner-directory.md"},
 }
 
-// HelpTool describes what this server, the skills and the CLI offer. It is
-// added after filtering, so it reports the tools that are really available.
 // toolsetsFor returns the toolsets with the tools of each that are
 // available (toolsets without any are left out), so that a client can
-// select tools by task itself.
+// select tools by task itself. "other" holds the available tools in no
+// toolset (help excluded). Each toolset carries the effect and class of its
+// tools.
 func toolsetsFor(available map[string]Tool) []map[string]any {
 	out := []map[string]any{}
+	inSome := map[string]bool{"help": true}
+	entry := func(name, description string, tools []string) map[string]any {
+		effects := map[string]any{}
+		for _, t := range tools {
+			effects[t] = map[string]any{"effect": EffectOf(t), "class": ClassOf(t)}
+		}
+		return map[string]any{"name": name, "description": description, "tools": tools, "toolEffects": effects}
+	}
 	for _, n := range ToolsetNames() {
 		tools := []string{}
 		for _, t := range Toolsets[n] {
 			if _, ok := available[t]; ok {
 				tools = append(tools, t)
+				inSome[t] = true
 			}
 		}
 		if len(tools) > 0 {
-			out = append(out, map[string]any{"name": n, "description": ToolsetDescriptions[n], "tools": tools})
+			out = append(out, entry(n, ToolsetDescriptions[n], tools))
 		}
+	}
+	var other []string
+	for name := range available {
+		if !inSome[name] {
+			other = append(other, name)
+		}
+	}
+	if len(other) > 0 {
+		slices.Sort(other)
+		out = append(out, entry(OtherToolset, "tools in no other toolset", other))
 	}
 	return out
 }
 
+// HelpTool describes what this server, the skills and the CLI offer. It is
+// added after filtering, so it reports the tools that are really available.
 func HelpTool(info HelpInfo) Tool {
 	available := map[string]Tool{}
 	for _, t := range info.Tools {
@@ -96,14 +125,22 @@ func HelpTool(info HelpInfo) Tool {
 	overview := func() map[string]any {
 		tools := []map[string]any{}
 		for _, t := range info.Tools {
-			tools = append(tools, map[string]any{"name": t.Name, "title": t.Title, "effect": EffectOf(t.Name)})
+			tools = append(tools, map[string]any{"name": t.Name, "title": t.Title, "effect": EffectOf(t.Name), "class": ClassOf(t.Name)})
 		}
 		mode := info.Mode
 		if mode == "" {
 			mode = "none"
 		}
+		// readOnly is the effective state: no available tool changes the
+		// tenant (by --read-only, the mode or the tool filters)
+		readOnly := info.ReadOnly || !slices.ContainsFunc(info.Tools, func(t Tool) bool { return EffectOf(t.Name) == EffectTenant })
+		server := map[string]any{"mode": mode, "readOnly": readOnly, "tools": len(info.Tools), "disabledTools": nonNil(info.Removed),
+			"toolsets": toolsetsFor(available),
+			"loop": map[string]any{"required": info.Loop.Required, "caps": map[string]any{"maxIterations": info.Loop.Caps.MaxIterations,
+				"sameErrorLimit": info.Loop.Caps.SameErrorLimit, "wallClockMinutes": info.Loop.Caps.WallClockMinutes, "maxDeploys": info.Loop.Caps.MaxDeploys}},
+			"masking": map[string]any{"maskPatterns": nonNil(info.MaskPatterns), "redactPayloads": info.RedactPayloads}}
 		return map[string]any{
-			"server":    map[string]any{"mode": mode, "readOnly": info.ReadOnly, "tools": len(info.Tools), "disabledTools": nonNil(info.Removed)},
+			"server":    server,
 			"workflows": workflowsFor(available),
 			"tools":     tools,
 			"toolsets":  toolsetsFor(available),
@@ -143,12 +180,16 @@ func HelpTool(info HelpInfo) Tool {
 				return map[string]any{"cli": commandSummaries(info.Commands), "reference": docsURL + "commands.md"}, nil
 			}
 			if t, ok := available[topic]; ok && t.Name != "help" {
-				return map[string]any{"tool": t.Name, "title": t.Title, "available": true, "effect": EffectOf(t.Name),
+				return map[string]any{"tool": t.Name, "title": t.Title, "available": true, "effect": EffectOf(t.Name), "class": ClassOf(t.Name),
 					"description": t.Description, "inputSchema": t.InputSchema}, nil
 			}
 			if slices.Contains(info.Removed, topic) {
-				return map[string]any{"tool": topic, "available": false, "effect": EffectOf(topic),
-					"reason": "disabled on this server by its mode or tool filter; ask the user, or use another server"}, nil
+				reason := "disabled on this server by its mode or tool filter"
+				if r := info.Reasons[topic]; r != "" {
+					reason = r
+				}
+				return map[string]any{"tool": topic, "available": false, "effect": EffectOf(topic), "class": ClassOf(topic),
+					"reason": reason + "; ask the user, or use another server"}, nil
 			}
 			if name, file, ok := strings.Cut(topic, "/"); ok {
 				if _, isSkill := skills.Find(name); isSkill {
