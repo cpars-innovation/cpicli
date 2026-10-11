@@ -61,6 +61,7 @@ var apiProbes = []apiProbe{
 	{"partner directory", "/api/v1/StringParameters?$top=1", "pd-snapshot, pd-deploy, pd_diff", false},
 	{"data stores", "/api/v1/DataStores", "datastore commands", false},
 	{"log files", "/api/v1/LogFiles", "log-files", false},
+	{"audit log", "/api/v1/AuditLogs?$top=1", "audit-log (who changed what)", false},
 }
 
 // Doctor checks the connection and which API areas the credentials can

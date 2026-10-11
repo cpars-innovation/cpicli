@@ -244,10 +244,6 @@ func baseContentType(ct string) string {
 	return ct
 }
 
-// extensionContentTypes maps file extensions to Partner Directory content
-// types for single-key deployments without a _metadata.json entry.
-var extensionContentTypes = map[string]string{".xsl": "xsl", ".xslt": "xsl", ".xml": "xml", ".json": "json", ".xsd": "xsd"}
-
 // PDKeyResult is the outcome for one key of a single-key deployment.
 type PDKeyResult struct {
 	Key    string `json:"key"`
@@ -292,10 +288,10 @@ func pdDeployKeys(api *cpi.PartnerDirectory, local *repo.PartnerDirectory, keys 
 			b := bins[i].BinaryParameter
 			if !bins[i].FromMetadata {
 				ext := strings.ToLower(filepath.Ext(bins[i].File))
-				ct, ok := extensionContentTypes[ext]
+				ct, ok := PDContentTypeForExtension(ext)
 				if !ok {
 					if slices.Contains(byPID[pid], b.ID) {
-						return nil, output.Usagef("%s: no content type in _metadata.json and unknown extension %q (known: .xsl, .xslt, .xml, .json, .xsd)", bins[i].File, ext)
+						return nil, output.Usagef("%s: no content type in _metadata.json and unknown extension %q (known: %s)", bins[i].File, ext, pdExtensions())
 					}
 					continue
 				}

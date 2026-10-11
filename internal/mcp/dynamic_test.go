@@ -81,7 +81,7 @@ func TestDynamicToolsets(t *testing.T) {
 	byID := serve(t, srv, `{"jsonrpc":"2.0","id":5,"method":"tools/list"}`,
 		call(6, "enable_toolset", map[string]any{"toolsets": []string{"security"}}),
 		call(7, "enable_toolset", map[string]any{"toolsets": []string{"nope"}}))
-	assert.ElementsMatch(t, []string{"doctor", "help", "list_toolsets", "enable_toolset", "list_credentials", "list_keystore"}, listedNames(t, byID["5"]))
+	assert.ElementsMatch(t, append([]string{"doctor", "help", "list_toolsets", "enable_toolset"}, Toolsets["security"]...), listedNames(t, byID["5"]))
 	again := toolResult(t, byID["6"])
 	assert.Contains(t, again.Content[0].Text, `"addedTools":[]`) // nothing new, no notification
 	assert.Equal(t, "usage", toolResult(t, byID["7"]).StructuredContent.ErrorCategory)

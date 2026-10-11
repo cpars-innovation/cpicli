@@ -62,6 +62,13 @@ Listing never returns secrets.`,
 			for _, a := range o.OAuth2Credentials {
 				log.Info().Msgf("oauth2        %-30s %s %s (%s)", a.Name, a.ClientID, a.TokenServiceURL, a.Status)
 			}
+			for _, a := range o.OAuth2AuthorizationCodes {
+				token := "no refresh token"
+				if a.RefreshTokenExists {
+					token = "refresh token"
+				}
+				log.Info().Msgf("oauth2-authcode %-28s %s %s (%s, %s)", a.Name, a.Provider, a.ClientID, a.UserName, token)
+			}
 			for _, p := range o.SecureParameters {
 				log.Info().Msgf("secure-param  %-30s (%s)", p.Name, p.Status)
 			}
@@ -71,7 +78,7 @@ Listing never returns secrets.`,
 			return nil
 		},
 	}
-	list.Flags().String("kind", "", "Only this kind: "+strings.Join(cpi.CredentialKinds, ", "))
+	list.Flags().String("kind", "", "Only this kind: "+strings.Join(cpi.ListCredentialKinds, ", "))
 
 	setUser := &cobra.Command{
 		Use:          "set-user",
@@ -209,7 +216,7 @@ func credentialOutcome(cmd *cobra.Command, res *ops.CredentialResult, err error)
 func NewKeystoreCommand() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "keystore",
-		Short: "List keystore entries, check expiry, export and import certificates",
+		Short: "Keystore: list and check expiry, certificates, key pairs, SSH keys, CSRs, chains, history",
 	}
 
 	list := &cobra.Command{
@@ -295,6 +302,7 @@ func NewKeystoreCommand() *cobra.Command {
 	imp.Flags().Bool("update", false, "Replace an existing entry with the same alias")
 
 	c.AddCommand(list, export, imp)
+	c.AddCommand(keystoreMaterialCommands()...)
 	return c
 }
 

@@ -4,6 +4,7 @@
 package cpitest
 
 import (
+	"crypto/ecdsa"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
@@ -193,11 +194,18 @@ type Trace struct {
 	ExchangeProperties map[string]string
 }
 
-// KeystoreEntry is a certificate of the mock tenant keystore.
+// KeystoreEntry is a certificate or key pair of the mock tenant keystore.
 type KeystoreEntry struct {
 	Alias    string
 	NotAfter time.Time
 	DER      []byte
+	// Type is Certificate (default), KeyPair or SSHKey; Owner "SAP" marks
+	// entries that cannot be deleted.
+	Type  string `json:",omitempty"`
+	Owner string `json:",omitempty"`
+	// Chain is the certificate chain of a key pair (DER, own certificate first).
+	Chain [][]byte `json:",omitempty"`
+	key   *ecdsa.PrivateKey
 }
 
 // Tenant is a mock CPI tenant.
@@ -209,6 +217,9 @@ type Tenant struct {
 	// SecureParametersUnavailable answers 404 for SecureParameters (Cloud Foundry).
 	SecureParametersUnavailable bool
 	Keystore                    []KeystoreEntry
+	// SecurityMaterial: key pairs history, PGP, access policies, audit log,
+	// alternative partners and authorized users.
+	SecurityMaterial
 	// MessageLogSteps: each MessageProcessingLogs query returns the next step
 	// (the last step repeats). Single-message endpoints look up all steps.
 	MessageLogSteps [][]MessageLog
@@ -302,6 +313,7 @@ type Tenant struct {
 	faults      []fault
 	tierSpec    *TierSpec
 	requests    []string
+	queries     map[string]url.Values
 	server      *httptest.Server
 }
 
@@ -377,6 +389,13 @@ func (m *Tenant) CSRFFetches() int {
 func (m *Tenant) PeakDownloads() int64 { return m.peakInFlight.Load() }
 
 // Requests returns "METHOD path" for every request received.
+// LastQuery returns a query parameter of the last request to path.
+func (m *Tenant) LastQuery(path, param string) string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.queries[path].Get(param)
+}
+
 func (m *Tenant) Requests() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -495,11 +514,15 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 	}
 	row := func(kind, key string) map[string]string {
 		pid, id, _ := strings.Cut(key, "/")
-		if kind == "String" {
-			return map[string]string{"Pid": pid, "Id": id, "Value": m.PDStrings[key]}
+		row := map[string]string{"Pid": pid, "Id": id, "Value": m.PDStrings[key]}
+		if kind != "String" {
+			b := m.PDBinaries[key]
+			row = map[string]string{"Pid": pid, "Id": id, "ContentType": b.ContentType, "Value": base64.StdEncoding.EncodeToString(b.Content)}
 		}
-		b := m.PDBinaries[key]
-		return map[string]string{"Pid": pid, "Id": id, "ContentType": b.ContentType, "Value": base64.StdEncoding.EncodeToString(b.Content)}
+		if sel := r.URL.Query().Get("$select"); sel != "" && !slices.Contains(strings.Split(sel, ","), "Value") {
+			delete(row, "Value") // $select without Value: the content is not sent
+		}
+		return row
 	}
 	exists := func(kind, key string) bool {
 		if kind == "String" {
@@ -826,6 +849,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	defer m.mu.Unlock()
 	path := r.URL.Path
 	m.requests = append(m.requests, r.Method+" "+path)
+	if m.queries == nil {
+		m.queries = map[string]url.Values{}
+	}
+	m.queries[path] = r.URL.Query()
 
 	if m.Live && r.Method == http.MethodGet && r.URL.Query().Has("$top") {
 		// collections that refuse $top on a real tenant, with its answers
@@ -920,6 +947,9 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if m.handleSecurity(w, r) {
+		return
+	}
 	switch {
 	case rePDCollection.MatchString(path) || rePDEntity.MatchString(path):
 		m.handlePD(w, r)
@@ -930,8 +960,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && path == "/api/v1/KeystoreEntries":
 		rows := []map[string]any{}
 		for _, e := range m.Keystore {
-			rows = append(rows, map[string]any{"Hexalias": strings.ToUpper(hex.EncodeToString([]byte(e.Alias))), "Alias": e.Alias,
-				"Type": "Certificate", "KeyType": "RSA", "KeySize": 2048, "ValidNotAfter": odataDate(e.NotAfter), "SubjectDN": "CN=" + e.Alias})
+			rows = append(rows, keystoreRow(e))
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
 

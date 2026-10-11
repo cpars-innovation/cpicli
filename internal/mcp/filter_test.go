@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
@@ -103,7 +104,7 @@ func TestToolsets(t *testing.T) {
 	}
 	// destructive tools are offered only on request (--tools)
 	for name := range names {
-		if name == "undeploy" || name == "delete_data_store_entry" || name == "unlock_artifact" || name == "doctor" {
+		if name == "undeploy" || name == "delete_data_store_entry" || slices.Contains(optInTools, name) || name == "doctor" {
 			continue
 		}
 		assert.True(t, inSome[name], "tool %s is in no toolset", name)

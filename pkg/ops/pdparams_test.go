@@ -121,6 +121,14 @@ func TestPDDeployKeys(t *testing.T) {
 		assert.Equal(t, exitcode.Usage, output.ExitCode(err), "%+v", opts)
 	}
 
+	// every SAP content type deploys by its file extension
+	for ext, ct := range map[string]string{".txt": "txt", ".zip": "zip", ".gz": "gz", ".zlib": "zlib", ".crt": "crt"} {
+		writeFile(t, filepath.Join(dir, "ONE_OMS", "Binary", "file_"+ct+ext), "content "+ct)
+		_, err := PDDeploy(api, local, PDDeployOptions{Keys: []string{"ONE_OMS:file_" + ct}})
+		require.NoError(t, err, ext)
+		assert.Equal(t, ct, mock.PDBinaries["ONE_OMS/file_"+ct].ContentType, ext)
+	}
+
 	before := len(mock.Requests())
 	res, err = PDDeploy(api, local, PDDeployOptions{Keys: []string{"ONE_OMS:new"}, DryRun: true})
 	require.NoError(t, err)

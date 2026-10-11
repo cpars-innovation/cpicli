@@ -156,6 +156,14 @@ var credentialCollections = map[string]string{
 // CredentialKinds lists the supported credential kinds.
 var CredentialKinds = []string{KindUser, KindOAuth2, KindSecureParam}
 
+// KindOAuth2AuthCode is the kind of OAuth2 authorization code credentials:
+// listed, but created only in the Web UI (they need the user's consent in a
+// browser).
+const KindOAuth2AuthCode = "oauth2-authcode"
+
+// ListCredentialKinds are the kinds `credentials list` accepts.
+var ListCredentialKinds = []string{KindUser, KindOAuth2, KindOAuth2AuthCode, KindSecureParam}
+
 func collection(kind string) (string, error) {
 	c, ok := credentialCollections[kind]
 	if !ok {

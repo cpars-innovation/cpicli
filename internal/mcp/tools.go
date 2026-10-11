@@ -80,8 +80,18 @@ undeploy requires confirm=true. Partner Directory: pd_dependencies (which flows 
 values), pd_diff (local vs tenant), then
 pd_deploy keys=["PID:ID"] to change one parameter without redeploying flows. pd_deploy is a
 dry run unless dry_run=false. send_test_message
-triggers real processing, including receiver calls. Security material is read-only here
-(list_credentials, list_keystore): secrets never pass through this server.`
+triggers real processing, including receiver calls. list_pd_partners lists the partners
+(parameter counts, content types); list_alternative_partners / list_authorized_users and
+create_alternative_partner / create_authorized_user manage partner identification.
+Security material: list_credentials (including OAuth2 authorization code credentials),
+list_keystore, list_keystore_history, get_certificate_chain, get_ssh_public_key, list_pgp_keys,
+list_access_policies, list_audit_logs (who changed what; status missing_role = no role, do not
+retry). Certificates: generate_key_pair (the tenant creates the key) -> get_csr -> the user has
+it signed -> upload_certificate_chain. create_access_policy / add_artifact_reference restrict
+artifacts to a role. Secrets and private keys never pass through this server (credentials, SSH
+key import and PGP keyrings: ask the user to run cpictl). The delete tools (delete_keystore_entry,
+delete_access_policy, delete_artifact_reference, delete_alternative_partner,
+delete_authorized_user) need confirm and are offered only when --tools names them.`
 
 // Config configures the CPI tools.
 type Config struct {
@@ -131,7 +141,7 @@ func Tools(cfg Config) []Tool {
 	}
 	reverter := cfg.LogLevels
 	cache := newReadCache(cfg.CacheTTL)
-	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), graphTools(cfg))
+	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), securityTools(cfg, readOnly), graphTools(cfg))
 	for i := range tools {
 		inner := tools[i].Handler
 		changesTenant := toolEffects[tools[i].Name] == EffectTenant

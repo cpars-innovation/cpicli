@@ -17,7 +17,7 @@ import (
 func NewPDCommand() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "pd",
-		Short: "Inspect Partner Directory parameters (get, diff, deps)",
+		Short: "Partner Directory: partners, parameters (get, diff, deps), alternative partners, authorized users",
 	}
 
 	get := &cobra.Command{
@@ -118,5 +118,6 @@ directory are listed as unknown. Nothing is read from the tenant.`,
 	deps.Flags().String("id", "", "Only this parameter ID")
 
 	c.AddCommand(get, diff, deps)
+	c.AddCommand(pdPartnerCommands()...)
 	return c
 }

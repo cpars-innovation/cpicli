@@ -358,8 +358,8 @@ Tools cover the whole loop: `doctor`, `create_package`, `download_artifact`, `dr
 `list_message_logs`, `get_message_log`, `get_message_steps`, `get_message_attachment`,
 `get_message_store_entry`, parameters, resources, `discover_tenant`, `graph_search`, `graph_neighbors`,
 `graph_path`, `list_credentials`,
-`list_keystore`, `undeploy` and `pd_deploy`. Security material is read-only over MCP; secrets never pass
-through the agent.
+`list_keystore`, key pairs and CSRs, PGP keys, access policies, the audit log, Partner Directory
+partners, `undeploy` and `pd_deploy`. Secrets and private keys never pass through the agent.
 Every result carries `ok`, an `errorCategory` matching the exit codes, and the structured result.
 See [docs/mcp.md](docs/mcp.md).
 

@@ -79,8 +79,83 @@ cpictl keystore import-cert --alias partner_acme --file acme-2027.pem --update
 ```
 
 `import-cert` validates the file as an X.509 certificate before uploading, rejects private
-keys and refuses to replace an existing alias without `--update`. Key pair generation,
-keystore backup/restore and history operations are intentionally not offered.
+keys and refuses to replace an existing alias without `--update`.
+
+### Key pairs, CSRs and SSH keys
+
+```bash
+# the tenant generates the key; the private key never leaves it (RSA 2048, one year by default)
+cpictl keystore generate-key-pair --alias client_cert --cn cpi-client.example.com --org "Example AG" --country DE
+cpictl keystore csr --alias client_cert --out client_cert.csr       # PKCS#10 for the CA
+cpictl keystore upload-chain --alias client_cert --file signed-chain.pem   # the CA's answer, own certificate first
+cpictl keystore chain --alias client_cert                           # self-signed or CA-signed?
+
+cpictl keystore generate-ssh-key --alias sftp_partner --cn sftp_partner
+SSH_PW=... cpictl keystore generate-ssh-key --alias sftp_partner --cn sftp_partner --ssh-file id_rsa --password-env SSH_PW
+cpictl keystore ssh-public-key --alias sftp_partner >> authorized_keys   # OpenSSH format
+
+cpictl keystore history                                             # former versions of entries
+cpictl keystore delete --alias partner_acme_old --confirm
+```
+
+- `generate-key-pair` and `generate-ssh-key` refuse an existing alias without `--update`;
+  SAP-owned entries (`sap_*`, owner SAP) can be neither replaced nor deleted.
+- `csr` and `upload-chain` need a key pair (or SSH key); `upload-chain` accepts PEM with several
+  certificates or one DER certificate and rejects private keys.
+- `generate-ssh-key --ssh-file` imports an existing OpenSSH private key; its password comes from
+  `--password-env`, `--password-file` or `--password-stdin` and is never logged.
+- `history` lists `HistoryKeystoreEntries` (versions replaced by renewals or updates). The API has
+  no call to reactivate a history version or to restore the backup keystore
+  (`keystore list --keystore backup_admin_system` shows it); use the Web UI for that.
+
+MCP: `list_keystore_history`, `get_certificate_chain`, `get_csr`, `get_ssh_public_key`,
+`generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry` (confirm, opt-in). SSH key
+import stays a CLI command: it needs a private key and a password.
+
+## OAuth2 authorization code credentials
+
+`credentials list` includes OAuth2 authorization code credentials (`--kind oauth2-authcode`):
+name, provider, client ID, user, whether a refresh token exists. Client secret and refresh token
+are never shown. They are created in the Web UI (the user's consent needs a browser).
+
+## PGP keyrings
+
+```bash
+cpictl pgp list                                  # public and secret keys: key ID, user IDs, sub keys, validity
+cpictl pgp export-public --out pubring.gpg
+cpictl pgp import-public --file pubring-new.gpg --confirm   # replaces the public keyring
+```
+
+`list` shows metadata only, never key material. `import-public` replaces the whole public
+keyring: export it first and merge locally. Secret keys are refused. MCP: `list_pgp_keys`.
+
+## Access policies
+
+```bash
+cpictl access-policies list
+cpictl access-policies create --role OrdersTeam --policy-description "Orders flows" \
+  --name Orders --type INTEGRATION_FLOW --attribute Name --value 'Orders_.*' --condition REGULAR_EXPRESSION
+cpictl access-policies add-reference --policy-id 1001 --name Returns --value Returns_In
+cpictl access-policies delete-reference --id 1002 --confirm
+cpictl access-policies delete --id 1001 --confirm
+```
+
+An artifact matched by a policy's artifact reference is accessible only to users with the
+policy's role. Deleting a policy or a reference lifts the restriction. MCP:
+`list_access_policies`, `create_access_policy`, `add_artifact_reference`; `delete_access_policy`
+and `delete_artifact_reference` (confirm, opt-in).
+
+## Audit log
+
+```bash
+cpictl audit-log --since 24h
+cpictl audit-log --since 7d --user dev@example.com --object Orders
+```
+
+Newest first, at most `--top` entries (default 200). Without a role that may read the audit log
+the tenant answers 403: the result has `status: missing_role` and a hint (exit code 0), and
+`cpictl doctor` lists the `audit log` area as forbidden (as on trial tenants). MCP:
+`list_audit_logs`.
 
 ## Roles
 

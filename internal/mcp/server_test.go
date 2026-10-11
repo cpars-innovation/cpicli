@@ -119,7 +119,11 @@ func TestProtocol(t *testing.T) {
 		"get_parameters", "set_parameters", "create_package", "upload_artifact", "upload_artifacts", "deploy", "send_test_message", "undeploy", "pd_deploy",
 		"get_pd_parameters", "pd_diff", "pd_dependencies", "config_diff", "drift", "compare", "transport_check", "discover_tenant",
 		"list_data_stores", "list_data_store_entries", "get_data_store_entry", "delete_data_store_entry", "list_variables", "get_variable",
-		"list_jms_queues", "get_jms_broker", "list_number_ranges", "list_log_files", "get_log_file", "list_idempotent_entries", "list_id_mappings", "list_locks", "unlock_artifact", "graph_search", "graph_neighbors", "graph_path"}, names)
+		"list_jms_queues", "get_jms_broker", "list_number_ranges", "list_log_files", "get_log_file", "list_idempotent_entries", "list_id_mappings", "list_locks", "unlock_artifact",
+		"list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key", "generate_key_pair", "upload_certificate_chain", "delete_keystore_entry",
+		"list_pgp_keys", "list_access_policies", "create_access_policy", "add_artifact_reference", "delete_access_policy", "delete_artifact_reference",
+		"list_audit_logs", "list_pd_partners", "list_alternative_partners", "create_alternative_partner", "delete_alternative_partner",
+		"list_authorized_users", "create_authorized_user", "delete_authorized_user", "graph_search", "graph_neighbors", "graph_path"}, names)
 
 	assert.Nil(t, resp["3"].Error)
 	assert.Equal(t, codeMethodNotFound, resp["4"].Error.Code)

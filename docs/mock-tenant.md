@@ -164,6 +164,13 @@ The built-in demo is a landscape of this format (`internal/cpitest/landscapes/de
   left running does not grow without limit. The age is measured from the newest log, not the
   clock: logs added for an earlier period, and a mock seeded in the past, keep their history until
   newer logs push it out. In Go tests: `Tenant.LogRetention` and `Tenant.MaxLogs`.
+- Security material: key pairs and SSH keys can be generated (the mock creates a real key, so
+  `keystore csr` returns a valid PKCS#10 and `upload-chain` accepts the signed chain), entries
+  deleted (SAP-owned ones refuse), and the keystore history, PGP keyrings and keys, OAuth2
+  authorization code credentials, access policies with artifact references and the audit log are
+  served (empty unless set in Go tests: `Tenant.SecurityMaterial`). `Partners`, alternative
+  partners and authorized users of the Partner Directory work the same way; parameter listings
+  honour `$select` (no values without `Value`).
 - Data stores and log files answer with empty lists; APIs the mock does not know answer 404.
 
 ## Execution
