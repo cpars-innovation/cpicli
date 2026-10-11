@@ -5,6 +5,21 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `cpictl connections`: the integration connections the tenant computes from its deployed flows
+  (sender host -> flows -> receiver host; `--refresh` recomputes). MCP
+  `list_integration_connections`.
+- `cpictl log-files archive --type http|trace --out x.zip`: the latest log files as one zip. MCP
+  `download_log_archive`.
+- `cpictl tenant-settings`: external logging and archiving on/off and the last archiving runs;
+  `tenant-settings external-logging --on|--off --confirm`, `tenant-settings archiving --on
+  --confirm`. MCP `get_tenant_settings` (read only).
+- `cpictl components learn` (tenant) records custom adapters deployed on the tenant with their
+  version (`deployedAdapters`). The API has no list of SAP's own adapter versions; those come
+  from the editor metadata (`components import`).
+- Mock tenant: integration connections (derived from the running flows; it requires the
+  `InvalidateCache` header like a tenant), log file archives, external logging and archiving
+  switches.
+
 - Component catalogue (`.cpi/components.json`, [docs/components.md](docs/components.md)): the
   adapter and step variants (`cmdVariantUri`) and versions the tenant offers.
   `cpictl components import <editor metadata>` reads the Web UI's editor metadata (what the

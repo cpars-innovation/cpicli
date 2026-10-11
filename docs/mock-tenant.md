@@ -187,6 +187,9 @@ executed: the payload passes through unchanged.
 - A receiver whose `credentialName` (SFTP: `credential_name`) does not exist on the tenant fails with
   `credential <name> not found on this tenant` (so a missing credential shows in the logs, not only
   in `transport check`).
+- **Integration connections** are derived from the running flows: per flow and external receiver
+  (not ProcessDirect or JMS) the first sender adapter to the receiver's host. How a tenant names
+  sender hosts is not known yet, so treat the sender side as an approximation.
 - **Check** (`validate`) runs a structural check of the flow and answers like a tenant:
   `Check execution result: Passed`, or `Failed` followed by the findings as SAP's JSON array
   (`severity`, `message`, `sourceObject`, `resourcePath`, `resourceName`). It reports required

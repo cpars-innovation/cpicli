@@ -230,7 +230,7 @@ func NewLogFilesCommand() *cobra.Command {
 	get.Flags().String("application", "", "Application of the log file")
 	get.Flags().Int("tail-bytes", 65536, "Bytes from the end of the file")
 	get.Flags().String("out", "", "Write the content to this file instead of stdout / the JSON result")
-	c.AddCommand(get)
+	c.AddCommand(get, newLogArchiveCommand())
 	return c
 }
 

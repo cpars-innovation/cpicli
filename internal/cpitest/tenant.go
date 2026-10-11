@@ -248,6 +248,8 @@ type Tenant struct {
 
 	// Locks are the edit locks (artifacts open for editing in the Web UI).
 	Locks []Lock
+	// ExternalLogging and Archiving are the tenant-wide switches.
+	ExternalLogging, Archiving bool
 
 	mu        sync.Mutex
 	Artifacts map[string]*Artifact
@@ -1112,6 +1114,8 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, map[string]string{"Name": k, "Value": props[k]})
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
+
+	case m.handlePlatform(w, r, path):
 
 	case r.Method == http.MethodGet && path == "/api/v1/IntegrationDesigntimeLocks":
 		rows := []map[string]any{}

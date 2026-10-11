@@ -250,6 +250,9 @@ read roles.
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
 | `delete_data_store_entry` | tenant, **destructive** | Delete one entry; requires `confirm: true` |
 | `list_locks` | | Artifacts open for editing in the Web UI: artifact, package, who holds the lock, since when |
+| `list_integration_connections` | | Sender host -> flows -> receiver host, as the tenant computes it from the deployed flows (`refresh` recomputes) |
+| `get_tenant_settings` | | External logging and archiving on/off, last archiving runs |
+| `download_log_archive` | local file | Zip of the latest `http` or `trace` log files, below the server root |
 | `list_components` | | Adapter and step variants (cmdVariantUri, version) the tenant offers, from `.cpi/components.json` ([components.md](components.md)); filter by name, kind, direction |
 | `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--tools unlock_artifact` |
 | `list_variables`, `get_variable` | | Global and flow variables, and a value |

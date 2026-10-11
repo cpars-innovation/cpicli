@@ -34,6 +34,8 @@ It is built from two sources:
           cpictl cannot fetch it). Authoritative: what the tenant offers today.
   learn   the variants existing flows use (versions the tenant accepted); also
           done by 'cpictl discover'. Automatic, but only knows what is in use.
+          From the tenant it also records the custom adapters deployed there
+          (runtime artifacts of an adapter type) with their version.
 Entries from the editor metadata win over learned ones.`,
 		Example: `  cpictl components import metadata.json
   cpictl components learn                 # all flows of the tenant
@@ -113,6 +115,19 @@ Entries from the editor metadata win over learned ones.`,
 			if err != nil {
 				return err
 			}
+			if tenant != "" {
+				deployed, err := ops.DeployedAdapters(tenantExecuter(cmd))
+				if err != nil {
+					return err
+				}
+				cat.DeployedAdapters = deployed
+				if err := cat.Save(file); err != nil {
+					return err
+				}
+				for _, a := range deployed {
+					log.Info().Msgf("Deployed custom adapter %s %s (%s)", a.ID, a.Version, a.Status)
+				}
+			}
 			output.SetResult(cmd.Context(), map[string]any{"file": file, "iflows": len(d.IFlows), "adapters": len(cat.Adapters), "steps": len(cat.Steps), "sources": cat.Sources})
 			log.Info().Msgf("Learned from %d integration flow(s): %d adapter and %d step variants in %s", len(d.IFlows), len(cat.Adapters), len(cat.Steps), file)
 			return nil
@@ -136,6 +151,9 @@ Entries from the editor metadata win over learned ones.`,
 			output.SetResult(cmd.Context(), res)
 			for _, a := range res.Adapters {
 				log.Info().Msgf("adapter %-22s %-9s %-10s %s", a.Name, a.Direction, a.Version, a.VariantURI)
+			}
+			for _, a := range res.DeployedAdapters {
+				log.Info().Msgf("deployed %-21s %-10s %s", a.ID, a.Version, a.Status)
 			}
 			for _, s := range res.Steps {
 				log.Info().Msgf("step    %-32s %-10s %s", s.Name, s.Version, s.VariantURI)

@@ -67,6 +67,9 @@ without a message log), list_idempotent_entries (skipped duplicates), list_id_ma
 Components: list_components gives the adapter and step variants (cmdVariantUri) and versions the
 tenant offers (.cpi/components.json); use them when writing flow XML, a newer version fails the
 tenant's Check (lint rule component-newer-than-tenant).
+Tenant: list_integration_connections (which systems the deployed flows connect, as the tenant
+computes it), get_tenant_settings (external logging, archiving), download_log_archive (zip of
+the latest http or trace logs).
 Locks: list_locks shows artifacts open for editing (an update fails while someone holds the
 lock). unlock_artifact (confirm; offered only when the server's --tools names it) discards the
 lock holder's unsaved changes: only on the user's explicit request.
@@ -137,7 +140,7 @@ func Tools(cfg Config) []Tool {
 	}
 	reverter := cfg.LogLevels
 	cache := newReadCache(cfg.CacheTTL)
-	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), componentTools(cfg, readOnly), graphTools(cfg))
+	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), componentTools(cfg, readOnly), platformTools(cfg, readOnly), graphTools(cfg))
 	for i := range tools {
 		inner := tools[i].Handler
 		changesTenant := toolEffects[tools[i].Name] == EffectTenant

@@ -15,6 +15,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`config-generate`](#config-generate) | Generate or refresh the orchestrator deployment config from a packages directory |
 | [`configure`](#configure) | Set artifact parameters from YAML files and optionally deploy |
 | [`configure pull`](#configure-pull) | Write current tenant parameter values into configure YAML files |
+| [`connections`](#connections) | List the integration connections the tenant computes: sender host -> flows -> receiver host |
 | [`credentials`](#credentials) | List and deploy user credentials, OAuth2 client credentials and secure parameters |
 | [`credentials apply`](#credentials-apply) | Create or update all credentials of a YAML file |
 | [`credentials delete`](#credentials-delete) | Delete a credential (requires --confirm) |
@@ -56,6 +57,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`locks list`](#locks-list) | List edit locks (who, since when) |
 | [`locks unlock`](#locks-unlock) | Remove the edit lock of an artifact (requires --confirm) |
 | [`log-files`](#log-files) | List system and HTTP log files of the runtime |
+| [`log-files archive`](#log-files-archive) | Download the latest log files of a type as one zip |
 | [`log-files get`](#log-files-get) | Print the end of a log file |
 | [`log-level`](#log-level) | Set the message processing log level of a deployed integration flow |
 | [`logs`](#logs) | Query message processing logs |
@@ -101,6 +103,9 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`sync`](#sync) | Synchronise the artifacts of a package between tenant and Git |
 | [`sync apiproduct`](#sync-apiproduct) | Synchronise API Management products between tenant and Git |
 | [`sync apiproxy`](#sync-apiproxy) | Synchronise API Management proxies (with dependent artifacts) between tenant and Git |
+| [`tenant-settings`](#tenant-settings) | Show tenant-wide runtime settings: external logging, archiving and its last runs |
+| [`tenant-settings archiving`](#tenant-settings-archiving) | Switch on archiving of message processing logs (requires --confirm; the API cannot switch it off) |
+| [`tenant-settings external-logging`](#tenant-settings-external-logging) | Switch external logging of message processing logs (requires --confirm) |
 | [`transport`](#transport) | Prepare a transport between tiers: dependencies, pre-checks against the target, copy artifact folders |
 | [`transport check`](#transport-check) | Check a transport against the target tenant (read only) |
 | [`transport copy`](#transport-copy) | Copy artifact folders into another content tree (local files) |
@@ -208,6 +213,8 @@ It is built from two sources:
           cpictl cannot fetch it). Authoritative: what the tenant offers today.
   learn   the variants existing flows use (versions the tenant accepted); also
           done by 'cpictl discover'. Automatic, but only knows what is in use.
+          From the tenant it also records the custom adapters deployed there
+          (runtime artifacts of an adapter type) with their version.
 Entries from the editor metadata win over learned ones.
 ```
 
@@ -392,6 +399,33 @@ Write current tenant parameter values into configure YAML files
   -o, --output-dir string     Directory for one YAML file per package (default ".")
       --package-ids strings   Package IDs to pull (default: all packages)
       --parallel int          Tenant reads at the same time (config: configure.pull.parallel) (default 8)
+```
+
+## connections
+
+List the integration connections the tenant computes: sender host -> flows -> receiver host
+
+```
+The tenant computes which systems its deployed integration flows connect: per
+connection the sender and receiver host and the flows in between (as in the
+Web UI's "Integration Connections"). --refresh makes the tenant recompute them
+from the deployed flows instead of answering from its cache.
+```
+
+**Usage:** `cpictl connections [flags]`
+
+**Flags:**
+
+```
+      --filter string   Only connections with a host or flow containing this
+      --refresh         Recompute the connections from the deployed flows
+```
+
+**Examples:**
+
+```
+  cpictl connections
+  cpictl connections --filter erp --refresh
 ```
 
 ## credentials
@@ -1270,6 +1304,26 @@ List system and HTTP log files of the runtime
 ```
   cpictl log-files --type http --since 2h
   cpictl log-files get --name http_access_2026-10-05.log --application it-cpi --tail-bytes 20000
+```
+
+## log-files archive
+
+Download the latest log files of a type as one zip
+
+**Usage:** `cpictl log-files archive [flags]`
+
+**Flags:**
+
+```
+      --out string    Zip file to write
+      --type string   Log file type: http or trace (default "http")
+```
+
+**Examples:**
+
+```
+  cpictl log-files archive --type http --out logs/http.zip
+  cpictl log-files archive --type trace --out logs/trace.zip
 ```
 
 ## log-files get
@@ -2414,6 +2468,47 @@ Configuration:
 ```
 
 **Usage:** `cpictl sync apiproxy`
+
+## tenant-settings
+
+Show tenant-wide runtime settings: external logging, archiving and its last runs
+
+**Usage:** `cpictl tenant-settings`
+
+**Examples:**
+
+```
+  cpictl tenant-settings
+  cpictl tenant-settings external-logging --on --confirm
+  cpictl tenant-settings archiving --on --confirm
+```
+
+## tenant-settings archiving
+
+Switch on archiving of message processing logs (requires --confirm; the API cannot switch it off)
+
+**Usage:** `cpictl tenant-settings archiving [flags]`
+
+**Flags:**
+
+```
+      --confirm   Confirm the change
+      --on        Switch on
+```
+
+## tenant-settings external-logging
+
+Switch external logging of message processing logs (requires --confirm)
+
+**Usage:** `cpictl tenant-settings external-logging [flags]`
+
+**Flags:**
+
+```
+      --confirm   Confirm the change
+      --off       Switch off
+      --on        Switch on
+```
 
 ## transport
 

@@ -40,6 +40,18 @@ type Catalog struct {
 	Sources  []string  `json:"sources"`
 	Adapters []Adapter `json:"adapters"`
 	Steps    []Step    `json:"steps"`
+	// DeployedAdapters are custom adapters deployed on the tenant (runtime
+	// artifacts of an adapter type), with the deployed version.
+	DeployedAdapters []DeployedAdapter `json:"deployedAdapters,omitempty"`
+}
+
+// DeployedAdapter is a custom adapter deployed on the tenant.
+type DeployedAdapter struct {
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version"`
+	Type    string `json:"type"`
+	Status  string `json:"status,omitempty"`
 }
 
 // Adapter is one adapter variant (adapter, direction, transport and message
