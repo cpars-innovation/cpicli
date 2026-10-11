@@ -19,6 +19,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/stats"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -164,6 +165,8 @@ func Execute(version, buildTime string) {
 // Results go to stdout, logs to stderr.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, buildTime string) int {
 	begin := time.Now()
+	// logs and --events - share stderr: one lock for every writer
+	stderr = zerolog.SyncWriter(stderr)
 	rootCmd := NewCLI(version)
 	rootCmd.SetVersionTemplate(fmt.Sprintf("cpictl version {{.Version}} (built %s)\n", buildTime))
 	rootCmd.SetArgs(args)
