@@ -1,13 +1,17 @@
 package cpitest
 
 import (
+	"cmp"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/mail"
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 )
 
@@ -43,12 +47,50 @@ var numericProps = map[string][]string{
 // tenant's wording is known.
 var propLabel = map[string]string{"server": "Address", "address": "Address", "httpAddressWithoutQuery": "Address"}
 
+// runtimeProfile is the runtime profile whose component versions the mock's
+// Check accepts (the profile of a Cloud Foundry tenant).
+const runtimeProfile = "integrationcell"
+
+// defaultComponentsJSON is the component catalogue of the mock's runtime
+// profile: SAP's editor metadata of an integrationcell tenant (Web UI,
+// /api/1.0/metadata), imported with catalog.Import (cpictl components
+// import) and stored one entry per line.
+//
+//go:embed components.json
+var defaultComponentsJSON []byte
+
+var defaultComponents = sync.OnceValues(func() (*catalog.Catalog, error) {
+	return parseCatalog(defaultComponentsJSON, "components.json")
+})
+
+// DefaultComponents is the mock's built-in component catalogue.
+func DefaultComponents() *catalog.Catalog {
+	c, err := defaultComponents()
+	if err != nil {
+		panic(err) // embedded and tested
+	}
+	return c
+}
+
+// parseCatalog reads a component catalogue (cpictl components format).
+func parseCatalog(data []byte, name string) (*catalog.Catalog, error) {
+	var c catalog.Catalog
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	if c.Schema != catalog.Schema {
+		return nil, fmt.Errorf("%s: not a component catalogue (schema %q, expected %q)", name, c.Schema, catalog.Schema)
+	}
+	return &c, nil
+}
+
 // checkFlow runs the structural part of a tenant's Check on an integration
-// flow: required channel attributes, numeric values, mail addresses and the
-// scripts the steps reference. Only the messages for the address and mail
-// attributes are worded exactly as a tenant words them; the rest follow the
-// same pattern.
-func checkFlow(c *artifactContent) []checkIssue {
+// flow: component versions the runtime profile supports (cat; nil: no
+// version check), required channel attributes, numeric values, mail
+// addresses and the scripts the steps reference. The messages for the
+// component versions, adapter details, address and mail attributes are
+// worded as a tenant words them; the rest follow the same pattern.
+func checkFlow(c *artifactContent, cat *catalog.Catalog) []checkIssue {
 	if c.Model == nil {
 		return nil
 	}
@@ -60,8 +102,31 @@ func checkFlow(c *artifactContent) []checkIssue {
 	resPath = strings.TrimSuffix(resPath, "/")
 	var issues []checkIssue
 	add := func(el *iflow.Element, etype, pid, msg string) {
-		issues = append(issues, checkIssue{Severity: "Error", Message: msg, ResourcePath: resPath, ResourceName: resName,
-			SourceObject: fmt.Sprintf("ComponentMetadataEditor/eid:%s/etype:%s/location:%s/pid:%s", el.ID, etype, el.Name, pid)})
+		src := fmt.Sprintf("ComponentMetadataEditor/eid:%s/etype:%s/location:%s", el.ID, etype, el.Name)
+		if pid != "" {
+			src += "/pid:" + pid
+		}
+		issues = append(issues, checkIssue{Severity: "Error", Message: msg, ResourcePath: resPath, ResourceName: resName, SourceObject: src})
+	}
+	if cat != nil {
+		for _, a := range m.Adapters {
+			details, version := checkAdapterVersion(cat, a)
+			if details {
+				add(a, "MessageFlow", "", "Enter adapter details for channel")
+			}
+			if version != "" {
+				add(a, "MessageFlow", "", unsupported(a.Props["ComponentType"], version))
+			}
+		}
+		for _, id := range m.Order {
+			el := m.Elements[id]
+			uri := el.Props["cmdVariantUri"]
+			v := catalog.Version(uri)
+			offered, ok := cat.Offered(uri)
+			if v != "" && ok && offered != "" && catalog.CompareVersions(v, offered) > 0 {
+				add(el, etypeOf(el), "", unsupported(el.Kind(), v))
+			}
+		}
 	}
 	for _, a := range m.Adapters {
 		kind := a.Props["ComponentType"] + "/" + a.Props["direction"]
@@ -102,6 +167,86 @@ func checkFlow(c *artifactContent) []checkIssue {
 		}
 	}
 	return issues
+}
+
+func unsupported(component, version string) string {
+	return fmt.Sprintf("This component %s with version %s is not supported in %s profile.", component, version, runtimeProfile)
+}
+
+// etypeOf is the element type in a sourceObject (callActivity -> CallActivity).
+func etypeOf(el *iflow.Element) string {
+	if el.Tag == "" {
+		return ""
+	}
+	return strings.ToUpper(el.Tag[:1]) + el.Tag[1:]
+}
+
+// checkAdapterVersion checks a channel against the runtime profile's
+// catalogue as a tenant does. details: the variant URI names no variant the
+// tenant knows (it then asks for the adapter details). version: the version
+// the profile does not support (empty: supported). The tenant reads the
+// version from componentVersion and falls back to 1.0 without it; the
+// profile supports versions up to the one its editor offers, and no 1.0 of
+// an adapter that has a newer version (SAP's adapters of the first
+// generation), which is what a real tenant answered for HTTPS, HTTP,
+// ProcessDirect and JMS channels with version 1.0.
+func checkAdapterVersion(cat *catalog.Catalog, a *iflow.Element) (details bool, version string) {
+	uri := a.Props["cmdVariantUri"]
+	offered, ok := "", false
+	if uri != "" {
+		if _, known := cat.Latest(uri); !known {
+			details = true
+		}
+		offered, ok = cat.Offered(uri)
+	}
+	if !ok {
+		offered, ok = offeredAdapter(cat, a)
+	}
+	if !ok {
+		return details, ""
+	}
+	cv := cmp.Or(a.Props["componentVersion"], "1.0")
+	offeredCV := majorMinor(offered)
+	switch {
+	case catalog.CompareVersions(cv, offeredCV) > 0:
+		return details, cv
+	case uri != "" && catalog.Version(uri) != "" && catalog.CompareVersions(catalog.Version(uri), offered) > 0:
+		return details, catalog.Version(uri)
+	case catalog.CompareVersions(majorMinor(cv), "1.0") <= 0 && catalog.CompareVersions(offeredCV, "1.0") > 0:
+		return details, cv
+	}
+	return details, ""
+}
+
+// offeredAdapter finds the editor's version of a channel's adapter by its
+// properties (ComponentType, direction, protocols) when the variant URI does
+// not name it; the newest of the matching variants.
+func offeredAdapter(cat *catalog.Catalog, a *iflow.Element) (string, bool) {
+	best, ok := "", false
+	for _, e := range cat.Adapters {
+		if e.Source != catalog.SourceEditor || !strings.EqualFold(e.Name, a.Props["ComponentType"]) || !strings.EqualFold(e.Direction, a.Props["direction"]) {
+			continue
+		}
+		if tp := a.Props["TransportProtocol"]; tp != "" && e.TransportProtocol != "" && !strings.EqualFold(tp, e.TransportProtocol) {
+			continue
+		}
+		if mp := a.Props["MessageProtocol"]; mp != "" && e.MessageProtocol != "" && !strings.EqualFold(mp, e.MessageProtocol) {
+			continue
+		}
+		if !ok || catalog.CompareVersions(e.Version, best) > 0 {
+			best, ok = e.Version, true
+		}
+	}
+	return best, ok
+}
+
+// majorMinor is the first two parts of a version (1.6.3 -> 1.6).
+func majorMinor(v string) string {
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) > 2 {
+		parts = parts[:2]
+	}
+	return strings.Join(parts, ".")
 }
 
 func cmpLabel(k string) string {

@@ -8,9 +8,9 @@
 //
 // The supported entry points are Serve and Start (start a live mock), SeedDemo,
 // SeedDir and SeedLandscape (load content; LoadLandscapeDir reads a
-// landscape), Tenant.MessageLogs (what the mock logged) and the admin API
-// under /_mock (set Tenant.AdminToken to require a bearer token from every
-// client). Tenant, Landscape and the other types are aliases of internal
+// landscape), Tenant.Auth (check credentials like a tenant),
+// Tenant.MessageLogs (what the mock logged) and the admin API under /_mock
+// (set Tenant.AdminToken to require a bearer token from every client). Tenant, Landscape and the other types are aliases of internal
 // types: use the documented entry points and fields such as Artifacts, URL
 // and Executer, and expect everything else, in particular the test-scripting
 // fields, to change.
@@ -39,13 +39,19 @@ type (
 	Artifact = cpitest.Artifact
 	// Package is an integration package of the mock.
 	Package = cpitest.Package
+	// Auth makes the mock check credentials like a tenant with an API key
+	// and a runtime key (set Tenant.Auth; nil accepts any credentials).
+	Auth = cpitest.Auth
+	// Client is an OAuth client (client ID and secret).
+	Client = cpitest.Client
 )
 
 // DemoTiers are the tiers of the demo landscape.
 var DemoTiers = cpitest.DemoTiers
 
 // Serve starts a live mock on a listener the caller opened (optionally TLS).
-// It accepts Basic Auth with CSRF and OAuth client credentials (any client).
+// It accepts Basic Auth with CSRF and OAuth client credentials (any client;
+// set Tenant.Auth to tell the API key from the runtime key like a tenant).
 func Serve(l net.Listener, config *tls.Config) *Tenant {
 	m := cpitest.Serve(l, config)
 	live(m)

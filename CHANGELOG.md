@@ -5,6 +5,26 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Mock tenant: `validate` checks component versions against the runtime profile
+  (`integrationcell`) like a tenant: a channel with version 1.0 of an adapter that has a newer one
+  (or without `componentVersion`, which the tenant reads as 1.0) fails with `This component HTTP
+  with version 1.0 is not supported in integrationcell profile.`, a variant URI the tenant does
+  not know with `Enter adapter details for channel`, and adapters or steps newer than the tenant
+  offers fail too. The versions come from a built-in component catalogue (SAP's editor metadata of
+  an integrationcell tenant); `landscape.yaml` can bring its own (`components:`, also per tier).
+- Mock tenant: `--credentials strict` checks credentials like a tenant with two service keys: the
+  API user or client (`--api-user`, `--api-password`, `--api-client-id`, `--api-client-secret`)
+  on `/api/v1`, the runtime client (`--runtime-client-id`, `--runtime-client-secret`, default
+  `mock-rt`) on `/http/...` and `/cxf/...`; the other key gets 403, wrong credentials 401, and the
+  token endpoint issues a token per client. The default `--credentials any` accepts any
+  credentials as before. The start output prints `CPICTL_RUNTIME_OAUTH_*` for `cpictl send`.
+- Mock tenant: uploads set `ModifiedAt` and `ModifiedBy` (the API user or OAuth client of the
+  request) on every save, also outside the live mode and for value mappings; the artifact itself
+  reports `ModifiedBy` too.
+- Mock tenant: the demo's `Billing_Post` script writes an `Invoice` attachment, so failed
+  postings have a trace and an attachment (scripts calling `addAttachmentAsString` get one);
+  data stores and log files are empty lists with `--seed empty` too (were 404).
+
 ## 0.9.1
 
 - Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with

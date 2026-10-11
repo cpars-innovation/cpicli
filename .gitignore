@@ -40,3 +40,6 @@
 
 # Landscape fixtures embedded by the mock tenant (go:embed)
 !internal/cpitest/landscapes/**
+
+# Component catalogue of the mock tenant's runtime profile (go:embed)
+!internal/cpitest/components.json

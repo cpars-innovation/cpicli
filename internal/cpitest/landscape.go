@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,9 +42,15 @@ type Landscape struct {
 	// Seed makes the generated traffic and failures reproducible (default:
 	// derived from the landscape name and tier).
 	Seed uint64 `yaml:"seed"`
+	// Components is a component catalogue file (cpictl components format,
+	// relative to the landscape directory) for the Check's version check:
+	// what the tenant's runtime profile supports. Default: the built-in
+	// catalogue of an integrationcell tenant.
+	Components string `yaml:"components"`
 
-	packages  []Package
-	artifacts []landscapeArtifact
+	packages   []Package
+	artifacts  []landscapeArtifact
+	components *catalog.Catalog
 }
 
 // TierSpec is what one tier changes on top of the landscape's content.
@@ -72,6 +79,11 @@ type TierSpec struct {
 	Systems          map[string]SystemSpec `yaml:"systems"`
 	// TrafficScale multiplies every traffic rule's rate on this tier (default 1).
 	TrafficScale float64 `yaml:"trafficScale"`
+	// Components is this tier's component catalogue file (default: the
+	// landscape's), e.g. a tenant on an older release.
+	Components string `yaml:"components"`
+
+	components *catalog.Catalog
 }
 
 // SystemSpec is the behaviour of a receiver system.
@@ -167,10 +179,34 @@ func LoadLandscape(fsys fs.FS) (*Landscape, error) {
 	if err := l.loadPackages(fsys); err != nil {
 		return nil, err
 	}
+	if l.components, err = loadComponents(fsys, l.Components); err != nil {
+		return nil, err
+	}
+	for i := range l.Tiers {
+		if l.Tiers[i].components, err = loadComponents(fsys, l.Tiers[i].Components); err != nil {
+			return nil, err
+		}
+	}
 	if err := l.validate(); err != nil {
 		return nil, fmt.Errorf("landscape.yaml: %w", err)
 	}
 	return l, nil
+}
+
+// loadComponents reads a component catalogue of a landscape (nil without one).
+func loadComponents(fsys fs.FS, name string) (*catalog.Catalog, error) {
+	if name == "" {
+		return nil, nil
+	}
+	data, err := fs.ReadFile(fsys, path.Clean(strings.TrimPrefix(name, "./")))
+	if err != nil {
+		return nil, fmt.Errorf("landscape: components: %w", err)
+	}
+	c, err := parseCatalog(data, name)
+	if err != nil {
+		return nil, fmt.Errorf("landscape: components: %w", err)
+	}
+	return c, nil
 }
 
 // LoadLandscapeDir reads a landscape from a directory on disk.
@@ -535,6 +571,10 @@ func SeedLandscape(m *Tenant, l *Landscape, tier string, now time.Time) error {
 	m.Raw["/api/v1/LogFiles"] = []map[string]any{}
 	m.FilterMessageLogs, m.Live = true, true
 	m.landscape, m.tierSpec = l, t
+	m.Components = t.components
+	if m.Components == nil {
+		m.Components = l.components
+	}
 	m.MessageLogSteps = [][]MessageLog{m.history(now)}
 	return nil
 }

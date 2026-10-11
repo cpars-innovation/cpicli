@@ -51,9 +51,15 @@ type flowInfo struct {
 	customHeaders map[string]bool // custom header properties the scripts write
 	setsAppID     bool            // scripts set SAP_ApplicationID
 	jmsConsumer   bool
+	// attachments are the attachment names the script of a step writes to
+	// the message processing log, by step ID.
+	attachments map[string][]string
 }
 
-var reCustomHeaderProp = regexp.MustCompile(`addCustomHeaderProperty\s*\(\s*["']([^"']+)["']`)
+var (
+	reCustomHeaderProp = regexp.MustCompile(`addCustomHeaderProperty\s*\(\s*["']([^"']+)["']`)
+	reAttachment       = regexp.MustCompile(`addAttachmentAs(?:String|Binary)\s*\(\s*["']([^"']+)["']`)
+)
 
 func (a *Artifact) info() *flowInfo {
 	if a.cached != nil {
@@ -81,6 +87,16 @@ func (a *Artifact) info() *flowInfo {
 		}
 	}
 	fi.steps = mainPath(fm.model)
+	for _, el := range fi.steps {
+		if script := el.Props["script"]; script != "" {
+			for _, mm := range reAttachment.FindAllStringSubmatch(string(a.Resources[path.Base(script)].Content), -1) {
+				if fi.attachments == nil {
+					fi.attachments = map[string][]string{}
+				}
+				fi.attachments[el.ID] = append(fi.attachments[el.ID], mm[1])
+			}
+		}
+	}
 	a.cached = fi
 	return fi
 }
@@ -179,6 +195,12 @@ func (x *executor) run(id string, msg message, start time.Time, predecessor stri
 			if errText != "" {
 				fail(el, errText)
 			}
+		}
+		for _, name := range fi.attachments[el.ID] { // the script logs the message
+			if l.Attachments == nil {
+				l.Attachments = map[string]string{}
+			}
+			l.Attachments[name] = msg.payload
 		}
 		if failedAt == el {
 			step.Status, step.Error = "FAILED", l.ErrorText

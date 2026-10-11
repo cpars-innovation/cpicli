@@ -6,5 +6,9 @@ import com.sap.it.script.v2.api.Message
 def Message processData(Message message) {
     String body = message.getBody(String) ?: ''
     message.setBody(body.replace('<Order>', '<Invoice>').replace('</Order>', '</Invoice>'))
+    def log = messageLogFactory.getMessageLog(message)
+    if (log != null) {
+        log.addAttachmentAsString('Invoice', message.getBody(String), 'text/xml')
+    }
     return message
 }
