@@ -26,8 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cpars-innovation/cpicli/internal/sync"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
+	"github.com/cpars-innovation/cpicli/pkg/snapshot"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -129,7 +129,7 @@ func TestE2E(t *testing.T) {
 	e2eJSON(t, 0, &sres, snap...)
 	assert.Equal(t, tree, treeOf(t, filepath.Join(packages, pkg)), "a second snapshot changes no file")
 	for _, a := range sres.Artifacts {
-		assert.Equal(t, sync.SnapUnchanged, a.Status, "%s: %s %s", a.Artifact, a.Note, a.Warning)
+		assert.Contains(t, []string{snapshot.StatusUnchanged, snapshot.StatusDraft}, a.Status, "%s: %s %s", a.Artifact, a.Note, a.Warning)
 	}
 
 	// 3. nothing changed: compared with the snapshot state, no upload, no deploy

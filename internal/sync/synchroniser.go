@@ -3,16 +3,12 @@ package sync
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/textproto"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
-	gosync "sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/file"
@@ -21,6 +17,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/snapshot"
 	"github.com/go-errors/errors"
 	"github.com/magiconair/properties"
 	"github.com/rs/zerolog/log"
@@ -32,41 +29,22 @@ type Synchroniser struct {
 	// Versioning decides the designtime version on upload (see
 	// docs/versioning.md); Unset keeps the tenant's version.
 	Versioning versioning.Mode
-	// State, when set, records every exported artifact (snapshot). With
-	// Incremental, artifacts whose version, ModifiedAt, configuration and
-	// local content are unchanged since the recorded state are not
-	// downloaded.
-	State       *SnapshotState
-	Incremental bool
-	// ArtifactSlots limits the artifacts exported at the same time across
-	// all packages (snapshot); nil exports one after another.
-	ArtifactSlots chan struct{}
 	// Baseline, when set, is the snapshot state of the target tenant: an
 	// upload compares the local content with the content the snapshot saw
 	// instead of downloading the artifact again, as long as the tenant's
 	// version and ModifiedAt are still the snapshot's. Artifacts the state
 	// does not cover are downloaded. VerifyDownload always downloads.
-	Baseline       *SnapshotState
+	Baseline       *snapshot.State
 	VerifyDownload bool
 	// DryRun makes UploadArtifact read only: it compares and reports what it
 	// would do (Action, the version the upload would give) without writing.
 	DryRun bool
-	// KeepRuntime: a content change with a version equal to the running one
-	// does not undeploy the runtime artifact; the outcome says Redeploy
-	// instead (a later forced deployment replaces it, without downtime).
+	// KeepRuntime: an upload never undeploys the runtime artifact. A content
+	// change with a version equal to the running one, or changed configured
+	// parameters, set Redeploy in the outcome instead (a later forced
+	// deployment replaces it, without downtime).
 	KeepRuntime bool
-	// Snap, when set, makes ArtifactsToGit a snapshot into the tenant
-	// layout (snapshot.go); nil: sync --target git.
-	Snap       *SnapshotOptions
-	skipped    atomic.Int64
-	downloaded atomic.Int64
 }
-
-// Downloaded returns the number of artifacts downloaded by exports.
-func (s *Synchroniser) Downloaded() int64 { return s.downloaded.Load() }
-
-// Skipped returns the number of artifacts an incremental export skipped.
-func (s *Synchroniser) Skipped() int64 { return s.skipped.Load() }
 
 func New(exe *httpclnt.HTTPExecuter) *Synchroniser {
 	s := new(Synchroniser)
@@ -75,63 +53,11 @@ func New(exe *httpclnt.HTTPExecuter) *Synchroniser {
 	return s
 }
 
+// PackageToGit writes the package details file <artifactsDir>/<id>.json when
+// it differs from the tenant's (snapshot.WritePackageDetails).
 func (s *Synchroniser) PackageToGit(packageDataFromTenant *cpi.PackageSingleData, packageId string, workDir string, artifactsDir string) error {
-	// Create temp directory in working dir
-	err := os.MkdirAll(workDir+"/from_tenant", os.ModePerm)
-	if err != nil {
-		return errors.Wrap(err, 0)
-	}
-
-	log.Info().Msg("Storing package details from tenant for comparison")
-	// Write package details from tenant to file
-	tenantFile := fmt.Sprintf("%v/from_tenant/%v.json", workDir, packageId)
-	f, err := os.Create(tenantFile)
-	if err != nil {
-		return errors.Wrap(err, 0)
-	}
-	content, err := json.MarshalIndent(packageDataFromTenant, "", "  ")
-	if err != nil {
-		f.Close()
-		return errors.Wrap(err, 0)
-	}
-	_, err = f.Write(content)
-	if err != nil {
-		f.Close()
-		return errors.Wrap(err, 0)
-	}
-	// Explicitly close the file before CopyFile to prevent Windows file locking issues
-	f.Close()
-
-	// Get existing package details file if it exists and compare values
-	gitSourceFile := fmt.Sprintf("%v/%v.json", artifactsDir, packageId)
-	if file.Exists(gitSourceFile) {
-		packageDataFromGit, err := cpi.GetPackageDetails(gitSourceFile)
-		if err != nil {
-			return err
-		}
-		if packageContentDiffer(packageDataFromTenant, packageDataFromGit) {
-			log.Info().Msgf("🏆 Changes to package %v detected and will be updated to Git", packageId)
-			err = file.CopyFile(tenantFile, gitSourceFile)
-			if err != nil {
-				return err
-			}
-		} else {
-			log.Info().Msgf("🏆 No changes to package %v detected. Update to Git not required", packageId)
-		}
-	} else {
-		log.Info().Msgf("🏆 Saving new file for package %v to Git", packageId)
-		err = file.CopyFile(tenantFile, gitSourceFile)
-		if err != nil {
-			return err
-		}
-	}
-	// Clean up working directory
-	err = os.RemoveAll(workDir + "/from_tenant")
-	if err != nil {
-		return errors.Wrap(err, 0)
-	}
-
-	return nil
+	_, err := snapshot.WritePackageDetails(artifactsDir, packageId, packageDataFromTenant)
+	return err
 }
 
 func (s *Synchroniser) VerifyDownloadablePackage(packageId string) (packageDataFromTenant *cpi.PackageSingleData, readOnly bool, packageExists bool, err error) {
@@ -168,52 +94,9 @@ func (s *Synchroniser) ArtifactsToGit(packageId string, workDir string, artifact
 		return err
 	}
 
-	// Process the artifacts: with ArtifactSlots, concurrently (the slots are
-	// shared by all packages of a snapshot); otherwise one after another
-	var wg gosync.WaitGroup
-	var mu gosync.Mutex
-	var failed []string
 	for _, artifact := range filtered {
-		run := func() {
-			export := s.artifactToGit
-			if s.Snap != nil {
-				export = func(packageId, workDir, artifactsDir, draftHandling, _ string, scriptCollectionMap []string, artifact *cpi.ArtifactDetails) error {
-					return s.snapshotArtifact(packageId, workDir, artifactsDir, draftHandling, scriptCollectionMap, artifact)
-				}
-			}
-			if err := export(packageId, workDir, artifactsDir, draftHandling, dirNamingType, scriptCollectionMap, artifact); err != nil {
-				mu.Lock()
-				failed = append(failed, fmt.Sprintf("%s: %v", artifact.Id, err))
-				mu.Unlock()
-			}
-		}
-		if s.ArtifactSlots == nil {
-			run()
-			if len(failed) > 0 {
-				return errors.New(failed[0])
-			}
-			continue
-		}
-		s.ArtifactSlots <- struct{}{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			defer func() { <-s.ArtifactSlots }()
-			run()
-		}()
-	}
-	wg.Wait()
-	if len(failed) > 0 {
-		sort.Strings(failed)
-		return fmt.Errorf("%d artifact(s) failed: %s", len(failed), strings.Join(failed, "; "))
-	}
-	if s.Snap != nil {
-		tenantIDs := make(map[string]bool, len(artifacts))
-		for _, a := range artifacts {
-			tenantIDs[a.Id] = true
-		}
-		if err := s.SnapshotLeftovers(packageId, artifactsDir, tenantIDs); err != nil {
-			return err
+		if err := s.artifactToGit(packageId, workDir, artifactsDir, draftHandling, dirNamingType, scriptCollectionMap, artifact); err != nil {
+			return fmt.Errorf("%s: %w", artifact.Id, err)
 		}
 	}
 
@@ -228,8 +111,8 @@ func (s *Synchroniser) ArtifactsToGit(packageId string, workDir string, artifact
 	return nil
 }
 
-// artifactToGit downloads one artifact (unless an incremental snapshot finds
-// it unchanged) and writes it into the Git directory when it differs.
+// artifactToGit downloads one artifact and writes it into the Git directory
+// when it differs (sync --target git; snapshots are pkg/snapshot).
 func (s *Synchroniser) artifactToGit(packageId, workDir, artifactsDir, draftHandling, dirNamingType string, scriptCollectionMap []string, artifact *cpi.ArtifactDetails) error {
 	var err error
 	log.Info().Msg("---------------------------------------------------------------------------------")
@@ -254,26 +137,6 @@ func (s *Synchroniser) artifactToGit(packageId, workDir, artifactsDir, draftHand
 	}
 	gitArtifactPath := fmt.Sprintf("%v/%v", artifactsDir, directoryName)
 
-	// incremental snapshot: skip the download when nothing changed
-	stateKey := packageId + "/" + artifact.Id
-	var sig ArtifactState
-	var sigErr error
-	if s.State != nil {
-		if sig, sigErr = tenantSignature(s.exe, artifact); sigErr != nil {
-			log.Warn().Msgf("Cannot read the configuration of %v (%v): downloading it", artifact.Id, sigErr)
-		} else if prev, ok := s.State.get(stateKey); s.Incremental && ok && unchangedSince(prev, sig, gitArtifactPath) {
-			log.Info().Str("artifact", artifact.Id).Msgf("🏆 %v unchanged since the last snapshot (version %v, modified %v, configuration, local copy): skipped",
-				artifact.Id, sig.Version, sig.ModifiedAt.Format(time.RFC3339))
-			if prev.UploadHash == "" && len(scriptCollectionMap) == 0 {
-				// state of an older cpictl: the local copy equals the tenant's content
-				prev.UploadHash = uploadHash(gitArtifactPath, artifact.ArtifactType)
-				s.State.set(stateKey, prev)
-			}
-			s.skipped.Add(1)
-			return nil
-		}
-	}
-
 	// Download artifact content
 	dt := cpi.NewDesigntimeArtifact(artifact.ArtifactType, s.exe)
 	targetDownloadFile := fmt.Sprintf("%v/download/%v.zip", workDir, artifact.Id)
@@ -281,7 +144,6 @@ func (s *Synchroniser) artifactToGit(packageId, workDir, artifactsDir, draftHand
 	if err != nil {
 		return err
 	}
-	s.downloaded.Add(1)
 	// Unzip artifact contents
 	log.Debug().Msgf("Target artifact directory name - %v", directoryName)
 	downloadedArtifactPath := fmt.Sprintf("%v/download/%v", workDir, directoryName)
@@ -293,11 +155,6 @@ func (s *Synchroniser) artifactToGit(packageId, workDir, artifactsDir, draftHand
 	// stable between downloads: no timestamp line, sorted keys
 	if err := file.NormalizeParametersFile(downloadedArtifactPath); err != nil {
 		return err
-	}
-	if s.State != nil && len(scriptCollectionMap) == 0 {
-		// the tenant's content as is (a script collection mapping changes the
-		// local copy, so it cannot serve as an upload baseline)
-		sig.UploadHash = uploadHash(downloadedArtifactPath, artifact.ArtifactType)
 	}
 
 	// The download's Bundle-Version is not the designtime version (often
@@ -347,13 +204,6 @@ func (s *Synchroniser) artifactToGit(packageId, workDir, artifactsDir, draftHand
 		}
 	}
 
-	if s.State != nil {
-		if sigErr != nil {
-			sig.ModifiedAt = time.Time{} // incomplete signature: never skip next time
-		}
-		sig.ContentHash, _ = localContentHash(gitArtifactPath)
-		s.State.set(stateKey, sig)
-	}
 	return nil
 }
 
@@ -385,43 +235,6 @@ func filterArtifacts(artifacts []*cpi.ArtifactDetails, includedIds []string, exc
 		return output, nil
 	}
 	return artifacts, nil
-}
-
-func packageContentDiffer(source *cpi.PackageSingleData, target *cpi.PackageSingleData) bool {
-	if source.Root.Name != target.Root.Name {
-		return true
-	}
-	if source.Root.Description != target.Root.Description {
-		return true
-	}
-	if source.Root.ShortText != target.Root.ShortText {
-		return true
-	}
-	if source.Root.Version != target.Root.Version {
-		return true
-	}
-	if source.Root.Vendor != target.Root.Vendor {
-		return true
-	}
-	if source.Root.Mode != target.Root.Mode {
-		return true
-	}
-	if source.Root.Products != target.Root.Products {
-		return true
-	}
-	if source.Root.Keywords != target.Root.Keywords {
-		return true
-	}
-	if source.Root.Countries != target.Root.Countries {
-		return true
-	}
-	if source.Root.Industries != target.Root.Industries {
-		return true
-	}
-	if source.Root.LineOfBusiness != target.Root.LineOfBusiness {
-		return true
-	}
-	return false
 }
 
 func (s *Synchroniser) ArtifactsToTenant(packageId string, workDir string, artifactsDir string, includedIds []string, excludedIds []string) error {
@@ -649,7 +462,7 @@ func (s *Synchroniser) UploadArtifact(artifactId, artifactName, artifactType, pa
 			if s.KeepRuntime {
 				log.Info().Msgf("Content of %v changed with the running version %v: to be deployed again (the runtime keeps running until then)", artifactId, outcome.Version)
 				outcome.Redeploy = true
-				return outcome, s.afterUpload(exists, artifactType, artifactId, parametersFile)
+				return outcome, s.afterUpload(exists, artifactType, artifactId, parametersFile, &outcome)
 			}
 			log.Info().Msg("Undeploying existing runtime artifact with same version number due to changes in design")
 			err = r.UnDeploy(artifactId)
@@ -660,14 +473,18 @@ func (s *Synchroniser) UploadArtifact(artifactId, artifactName, artifactType, pa
 		}
 	}
 
-	return outcome, s.afterUpload(exists, artifactType, artifactId, parametersFile)
+	return outcome, s.afterUpload(exists, artifactType, artifactId, parametersFile, &outcome)
 }
 
 // afterUpload updates the configured parameters from parametersFile.
-func (s *Synchroniser) afterUpload(exists bool, artifactType, artifactId, parametersFile string) error {
+func (s *Synchroniser) afterUpload(exists bool, artifactType, artifactId, parametersFile string, outcome *UploadOutcome) error {
 	if exists && artifactType == "Integration" && file.Exists(parametersFile) {
 		log.Info().Msg("Updating configured parameter(s) of Integration designtime artifact where necessary")
-		return updateConfiguration(artifactId, parametersFile, s.exe)
+		redeploy, err := updateConfiguration(artifactId, parametersFile, s.exe, s.KeepRuntime)
+		if redeploy {
+			outcome.Redeploy = true
+		}
+		return err
 	}
 	return nil
 }
@@ -945,12 +762,15 @@ func compareArtifactContents(workDir string, zipFile string, artifactDir string,
 	return dt.CompareContent(artifactDir, tgtDir, scriptMap, "tenant")
 }
 
-func updateConfiguration(artifactId string, parametersFile string, exe *httpclnt.HTTPExecuter) error {
+// updateConfiguration sets the configured parameters that parametersFile
+// changes. A deployed artifact with changed parameters is undeployed, or
+// with keepRuntime reported as to be deployed again (redeploy).
+func updateConfiguration(artifactId string, parametersFile string, exe *httpclnt.HTTPExecuter, keepRuntime bool) (redeploy bool, err error) {
 	// Get configured parameters from tenant
 	c := cpi.NewConfiguration(exe)
 	tenantParameters, err := c.Get(artifactId, "active")
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Get parameters from parameters.prop file
@@ -967,7 +787,7 @@ func updateConfiguration(artifactId string, parametersFile string, exe *httpclnt
 				log.Info().Msgf("Parameter %v to be updated from %v to %v", result.ParameterKey, result.ParameterValue, fileValue)
 				err = c.Update(artifactId, "active", result.ParameterKey, fileValue)
 				if err != nil {
-					return err
+					return false, err
 				}
 				atLeastOneUpdated = true
 			}
@@ -977,19 +797,22 @@ func updateConfiguration(artifactId string, parametersFile string, exe *httpclnt
 		r := cpi.NewRuntime(exe)
 		version, _, err := r.Get(artifactId)
 		if err != nil {
-			return err
+			return false, err
 		}
 		if version == "NOT_DEPLOYED" {
 			log.Info().Msg("🏆 No existing runtime artifact deployed")
+		} else if keepRuntime {
+			log.Info().Msgf("Configured parameters of %v changed: to be deployed again (the runtime keeps running until then)", artifactId)
+			return true, nil
 		} else {
 			log.Info().Msg("🏆 Undeploying existing runtime artifact due to changes in configured parameters")
 			err = r.UnDeploy(artifactId)
 			if err != nil {
-				return err
+				return false, err
 			}
 		}
 	} else {
 		log.Info().Msg("🏆 No updates required for configured parameters")
 	}
-	return nil
+	return false, nil
 }

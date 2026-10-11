@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
-	"github.com/cpars-innovation/cpicli/internal/sync"
+	"github.com/cpars-innovation/cpicli/pkg/snapshot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,8 +87,8 @@ func (l layoutRepo) snapshot(extra ...string) (cliRun, snapshotResult) {
 	return r, env.Result
 }
 
-func statuses(res snapshotResult) map[string]sync.SnapshotItem {
-	out := map[string]sync.SnapshotItem{}
+func statuses(res snapshotResult) map[string]snapshot.Item {
+	out := map[string]snapshot.Item{}
 	for _, it := range res.Artifacts {
 		out[it.Artifact] = it
 	}
@@ -139,8 +139,8 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	require.Equal(t, 0, r.code, r.stderr)
 	st := statuses(res)
 	assert.True(t, res.DryRun)
-	assert.Equal(t, sync.SnapNew, st["Outbound"].Status)
-	assert.Equal(t, sync.SnapDerived, st["Herrenberg_Outbound"].Status)
+	assert.Equal(t, snapshot.StatusNew, st["Outbound"].Status)
+	assert.Equal(t, snapshot.StatusDerived, st["Herrenberg_Outbound"].Status)
 	assert.Equal(t, "EDM/Outbound", st["Herrenberg_Outbound"].Source)
 	assert.NotContains(t, st, "Elsewhere", "--ids-include")
 	assert.NoDirExists(t, l.repo, "a dry run writes nothing, no state either")
@@ -175,7 +175,7 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	r, res = l.snapshot()
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Equal(t, before, treeOf(t, l.repo), "snapshot twice: empty git status")
-	assert.Equal(t, 0, res.Counts[sync.SnapChanged])
+	assert.Equal(t, 0, res.Counts[snapshot.StatusChanged])
 	r, _ = l.snapshot("--incremental")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Equal(t, before, treeOf(t, l.repo))
@@ -185,7 +185,7 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	require.NoError(t, os.WriteFile(script, []byte("local edit"), 0o644))
 	r, res = l.snapshot()
 	require.Equal(t, 0, r.code, r.stderr)
-	assert.Equal(t, sync.SnapLocalModified, statuses(res)["Other"].Status)
+	assert.Equal(t, snapshot.StatusLocalModified, statuses(res)["Other"].Status)
 	data, _ := os.ReadFile(script)
 	assert.Equal(t, "local edit", string(data))
 	r, _ = l.snapshot("--fail-on-local-modified")
@@ -196,10 +196,10 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	l.mock.Artifacts["Other"].ModifiedAt = time.Now()
 	r, res = l.snapshot()
 	require.Equal(t, 0, r.code, r.stderr)
-	assert.Equal(t, sync.SnapLocalModified, statuses(res)["Other"].Status)
+	assert.Equal(t, snapshot.StatusLocalModified, statuses(res)["Other"].Status)
 	r, res = l.snapshot("--overwrite-local")
 	require.Equal(t, 0, r.code, r.stderr)
-	assert.Equal(t, sync.SnapChanged, statuses(res)["Other"].Status)
+	assert.Equal(t, snapshot.StatusChanged, statuses(res)["Other"].Status)
 	data, _ = os.ReadFile(script)
 	assert.Equal(t, "v2", string(data))
 
@@ -209,7 +209,7 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	l.mock.Artifacts["Other"].ModifiedAt = time.Now().Add(time.Second)
 	r, res = l.snapshot()
 	require.Equal(t, 0, r.code, r.stderr)
-	assert.Equal(t, sync.SnapUnchanged, statuses(res)["Other"].Status, statuses(res)["Other"].Note)
+	assert.Equal(t, snapshot.StatusUnchanged, statuses(res)["Other"].Status, statuses(res)["Other"].Note)
 
 	// tenant changes: a file removed inside an artifact, a new artifact, a
 	// deleted artifact, an edited deployment copy; plus a new local artifact
@@ -235,12 +235,12 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Equal(t, before, treeOf(t, l.repo), "dry run: no files, no state")
 	st = statuses(res)
-	assert.Equal(t, sync.SnapChanged, st["Outbound"].Status)
-	assert.Equal(t, sync.SnapNew, st["New"].Status)
-	assert.Equal(t, sync.SnapDeleted, st["Gone"].Status)
-	assert.Equal(t, sync.SnapLocalOnly, st["Draft"].Status)
-	assert.Equal(t, sync.SnapLocalModified, st["Other"].Status)
-	assert.Equal(t, sync.SnapDerived, st["Herrenberg_Outbound"].Status)
+	assert.Equal(t, snapshot.StatusChanged, st["Outbound"].Status)
+	assert.Equal(t, snapshot.StatusNew, st["New"].Status)
+	assert.Equal(t, snapshot.StatusDeleted, st["Gone"].Status)
+	assert.Equal(t, snapshot.StatusLocalOnly, st["Draft"].Status)
+	assert.Equal(t, snapshot.StatusLocalModified, st["Other"].Status)
+	assert.Equal(t, snapshot.StatusDerived, st["Herrenberg_Outbound"].Status)
 	assert.Contains(t, st["Herrenberg_Outbound"].Warning, "src/main/resources/script/s.groovy", "edited on the tenant")
 	assert.Equal(t, 1, res.Warnings)
 
@@ -272,7 +272,7 @@ func TestSnapshotSingleLayout(t *testing.T) {
 	delete(l.mock.Artifacts, "Elsewhere")
 	r, res = l.snapshot("--dry-run")
 	require.Equal(t, 0, r.code, r.stderr)
-	assert.Equal(t, sync.SnapDeleted, statuses(res)["Elsewhere"].Status)
+	assert.Equal(t, snapshot.StatusDeleted, statuses(res)["Elsewhere"].Status)
 	r, _ = l.snapshot("--prune")
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.NoDirExists(t, filepath.Join(l.repo, "Unrelated"))
@@ -319,10 +319,10 @@ func TestSnapshotSkipsPrefixedCopies(t *testing.T) {
 	r, res := l.snapshot("--deployment-prefix", "QA")
 	require.Equal(t, 0, r.code, r.stderr)
 	st := statuses(res)
-	assert.Equal(t, sync.SnapNew, st["Outbound"].Status, "the config is prefixed: the plain ID is the source")
-	assert.Equal(t, sync.SnapDerived, st["DEV_Outbound"].Status)
+	assert.Equal(t, snapshot.StatusNew, st["Outbound"].Status, "the config is prefixed: the plain ID is the source")
+	assert.Equal(t, snapshot.StatusDerived, st["DEV_Outbound"].Status)
 	assert.Equal(t, "EDM/Outbound", st["DEV_Outbound"].Source)
-	assert.Equal(t, sync.SnapDerived, st["QA_Outbound"].Status)
+	assert.Equal(t, snapshot.StatusDerived, st["QA_Outbound"].Status)
 	assert.NoDirExists(t, filepath.Join(l.repo, "DEVEDM"), "no package folder, no package file")
 	assert.NoDirExists(t, filepath.Join(l.repo, "QAEDM"))
 	assert.FileExists(t, filepath.Join(l.repo, "EDM", "EDM.json"))

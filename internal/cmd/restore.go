@@ -83,6 +83,20 @@ func runRestore(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
+	// a folder of its own in --dir-work, removed after the run
+	if workDir != "" {
+		if err := os.MkdirAll(workDir, 0o755); err != nil {
+			return err
+		}
+	}
+	if workDir, err = os.MkdirTemp(workDir, "cpictl-restore-"); err != nil {
+		return fmt.Errorf("work directory: %w", err)
+	}
+	if config.GetBoolWithFallback(cmd, "keep-work-dir", "restore.keepWorkDir") {
+		log.Info().Msgf("Work directory %s is kept", workDir)
+	} else {
+		defer os.RemoveAll(workDir)
+	}
 	err = restoreSnapshot(serviceDetails, artifactsBaseDir, workDir, includedIds, excludedIds, mode)
 	if err != nil {
 		return err

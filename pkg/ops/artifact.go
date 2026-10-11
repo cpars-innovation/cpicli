@@ -11,6 +11,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/snapshot"
 )
 
 // UploadRequest describes a local artifact directory to upload.
@@ -27,6 +28,18 @@ type UploadRequest struct {
 	// SkipDraft returns a result with Skipped "draft" instead of an error
 	// when the tenant's artifact is in draft.
 	SkipDraft bool `json:"-"`
+	// Baseline is the snapshot state of the target tenant (snapshot.Take,
+	// snapshot.LoadState): when it covers the artifact and the tenant's
+	// version and ModifiedAt are still the snapshot's, the local content is
+	// compared with the hash the snapshot recorded instead of downloading
+	// the artifact (Compared "snapshot"; otherwise "download" with
+	// CompareReason). Use only a state of the same tenant.
+	Baseline *snapshot.State `json:"-"`
+	// KeepRuntime: the upload never undeploys the runtime artifact. A
+	// content change with the running version sets Redeploy instead (deploy
+	// it afterwards with force; it keeps running until then). Without it,
+	// such a runtime artifact is undeployed (RuntimeUndeployed).
+	KeepRuntime bool `json:"-"`
 }
 
 // UploadResult is the outcome of UploadArtifact.
@@ -70,6 +83,7 @@ func UploadArtifact(exe *httpclnt.HTTPExecuter, req UploadRequest) (*UploadResul
 	syncer := sync.New(exe)
 	syncer.Versioning = req.Versioning
 	syncer.DryRun = req.DryRun
+	syncer.Baseline, syncer.KeepRuntime = req.Baseline, req.KeepRuntime
 	outcome, err := syncer.UploadArtifact(req.ID, req.Name, req.Type, req.PackageID, req.Dir, workDir, "", nil)
 	if req.SkipDraft && sync.IsDraft(err) {
 		outcome.Action = "SKIPPED"
