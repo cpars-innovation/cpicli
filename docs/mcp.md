@@ -117,23 +117,25 @@ restrictive wins:
 | Mode | Tools |
 |------|-------|
 | `discover` | read-only (same as `--read-only`) |
-| `operate` | read tools, local files and `set_log_level`: monitoring and diagnosis |
+| `operate` | read tools, local files, `set_log_level`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`: monitoring and diagnosis |
 | `develop` | all tools; `pd_deploy` refuses `full_sync`, `undeploy` needs `confirm` |
 | `full` | all tools without restrictions, including `pd_deploy` with `full_sync` (same as no `--mode`) |
 
-`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`
-and `delete_package` always need `confirm: true`; that is part of the tool, not of a mode.
+`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`,
+`delete_package`, `retry_jms_messages`, `move_jms_messages` and `delete_jms_messages` always need
+`confirm: true`; that is part of the tool, not of a mode.
 
-`unlock_artifact`, `delete_artifact` and `delete_package` are **opt-in**: no mode offers them (not
-even `full`), only `--tools` naming them exactly (`--tools 'list_*,unlock_artifact'`; a pattern
-such as `unlock_*`, `delete_*` or `*` does not count). Removing a lock discards the unsaved
-changes of whoever holds it; a deleted artifact or package cannot be restored.
+`unlock_artifact`, `delete_artifact`, `delete_package` and `delete_jms_messages` are **opt-in**: no
+mode offers them (not even `full`), only `--tools` naming them exactly (`--tools
+'list_*,unlock_artifact'`; a pattern such as `unlock_*`, `delete_*` or `*` does not count).
+Removing a lock discards the unsaved changes of whoever holds it; a deleted artifact or package
+cannot be restored; deleted JMS messages are never processed.
 
 The mode is added to the server instructions.
 
 ### Toolsets
 
-The server has about 70 tools. An agent chooses better among the tools of its task than among all
+The server has about 90 tools. An agent chooses better among the tools of its task than among all
 of them, and every tool description costs context in every call. `--toolset` (or
 `CPICTL_TOOLSET`) offers only the tools of one or more tasks; it combines with `--tools`, and the
 mode still applies on top (the more restrictive wins). `doctor` and `help` are always there.
@@ -142,17 +144,17 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 |---------|-----|-------|
 | `inspect` | understanding content | list and read packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare |
 | `build` | changing flows on DEV | read tools, `download_artifact`, `copy_iflow`, `layout_iflow`, `create_package`, `upload_artifact(s)`, `validate_artifact`, `check_guidelines`, `set_parameters`, `deploy`, `bump_versions`, `lint`, loop tools |
-| `test` | testing and diagnosing | `send_test_message`, message logs, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
-| `monitor` | operations | `message_summary`, message logs and traces, runtime status, log files, data stores, variables, JMS, number ranges, idempotency, ID mappings, keystore |
+| `test` | testing and diagnosing | `send_test_message`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
+| `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore |
 | `promote` | moving between tiers | `compare`, `transport_check`, `drift`, `config_diff`, parameters, credentials, keystore, Partner Directory dependencies and diff, runtime status |
 | `improve` | quality | `lint`, `lint_fix`, `layout_iflow`, graph, `drift`, `compare`, `bump_versions` |
 | `partner-directory` | Partner Directory | `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff` |
 | `security` | security material (read) | `list_credentials`, `list_keystore` |
 
-`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `delete_artifact` and `delete_package`
-are in no toolset: offer them explicitly with `--tools`. `list_locks` is in `inspect` and `build`;
-`list_value_mappings` and `get_value_mapping` are in `inspect` and `build`, `set_value_mapping` in
-`build`; `list_components` in `build` and `improve`.
+`undeploy`, `delete_data_store_entry`, `unlock_artifact`, `delete_artifact`, `delete_package` and
+`delete_jms_messages` are in no toolset: offer them explicitly with `--tools`. `list_locks` is in
+`inspect` and `build`; `list_value_mappings` and `get_value_mapping` are in `inspect` and `build`,
+`set_value_mapping` in `build`; `list_components` in `build` and `improve`.
 
 ```json
 "cpi-dev":  { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"] },
@@ -200,7 +202,7 @@ leaves a tool enabled by accident.
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package` | removed |
+| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state` | removed |
 
 ```json
 "cpi-qa":   { "command": "cpictl", "args": ["mcp", "--root", ".", "--read-only"] },
@@ -240,11 +242,12 @@ read roles.
 | `get_runtime_status` | | Runtime status, version, deployment time and error of given artifacts |
 | `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`) |
 | `list_service_endpoints` | | Callable URLs of deployed integration flows (where to send test messages) |
-| `list_message_logs` | | Message processing logs by artifact or package, status, time, IDs; error texts; `wait_seconds` for final status; `custom_header {name, value}` (client-side scan, see `scanned`/`truncated`) |
+| `list_message_logs` | | Message processing logs by artifact or package, status, time, IDs; error texts; `wait_seconds` for final status; `custom_header {name, value}` (as `find_messages_by_header`) |
+| `find_messages_by_header` | | Messages whose custom header property has a value (e.g. an order number), tenant-wide in one call; narrowed by flow, package, time, status. Tenants without the search are scanned (`scanned`/`truncated`) |
 | `message_summary` | | Volume and failures over a window: per flow (count per status, failures, durations), per connection between flows (predecessor links, or graph connections by correlation ID), failures grouped by error fingerprint with sample, count, first / last and newest GUID |
 | `get_trace_tree` | | Path across flows from a trace ID or a message GUID (correlation ID, optionally joined by key custom headers): tree, hops, `pathKey`, `firstFailure` |
-| `get_message_log` | | One message: error text, custom header properties, adapter attributes, attachments, persisted messages |
-| `get_message_steps` | | Processing steps of a message and the first failing step (`modelStepId`) |
+| `get_message_log` | | One message: error text, `errorInformation` (`lastErrorModelStepId`), custom header properties, adapter attributes, attachments, persisted messages |
+| `get_message_steps` | | Processing steps of a message and the first failing step (`modelStepId`); `properties: true` adds each step's properties |
 | `get_message_attachment` | | Content of a log attachment |
 | `get_message_store_entry` | | Payload persisted by a Persist step |
 | `set_log_level` | runtime setting | NONE / INFO / DEBUG / TRACE for a deployed flow; the server sets it back to INFO after `revert_after_minutes` (default 10 for TRACE and DEBUG) and on shutdown; result `revertsAt` |
@@ -264,7 +267,12 @@ read roles.
 | `delete_artifact` | designtime, **destructive**, opt-in | Delete a designtime artifact of any type (type found on the tenant unless `artifact_type`); a deployed one is refused unless `undeploy_first`; requires `confirm: true` and `--tools delete_artifact` |
 | `delete_package` | designtime, **destructive**, opt-in | Delete a package; refused while it has artifacts unless `with_artifacts`, and while they are deployed unless `undeploy_first`; requires `confirm: true` and `--tools delete_package` |
 | `list_variables`, `get_variable` | | Global and flow variables, and a value |
-| `list_jms_queues`, `get_jms_broker` | | Queues with message counts; broker capacity and usage |
+| `list_jms_queues`, `get_jms_broker` | | Queues with message counts and the flows that use them; broker capacity and usage |
+| `list_jms_messages` | | Messages of a queue: JMS message ID, failed, retry count, next retry, message GUID of the last attempt |
+| `retry_jms_messages` | tenant | Process messages of a queue again now (ids or `all`); requires `confirm: true` |
+| `move_jms_messages` | tenant | Move messages to another queue (e.g. error queue back to the processing queue); requires `confirm: true` |
+| `delete_jms_messages` | tenant, **destructive**, opt-in | Delete messages from a queue; requires `confirm: true` and `--tools delete_jms_messages` |
+| `set_jms_queue_state` | tenant | Deactivate a queue (messages are kept, not consumed) or activate it |
 | `list_number_ranges` | | Number range objects and current values |
 | `list_log_files`, `get_log_file` | | System / HTTP log files and the end of one (adapter errors without a message log) |
 | `list_idempotent_entries`, `list_id_mappings` | | Entries ignored as duplicates; ID mapper entries |

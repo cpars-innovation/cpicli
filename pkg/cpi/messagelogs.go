@@ -233,6 +233,86 @@ func (m *MessageLogs) ErrorText(guid string) (string, error) {
 	return string(body), err
 }
 
+// ErrorInformation is the error summary of a failed message: the type of
+// error and the model step (element of the .iflw) where it happened last.
+type ErrorInformation struct {
+	Type                 string `json:"type,omitempty"`
+	LastErrorModelStepID string `json:"lastErrorModelStepId,omitempty"`
+}
+
+// ErrorInformation returns the error summary of a message (nil if none: the
+// tenant answers 204). Endpoint: MessageProcessingLogs('{guid}')/ErrorInformation.
+func (m *MessageLogs) ErrorInformation(guid string) (*ErrorInformation, error) {
+	resp, err := readOnlyCall(fmt.Sprintf("/api/v1/MessageProcessingLogs(%s)/ErrorInformation", odataString(guid)), "Get message error information", m.exe)
+	if err != nil {
+		if code := httpclnt.StatusCode(err); code == http.StatusNotFound || code == http.StatusNoContent {
+			return nil, nil
+		}
+		return nil, err
+	}
+	body, err := m.exe.ReadRespBody(resp)
+	if err != nil || len(body) == 0 {
+		return nil, err
+	}
+	var data struct {
+		D struct{ Type, LastErrorModelStepId string } `json:"d"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, errors.Wrap(err, 0)
+	}
+	if data.D.Type == "" && data.D.LastErrorModelStepId == "" {
+		return nil, nil
+	}
+	return &ErrorInformation{Type: data.D.Type, LastErrorModelStepID: data.D.LastErrorModelStepId}, nil
+}
+
+// maxHeaderSearchPages bounds a custom header search that follows __next.
+const maxHeaderSearchPages = 50
+
+// FindByCustomHeader returns the messages with the custom header property
+// name = value, through MessageProcessingLogCustomHeaderProperties with
+// $expand=Log (the tenant cannot filter MessageProcessingLogs by custom
+// headers). Order: as the tenant returns them.
+func (m *MessageLogs) FindByCustomHeader(name, value string) ([]MessageLog, error) {
+	filter := fmt.Sprintf("Name eq %s and Value eq %s", odataString(name), odataString(value))
+	path := "/api/v1/MessageProcessingLogCustomHeaderProperties?$filter=" + queryEscape(filter) + "&$expand=Log"
+	var out []MessageLog
+	seen := map[string]bool{}
+	for page := 0; path != "" && page < maxHeaderSearchPages; page++ {
+		resp, err := readOnlyCall(path, "Search message processing logs by custom header", m.exe)
+		if err != nil {
+			return nil, err
+		}
+		body, err := m.exe.ReadRespBody(resp)
+		if err != nil {
+			return nil, err
+		}
+		var data struct {
+			D struct {
+				Results []struct {
+					Log *mplData `json:"Log"`
+				} `json:"results"`
+				Next string `json:"__next"`
+			} `json:"d"`
+		}
+		if err := json.Unmarshal(body, &data); err != nil {
+			return nil, errors.Wrap(err, 0)
+		}
+		for _, r := range data.D.Results {
+			if r.Log == nil || r.Log.MessageGuid == "" || seen[r.Log.MessageGuid] {
+				continue
+			}
+			seen[r.Log.MessageGuid] = true
+			out = append(out, r.Log.toLog())
+		}
+		path = ""
+		if data.D.Next != "" {
+			path = relativeNext(data.D.Next)
+		}
+	}
+	return out, nil
+}
+
 // NameValue is a custom header property or adapter attribute.
 type NameValue struct {
 	Name    string `json:"name"`
@@ -402,6 +482,9 @@ type MessageRunStep struct {
 	// RunID and ChildCount identify the step (key of MessageProcessingLogRunSteps).
 	RunID      string `json:"runId,omitempty"`
 	ChildCount int    `json:"childCount"`
+	// Properties are the step's properties (RunStepProperties, read with
+	// RunStepsWithProperties), e.g. the receiver URL of an adapter step.
+	Properties []NameValue `json:"properties,omitempty"`
 }
 
 // Runs lists the processing runs of a message.
@@ -425,11 +508,28 @@ func (m *MessageLogs) Runs(guid string) ([]MessageRun, error) {
 // RunSteps lists the steps of a processing run.
 // Endpoint: MessageProcessingLogRuns('{RunId}')/RunSteps.
 func (m *MessageLogs) RunSteps(runID string) ([]MessageRunStep, error) {
+	return m.runSteps(runID, false)
+}
+
+// RunStepsWithProperties lists the steps of a run with their properties. The
+// tenant serves MessageProcessingLogRunStepProperties only via $expand
+// (direct and navigation reads answer 500 "Only retrievable via $expand").
+func (m *MessageLogs) RunStepsWithProperties(runID string) ([]MessageRunStep, error) {
+	return m.runSteps(runID, true)
+}
+
+func (m *MessageLogs) runSteps(runID string, properties bool) ([]MessageRunStep, error) {
 	var rows []struct {
 		StepId, ModelStepId, Activity, Status, Error, BranchId, StepStart, StepStop string
 		ChildCount                                                                  int
+		RunStepProperties                                                           *struct {
+			Results []struct{ Name, Value string } `json:"results"`
+		}
 	}
 	urlPath := fmt.Sprintf("/api/v1/MessageProcessingLogRuns(%s)/RunSteps", odataString(runID))
+	if properties {
+		urlPath += "?$expand=RunStepProperties"
+	}
 	if err := getResults(m.exe, urlPath, "Get run steps", &rows); err != nil {
 		return nil, err
 	}
@@ -437,8 +537,17 @@ func (m *MessageLogs) RunSteps(runID string) ([]MessageRunStep, error) {
 	for _, r := range rows {
 		start, _ := ParseODataTime(r.StepStart)
 		stop, _ := ParseODataTime(r.StepStop)
-		out = append(out, MessageRunStep{StepID: r.StepId, ModelStepID: r.ModelStepId, Activity: r.Activity, Status: r.Status,
-			Error: r.Error, BranchID: r.BranchId, Start: start, Stop: stop, RunID: runID, ChildCount: r.ChildCount})
+		step := MessageRunStep{StepID: r.StepId, ModelStepID: r.ModelStepId, Activity: r.Activity, Status: r.Status,
+			Error: r.Error, BranchID: r.BranchId, Start: start, Stop: stop, RunID: runID, ChildCount: r.ChildCount}
+		if properties {
+			step.Properties = []NameValue{}
+			if r.RunStepProperties != nil {
+				for _, p := range r.RunStepProperties.Results {
+					step.Properties = append(step.Properties, NameValue{Name: p.Name, Value: p.Value})
+				}
+			}
+		}
+		out = append(out, step)
 	}
 	return out, nil
 }

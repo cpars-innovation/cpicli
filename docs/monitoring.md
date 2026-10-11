@@ -84,9 +84,11 @@ Statuses: `COMPLETED`, `PROCESSING`, `RETRY`, `ESCALATED`, `FAILED`, `CANCELLED`
 One message:
 
 ```bash
-cpictl logs get --message-guid <guid>        # error text, custom header properties, adapter attributes,
+cpictl logs get --message-guid <guid>        # error text and the model step it failed at, custom header
+                                             # properties, adapter attributes (e.g. HTTP status),
                                              # attachments, persisted messages (with their IDs)
 cpictl logs steps --message-guid <guid>      # processing steps and the failing step (ModelStepId)
+cpictl logs steps --message-guid <guid> --properties   # with each step's properties
 cpictl logs attachment --id <attachment-id> [--out file]
 cpictl logs payload --id <message-store-entry-id> [--out file]
 ```
@@ -97,16 +99,22 @@ limited by `--max-bytes`, default 64 KB).
 
 ### Searching by custom header
 
-The tenant cannot filter message processing logs by custom header properties, so cpictl scans:
+Custom header properties your flows write (`messageLog.addCustomHeaderProperty`, e.g. an order
+number) find their messages tenant-wide in one call:
 
 ```bash
-cpictl logs --artifact-id OrderIntake --since 2h --header OrderId=4711
-cpictl logs --package-id Orders --since 1h --header OrderId=4711 --top 5
+cpictl logs search --header OrderNo=4711
+cpictl logs search --header OrderNo=4711 --since 2d --status FAILED --errors
+cpictl logs --package-id Orders --since 1h --header OrderNo=4711 --top 5   # same search, narrowed
 ```
 
-A scan always needs `--artifact-id` or `--package-id` and `--since` (the tenant is shared). It
-reads at most `--top` × 10 messages (max 500); `scanned` and `truncated` in the result say how
-far it got. `--package-id` alone lists the messages of all flows of the package.
+The tenant cannot filter message processing logs by a custom header (`$filter` answers 400), but
+it filters `MessageProcessingLogCustomHeaderProperties` by `Name` and `Value` and expands each
+match's `Log`. `--artifact-id`, `--package-id`, `--since`, `--until` and `--status` narrow the
+matches. A tenant without that entity set is scanned instead: that needs `--artifact-id` or
+`--package-id` and `--since` (the tenant is shared), reads at most `--top` × 10 messages (max 500),
+and `scanned` and `truncated` in the result say how far it got. `--package-id` alone lists the
+messages of all flows of the package.
 
 ### Following a message across flows
 
@@ -139,8 +147,9 @@ cpictl logs tree --message <guid>
 cpictl logs tree --message <guid> --key-header OrderNo --package-id Orders --since 2h
 ```
 
-The key value is taken from any message of the run. The tenant cannot filter by custom headers,
-so `--key-header` scans the scope like the header search above (`--max-scan`, default 200).
+The key value is taken from any message of the run. The messages with the same value are found
+with the header search above (no scope needed; a scope narrows them); a tenant without it is
+scanned (scope required, `--max-scan`, default 200).
 
 The result has the tree, `hops` (from flow, to flow, both messages, `link`) and a `pathKey` that is
 the same for every message taking the same route. Links:
@@ -164,7 +173,12 @@ cpictl datastore get --data-store Orders --artifact-id OrderIntake --id <entry> 
 cpictl datastore delete --data-store Orders --artifact-id OrderIntake --id <entry> --confirm
 cpictl variables --artifact-id OrderIntake                        # flow and global variables
 cpictl variables get --name lastRun --artifact-id OrderIntake
-cpictl jms queues --prefix ORDERS                                 # fullest first
+cpictl jms queues --prefix ORDERS                                 # fullest first, with their flows
+cpictl jms messages --queue ORDERS_IN --failed-only               # messages waiting for a retry
+cpictl jms retry --queue ORDERS_IN --id <jms-message-id> --confirm
+cpictl jms move --queue ORDERS_ERR --to ORDERS_IN --all --confirm # e.g. back from an error queue
+cpictl jms delete --queue ORDERS_IN --id <jms-message-id> --confirm
+cpictl jms deactivate --queue ORDERS_IN                           # keep messages, stop consuming
 cpictl jms broker                                                 # capacity and usage
 cpictl number-ranges
 cpictl log-files --type http --since 2h                           # adapter errors without a message log
@@ -174,8 +188,20 @@ cpictl id-mappings --source-id <id>
 ```
 
 Data store entries and variables are business data: lists show metadata only, `get` downloads.
-Global data stores and variables have an empty `--artifact-id`. Retrying, moving or deleting JMS
-messages is not supported.
+Global data stores and variables have an empty `--artifact-id`.
+
+JMS messages are managed as in Manage Message Queues of the Web UI. On Cloud Foundry they are
+read through `MessagingQueues('{queue}')/MessagingMessages` (the `MessagingMessages` collection
+answers 404, the Neo-era `JmsMessages` / `JmsQueues` 501). An unknown queue lists no messages on
+the tenant, so cpictl checks the name against `jms queues` first. Messages are selected with
+`--id` (repeatable) or `--all` (`--failed-only`); `retry`, `move` and `delete` need `--confirm`.
+`retry` and `move` call `RetryMessagingMessages` / `MoveMessagingMessages` with a JSON body
+(`queueName`, `targetQueueName`, `jmsMessageIds`), `delete` deletes
+`MessagingMessages(jmsMessageId,queueName)`, `activate` / `deactivate` call `activateQueue` /
+`deactivateQueue`. The reads are verified on a Cloud Foundry tenant; the changing calls are not
+yet (the function imports declare no parameters, so the body format is cpictl's reading of the
+`$metadata`). The flows of a queue come from `Queues?$expand=Artifacts`; their `direction` is the
+tenant's code, passed on as is.
 
 ## Resources of an iFlow
 
@@ -189,8 +215,8 @@ cpictl download --artifact-id OrderIntake --dir ./OrderIntake     # whole artifa
 
 | Area | Endpoints |
 |------|-----------|
-| Logs | `MessageProcessingLogs` (query, single), `ErrorInformation/$value`, `CustomHeaderProperties`, `AdapterAttributes`, `Attachments` |
-| Payloads and steps | `MessageProcessingLogAttachments('{Id}')/$value`, `MessageProcessingLogs('{guid}')/MessageStoreEntries`, `MessageStoreEntries('{Id}')/$value`, `MessageProcessingLogs('{guid}')/Runs`, `MessageProcessingLogRuns('{Id}')/RunSteps` |
+| Logs | `MessageProcessingLogs` (query, single), `ErrorInformation/$value`, `ErrorInformation`, `CustomHeaderProperties`, `AdapterAttributes`, `Attachments`, `MessageProcessingLogCustomHeaderProperties?$filter=Name eq … and Value eq …&$expand=Log` |
+| Payloads and steps | `MessageProcessingLogAttachments('{Id}')/$value`, `MessageProcessingLogs('{guid}')/MessageStoreEntries`, `MessageStoreEntries('{Id}')/$value`, `MessageProcessingLogs('{guid}')/Runs`, `MessageProcessingLogRuns('{Id}')/RunSteps` (`$expand=RunStepProperties`: step properties are only served this way) |
 | Content | `ValidateIntegrationDesigntimeArtifact`, `ExecuteIntegrationDesigntimeArtifactsGuidelines`, `DesignGuidelineExecutionResults`, `ServiceEndpoints`, `IntegrationRuntimeArtifacts`, `Resources`, artifact `$value` |
 
 The endpoints in the second row belong to SAP's Message Store and trace APIs and are not

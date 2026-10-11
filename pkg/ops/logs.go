@@ -195,6 +195,9 @@ type MessageLogDetail struct {
 	AdapterAttributes      []cpi.NameValue         `json:"adapterAttributes"`
 	Attachments            []cpi.MessageAttachment `json:"attachments"`
 	MessageStoreEntries    []cpi.MessageStoreEntry `json:"messageStoreEntries"`
+	// ErrorInformation is the error type and the model step (id of the .iflw
+	// element) where the message failed last, for failed messages.
+	ErrorInformation *cpi.ErrorInformation `json:"errorInformation,omitempty"`
 	// Warnings lists optional details that could not be read.
 	Warnings []string `json:"warnings,omitempty"`
 }
@@ -237,6 +240,11 @@ func GetMessageLog(exe *httpclnt.HTTPExecuter, guid string, maxErrorBytes int) (
 			return nil, err
 		}
 		d.ErrorText, d.ErrorTruncated = truncate(text, maxErrorBytes)
+		info, err := mpl.ErrorInformation(guid)
+		if err := optional("error information", err); err != nil {
+			return nil, err
+		}
+		d.ErrorInformation = info
 	}
 	if headers, err := mpl.CustomHeaderProperties(guid); optional("custom header properties", err) != nil {
 		return nil, err
@@ -314,6 +322,12 @@ type MessageSteps struct {
 // GetMessageSteps returns the processing runs and steps of a message, and the
 // first failing step (to locate the error in the iFlow model: ModelStepID).
 func GetMessageSteps(exe *httpclnt.HTTPExecuter, guid string) (*MessageSteps, error) {
+	return GetMessageStepsWith(exe, guid, false)
+}
+
+// GetMessageStepsWith is GetMessageSteps; properties adds each step's
+// properties (MessageProcessingLogRunStepProperties, read with $expand).
+func GetMessageStepsWith(exe *httpclnt.HTTPExecuter, guid string, properties bool) (*MessageSteps, error) {
 	if guid == "" {
 		return nil, output.Usagef("message GUID is required")
 	}
@@ -327,7 +341,11 @@ func GetMessageSteps(exe *httpclnt.HTTPExecuter, guid string) (*MessageSteps, er
 	}
 	res := &MessageSteps{MessageGuid: guid, Runs: make([]MessageRunWithSteps, 0, len(runs))}
 	for _, r := range runs {
-		steps, err := mpl.RunSteps(r.ID)
+		read := mpl.RunSteps
+		if properties {
+			read = mpl.RunStepsWithProperties
+		}
+		steps, err := read(r.ID)
 		if err != nil {
 			return nil, err
 		}

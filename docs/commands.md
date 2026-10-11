@@ -48,9 +48,15 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`iflow`](#iflow) | Work with integration flow files (copy a template under a new ID, lay out the diagram) |
 | [`iflow copy`](#iflow-copy) | Copy an integration flow under a new ID, name and sender address |
 | [`iflow layout`](#iflow-layout) | Lay out the diagram of integration flows: steps in flow order, no overlaps, right-angled lines (local files) |
-| [`jms`](#jms) | JMS queues and broker capacity |
+| [`jms`](#jms) | JMS queues, their messages (retry, move, delete) and broker capacity |
+| [`jms activate`](#jms-activate) | Activate a queue: its consumer flow receives messages again |
 | [`jms broker`](#jms-broker) | Show JMS broker capacity and usage |
-| [`jms queues`](#jms-queues) | List JMS queues, fullest first |
+| [`jms deactivate`](#jms-deactivate) | Deactivate a queue: messages are kept but not handed to its consumer flow |
+| [`jms delete`](#jms-delete) | Delete messages from a queue (requires --confirm) |
+| [`jms messages`](#jms-messages) | List the messages of a queue (failed ones wait for a retry) |
+| [`jms move`](#jms-move) | Move messages to another queue (requires --confirm) |
+| [`jms queues`](#jms-queues) | List JMS queues, fullest first, with the flows that use them |
+| [`jms retry`](#jms-retry) | Process messages of a queue again now (requires --confirm) |
 | [`keystore`](#keystore) | List keystore entries, check expiry, export and import certificates |
 | [`keystore export-cert`](#keystore-export-cert) | Export the certificate of a keystore entry as PEM |
 | [`keystore import-cert`](#keystore-import-cert) | Import a certificate (PEM or DER) into the tenant keystore |
@@ -65,8 +71,9 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`log-level`](#log-level) | Set the message processing log level of a deployed integration flow |
 | [`logs`](#logs) | Query message processing logs |
 | [`logs attachment`](#logs-attachment) | Download a log attachment (ID from 'logs get') |
-| [`logs get`](#logs-get) | Show one message: status, error text, custom headers, attachments |
+| [`logs get`](#logs-get) | Show one message: status, error text and step, custom headers, adapter attributes, attachments |
 | [`logs payload`](#logs-payload) | Download a persisted message (message store entry ID from 'logs get') |
+| [`logs search`](#logs-search) | Find messages by a custom header property value (e.g. an order number) |
 | [`logs steps`](#logs-steps) | Show the processing steps of a message and the step that failed |
 | [`logs summary`](#logs-summary) | Message volume and failures per flow, per connection between flows and per error fingerprint |
 | [`logs trace`](#logs-trace) | List the traced steps of a message (flow on log level TRACE) |
@@ -1158,7 +1165,41 @@ Review the result in the Web UI before deploying.
 
 ## jms
 
-JMS queues and broker capacity
+JMS queues, their messages (retry, move, delete) and broker capacity
+
+```
+JMS queues and their messages, as Manage Message Queues in the Web UI.
+
+A message whose processing failed stays in its queue (status RETRY) until a
+retry succeeds or it expires. retry processes messages again now, move hands
+them to another queue (e.g. from an error queue back to the queue of the
+flow that processes them), delete removes them: they are not processed any
+more. Select messages with --id (repeatable) or --all (--failed-only: only
+failed ones). retry, move and delete need --confirm.
+```
+
+**Examples:**
+
+```
+  cpictl jms queues
+  cpictl jms messages --queue Orders_Billing --failed-only
+  cpictl jms retry --queue Orders_Billing --id ID:abc --confirm
+  cpictl jms move --queue Orders_Billing_Error --to Orders_Billing --all --confirm
+  cpictl jms delete --queue Orders_Billing --id ID:abc --confirm
+  cpictl jms deactivate --queue Orders_Billing
+```
+
+## jms activate
+
+Activate a queue: its consumer flow receives messages again
+
+**Usage:** `cpictl jms activate [flags]`
+
+**Flags:**
+
+```
+      --queue string   Queue name
+```
 
 ## jms broker
 
@@ -1166,9 +1207,68 @@ Show JMS broker capacity and usage
 
 **Usage:** `cpictl jms broker`
 
+## jms deactivate
+
+Deactivate a queue: messages are kept but not handed to its consumer flow
+
+**Usage:** `cpictl jms deactivate [flags]`
+
+**Flags:**
+
+```
+      --queue string   Queue name
+```
+
+## jms delete
+
+Delete messages from a queue (requires --confirm)
+
+**Usage:** `cpictl jms delete [flags]`
+
+**Flags:**
+
+```
+      --all            All messages of the queue
+      --confirm        Confirm the action
+      --failed-only    With --all: only failed messages
+      --id strings     JMS message IDs (from 'jms messages')
+      --queue string   Queue name
+```
+
+## jms messages
+
+List the messages of a queue (failed ones wait for a retry)
+
+**Usage:** `cpictl jms messages [flags]`
+
+**Flags:**
+
+```
+      --failed-only    Only messages whose processing failed
+      --queue string   Queue name
+      --top int        Maximum messages (default 100)
+```
+
+## jms move
+
+Move messages to another queue (requires --confirm)
+
+**Usage:** `cpictl jms move [flags]`
+
+**Flags:**
+
+```
+      --all            All messages of the queue
+      --confirm        Confirm the action
+      --failed-only    With --all: only failed messages
+      --id strings     JMS message IDs (from 'jms messages')
+      --queue string   Queue name
+      --to string      Target queue
+```
+
 ## jms queues
 
-List JMS queues, fullest first
+List JMS queues, fullest first, with the flows that use them
 
 **Usage:** `cpictl jms queues [flags]`
 
@@ -1176,6 +1276,22 @@ List JMS queues, fullest first
 
 ```
       --prefix string   Only queues whose name starts with this
+```
+
+## jms retry
+
+Process messages of a queue again now (requires --confirm)
+
+**Usage:** `cpictl jms retry [flags]`
+
+**Flags:**
+
+```
+      --all            All messages of the queue
+      --confirm        Confirm the action
+      --failed-only    With --all: only failed messages
+      --id strings     JMS message IDs (from 'jms messages')
+      --queue string   Queue name
 ```
 
 ## keystore
@@ -1459,7 +1575,7 @@ Statuses: COMPLETED, PROCESSING, RETRY, ESCALATED, FAILED, CANCELLED, DISCARDED,
       --artifact-id string              Integration flow ID
       --correlation-id string           Correlation ID
       --errors                          Include the error text of failed messages
-      --header string                   Only messages with this custom header property, name=value (client-side scan; needs --artifact-id or --package-id, and --since)
+      --header string                   Only messages with this custom header property, name=value (as 'logs search'; tenants without the custom header search are scanned: needs --artifact-id or --package-id, and --since)
       --package-id string               Messages of all integration flows of this package (needs --since)
       --since string                    Messages that ended after this time (duration like 1h or RFC 3339)
       --skip int                        Skip the first n messages
@@ -1476,6 +1592,7 @@ Statuses: COMPLETED, PROCESSING, RETRY, ESCALATED, FAILED, CANCELLED, DISCARDED,
   cpictl logs --artifact-id OrderIntake --status FAILED --errors --output json
   cpictl logs --artifact-id OrderIntake --since 2m --wait 60s --errors
   cpictl logs --package-id Orders --since 1h --header OrderId=4711
+  cpictl logs search --header OrderNo=4711
   cpictl logs get --message-guid AFq478Bblxi4wCjBcDb_G0vAGGZG
   cpictl logs tree --trace-id 0af7651916cd43dd8448eb211c80319c
 ```
@@ -1496,7 +1613,7 @@ Download a log attachment (ID from 'logs get')
 
 ## logs get
 
-Show one message: status, error text, custom headers, attachments
+Show one message: status, error text and step, custom headers, adapter attributes, attachments
 
 **Usage:** `cpictl logs get [flags]`
 
@@ -1520,6 +1637,42 @@ Download a persisted message (message store entry ID from 'logs get')
       --out string      Write the content to this file instead of stdout / the JSON result
 ```
 
+## logs search
+
+Find messages by a custom header property value (e.g. an order number)
+
+```
+Find messages by a custom header property that flows write
+(messageLog.addCustomHeaderProperty), such as an order number, newest first.
+
+The tenant searches MessageProcessingLogCustomHeaderProperties: no scope is
+needed. --artifact-id, --package-id, --since, --until and --status narrow the
+result. Tenants without that entity set are scanned instead, which needs
+--artifact-id or --package-id, and --since.
+```
+
+**Usage:** `cpictl logs search [flags]`
+
+**Flags:**
+
+```
+      --artifact-id string   Only messages of this integration flow
+      --errors               Include the error text of failed messages
+      --header string        Custom header property, name=value
+      --package-id string    Only messages of this package's integration flows
+      --since string         Only messages that ended after this time (duration like 1h or RFC 3339)
+      --status strings       Only these statuses, e.g. FAILED,RETRY
+      --top int              Maximum number of messages (max 200) (default 20)
+      --until string         Only messages that started before this time
+```
+
+**Examples:**
+
+```
+  cpictl logs search --header OrderNo=4711
+  cpictl logs search --header OrderNo=4711 --since 2d --status FAILED --errors
+```
+
 ## logs steps
 
 Show the processing steps of a message and the step that failed
@@ -1530,6 +1683,7 @@ Show the processing steps of a message and the step that failed
 
 ```
       --message-guid string   Message GUID
+      --properties            Include the properties of each step (e.g. adapter addresses)
 ```
 
 ## logs summary
@@ -1610,10 +1764,11 @@ ApplicationMessageId = trace ID, otherwise by scanning the scope (--artifact-ids
 --package-id, and --since) for the trace-id custom header.
 
 --message (a message GUID): all messages with its correlation ID. With --key-header
-(custom header properties your flows write, e.g. OrderNo), messages of the scope with
-the same value join the path, with the rest of their run: the path continues when the
-message left the tenant and came back with a new correlation ID. The tenant cannot
-filter by custom headers, so the scope is scanned (at most --max-scan messages).
+(custom header properties your flows write, e.g. OrderNo), messages with the same
+value join the path, with the rest of their run: the path continues when the message
+left the tenant and came back with a new correlation ID. They are found with the
+custom header search (as 'logs search'; a scope narrows it); tenants without it scan
+the scope (--artifact-ids or --package-id, and --since; at most --max-scan messages).
 
 Nodes are linked by span-id / parent-span-id (names configurable), else by the
 predecessor message, else (--message only) by start time ("inferred", or "header"
@@ -1627,7 +1782,7 @@ is the same for every message taking the same route.
 
 ```
       --artifact-ids strings     Scope of the fallback scan
-      --key-header strings       With --message: custom header properties that join runs with the same value (scans the scope)
+      --key-header strings       With --message: custom header properties that join runs with the same value
       --max-messages int         With --message: maximum messages of the path (default 200)
       --max-scan int             Maximum messages scanned (default 200)
       --message string           Message GUID: follow its correlation ID (and --key-header) across flows

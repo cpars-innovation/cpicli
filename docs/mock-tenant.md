@@ -187,7 +187,11 @@ executed: the payload passes through unchanged.
   caller with the same error. No deployed consumer: `no consumer for address …`.
 - **JMS** hands the message to the flow that consumes the queue about a second later: same
   correlation ID, no predecessor (cpictl links them by correlation ID). A failing JMS consumer
-  ends in `RETRY`. No consumer: the message stays in the queue (nothing is logged).
+  ends in `RETRY` and its message stays in the queue as a failed message (`jms messages`; demo:
+  `Orders_Billing`), where `jms retry`, `move` and `delete` act on it (a retry counts the attempt,
+  the flow does not run again). No consumer: the message stays in the queue (nothing is logged).
+  Queues exist once a flow that reads them is deployed; `jms activate` / `deactivate` set their
+  state.
 - **Other receivers** (HTTP, OData, SOAP, SFTP, …) are answered by the landscape's **systems**: the
   receiver's host (from the URL or the `host` property, parameters applied) is matched against
   each system's `match` pattern. The system's `latencyMs` adds to the run; with `failRate` the call
@@ -212,7 +216,9 @@ executed: the payload passes through unchanged.
   flow's scripts write them (`addCustomHeaderProperty("OrderNo", …)`), and the key as
   `ApplicationMessageId` when they set `SAP_ApplicationID`. A received message's key is taken from
   the `SAP_ApplicationID` header, a key header sent as HTTP header, or `<OrderNo>…</OrderNo>` in
-  the payload.
+  the payload. `MessageProcessingLogCustomHeaderProperties` answers `$filter` on `Name` and
+  `Value` (`eq`) with `$expand=Log` like the tenant (`logs search`), and step properties come
+  with `RunSteps?$expand=RunStepProperties` when a step has any.
 - **Traffic**: at start, the `traffic` rules generate the message history (`history`, default
   24 h); runs that would end in the future are left out. The random source is derived from the
   landscape and the tier (or `seed`), so a tier always generates the same history and tiers
