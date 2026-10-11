@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
@@ -12,9 +13,12 @@ import (
 )
 
 func TestDoctorProbesAndErrorText(t *testing.T) {
+	var mu sync.Mutex // the probes run in parallel
 	queries := map[string]string{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		queries[r.URL.Path] = r.URL.RawQuery
+		mu.Unlock()
 		switch r.URL.Path {
 		case "/api/v1/DataStores":
 			w.WriteHeader(http.StatusBadRequest)
