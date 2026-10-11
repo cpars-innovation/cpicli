@@ -60,8 +60,8 @@ var workflows = []Workflow{
 		Tools: []string{"compare", "transport_check", "drift", "get_runtime_status"}, Docs: "transport.md"},
 	{Task: "Find who calls a flow, or who uses a credential, script, header or PD parameter",
 		Tools: []string{"graph_search", "graph_neighbors", "graph_path"}, Docs: "graph.md"},
-	{Task: "Diagnose failed messages and runtime errors",
-		Tools: []string{"message_summary", "list_runtime_artifacts", "list_message_logs", "get_message_log", "get_message_steps", "get_trace_tree", "list_log_files", "get_log_file"}, Docs: "monitoring.md"},
+	{Task: "Diagnose failed messages and runtime errors, follow a business key, handle JMS queues", Skill: "cpi-operate",
+		Tools: []string{"message_summary", "list_runtime_artifacts", "find_messages_by_header", "get_message_log", "get_message_steps", "get_trace_tree", "list_jms_messages", "retry_jms_messages", "list_log_files", "list_integration_connections"}, Docs: "monitoring.md"},
 	{Task: "Change parameters or Partner Directory values",
 		Tools: []string{"get_parameters", "set_parameters", "config_diff", "pd_dependencies", "pd_diff", "pd_deploy"}, Docs: "partner-directory.md"},
 }

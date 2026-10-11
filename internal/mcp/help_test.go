@@ -37,7 +37,7 @@ func TestHelpTool(t *testing.T) {
 	server := ov["server"].(map[string]any)
 	assert.Equal(t, "discover", server["mode"])
 	assert.Contains(t, server["disabledTools"], "deploy")
-	assert.Len(t, ov["skills"], 6)
+	assert.Len(t, ov["skills"], 7)
 	assert.Len(t, ov["tools"], len(kept))
 	var newFlow map[string]any
 	for _, w := range ov["workflows"].([]any) {

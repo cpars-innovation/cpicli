@@ -91,8 +91,11 @@ Then for each case:
    `messageGuid` and, after the wait, `log` (status, error text, custom headers, attachments).
 2. Compare with `expect`. A case passes only if every expectation holds.
 3. On a mismatch:
+   - `get_message_log` with the GUID: for a failed message `errorInformation` names the last
+     model step that failed (`lastErrorModelStepId`) and the adapter attributes show what the
+     receiver answered.
    - `get_message_steps` with the message GUID: the first failing step and its `modelStepId`
-     (the id of the element in the .iflw).
+     (the id of the element in the .iflw); `properties: true` adds each step's properties.
    - `get_message_log` / `get_message_attachment` / `get_message_store_entry` for the payload
      at the logged points.
    - Still unclear what happens between the steps: `set_log_level` TRACE, send the case
@@ -102,6 +105,13 @@ Then for each case:
    - Decide whether the flow or the test is wrong. Fix the flow with the cpi-build loop,
      never weaken an expectation just to make the test pass. Ask the user when the expected
      behaviour is unclear.
+
+Asynchronous chains (JMS, ProcessDirect to further flows): the case's `messageGuid` covers the
+first flow only. Follow the message with `get_trace_tree` (message_guid, key_headers), or find
+every message with the same business key with `find_messages_by_header` (for example
+`OrderNo=4711`, one call, no scan). A message that waits in a JMS queue after a failure shows in
+`list_jms_messages` (queue, `failed_only`); `retry_jms_messages` (confirm) runs it again after the
+fix. Ask before retrying on a shared tenant.
 
 Report the static checks (validation status, guideline violations) and a table: case, result,
 HTTP status, message status, message GUID, reason.

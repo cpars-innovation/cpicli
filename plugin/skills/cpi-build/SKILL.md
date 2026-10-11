@@ -19,6 +19,10 @@ Read [iflow-structure.md](iflow-structure.md) before editing a model for the fir
    Changing the address, payload or headers of an existing flow? `graph_neighbors` (node the
    flow, `direction: "in"`, `edge_types: ["sends_to"]`) lists the flows that call it; tell the
    user before you break them.
+   `list_locks` with the flow's ID: if someone holds the edit lock, they have the flow open in
+   the Web UI and an upload either fails or their unsaved work is lost. Tell the user who holds
+   it since when and wait. Never remove a lock unless the user asks for exactly that
+   (`unlock_artifact` exists only when the server was started with it).
 4. Get the files:
    - existing flow: `download_artifact` into the repository's content folder (convention, or
      `content/<PackageId>/<FlowId>`), unless the files are already there and up to date;
@@ -54,7 +58,8 @@ user the summary (`.cpi/loops/<loop_id>.md`). Call `loop_end` as well when the f
    Fix the files and go back to 1. Missing security material is not yours to create:
    tell the user which credential or certificate to deploy with `cpictl credentials` /
    `cpictl keystore` and stop.
-6. Parameters only: `set_parameters` then `deploy` (no upload needed).
+6. Parameters only: `set_parameters` then `deploy` (no upload needed). Value mapping entries:
+   `get_value_mapping`, then `set_value_mapping` (confirm) and `deploy` the value mapping.
 7. When the flow is DEPLOYED, continue with the cpi-test skill.
 
 Stop and ask after three failed attempts at the same error, or when the fix needs a decision
@@ -64,6 +69,12 @@ the plan does not cover.
 
 - Never invent component XML. Copy an element of the same type from a flow of this tenant
   (discovery.json lists which flows use which component) and adapt its properties.
+- Component versions: `list_components` (name, kind, direction) gives the `cmdVariantUri` and
+  version the tenant offers for every adapter and step. Use those for new elements and never a
+  newer version: the tenant's Check and deploy fail (`lint` reports it as
+  `component-newer-than-tenant`). No catalogue yet? Run `discover_tenant` (it learns the versions
+  in use) and ask the user to import the editor metadata (`cpictl components import`, see
+  docs/components.md) for the exact list.
 - Externalise everything that differs between environments (hosts, paths, credential names,
   directories) as `{{Parameter}}`, with keys named as in the conventions.
 - Do not put secrets, tokens or productive data into files, parameters or test messages.

@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Plugin (0.2.0): new skill `cpi-operate` (what is failing, follow a business key with
+  `find_messages_by_header`, JMS queues: inspect, retry, move; locks, certificates, connections,
+  tenant settings, log archives). `cpi-build` checks edit locks before changing a flow, takes new
+  component versions from `list_components` and changes value mappings; `cpi-test` uses the
+  error information, step properties, business-key search and JMS queues for asynchronous
+  chains; `cpi-discover` reads integration connections and the component catalogue; the reviewer
+  runs lint (`component-newer-than-tenant` is a blocker) and checks locks.
+
 ## 0.9.0
 
 Many new tenant APIs (so an agent can do what a Web UI user can). Every read was checked on a

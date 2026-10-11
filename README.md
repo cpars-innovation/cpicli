@@ -375,7 +375,8 @@ commands, and which tools and skill fit tasks such as "create a new flow from a 
 
 The repository is also a Claude Code plugin marketplace. The plugin `cpi` adds the MCP server,
 skills to discover your tenant's conventions, to plan, build, test and review flows and to improve
-existing ones (`cpi-improve`: script collections, Partner Directory, dead steps), and a
+existing ones (`cpi-improve`: script collections, Partner Directory, dead steps), to operate a
+tenant (`cpi-operate`: failed messages, business keys, JMS queues, locks, certificates), and a
 read-only reviewer agent:
 
 ```text
