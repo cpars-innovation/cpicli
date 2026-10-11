@@ -474,7 +474,8 @@ make test-integration       # writes to a REAL tenant, needs CPICTL_* variables
 cmd/cpictl         main package
 internal/cmd       CLI commands, output contract
 internal/mcp       MCP server and tools
-pkg/ops            operations with structured results (shared by CLI and MCP)
+pkg/ops            operations with structured results (shared by CLI and MCP; docs/go-api.md)
+pkg/models         deploy config and configure file models
 pkg/cpi            SAP Cloud Integration OData API client
 pkg/httpclnt       HTTP client: OAuth / Basic Auth, CSRF, typed errors
 internal/cpitest   mock tenant for tests

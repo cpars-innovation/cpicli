@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )

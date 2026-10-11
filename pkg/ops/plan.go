@@ -6,8 +6,8 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 )
 
 // DeployDecision predicts what a deployment does for one artifact (plan

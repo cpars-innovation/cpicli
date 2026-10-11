@@ -40,3 +40,15 @@ func TestBumpAndMax(t *testing.T) {
 	assert.Equal(t, "1.0.15", Max("1.0.9", "", "1.0.15", "1.0.10"))
 	assert.Equal(t, "", Max("", ""))
 }
+
+func TestCompare(t *testing.T) {
+	assert.Equal(t, 1, Compare("1.0.10", "1.0.9"))
+	assert.Equal(t, -1, Compare("1.0.9", "1.0.10"))
+	assert.Equal(t, 0, Compare("1.0", "1.0.0"))
+	assert.Equal(t, 1, Compare("1.0.x", "1.0.5"), "non-numeric sorts after numbers")
+	for _, m := range Modes {
+		got, err := Parse(string(m))
+		require.NoError(t, err)
+		assert.Equal(t, m, got)
+	}
+}

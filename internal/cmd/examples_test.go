@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/deploy"
-	"github.com/cpars-innovation/cpicli/internal/models"
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,7 +55,7 @@ func TestDocsExamples(t *testing.T) {
 		assert.False(t, cfg.Packages[1].Deploy)
 		for _, p := range cfg.Packages {
 			for _, a := range p.Artifacts {
-				assert.True(t, cpi.IsValidArtifactType(mapArtifactTypeForSync(a.Type)), a.Type)
+				assert.True(t, cpi.IsValidArtifactType(ops.DesigntimeType(a.Type)), a.Type)
 			}
 		}
 	})
@@ -173,7 +173,7 @@ func TestDocsExamples(t *testing.T) {
 	}
 
 	t.Run("partner-directory", func(t *testing.T) {
-		pd := repo.NewPartnerDirectory(filepath.Join(examplesDir, "partner-directory"))
+		pd := pdrepo.New(filepath.Join(examplesDir, "partner-directory"))
 		pids, err := pd.GetLocalPIDs()
 		require.NoError(t, err)
 		assert.Equal(t, []string{"SAP_SYSTEM_001"}, pids)

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,7 +110,7 @@ func TestFullSyncAbortsOnLocalReadError(t *testing.T) {
 			breakLocal(t, dir)
 
 			mock, pdAPI := newPDMock(t, remote)
-			_, err := PDDeploy(pdAPI, repo.NewPartnerDirectory(dir), PDDeployOptions{Replace: true, FullSync: true, DryRun: false})
+			_, err := PDDeploy(pdAPI, pdrepo.New(dir), PDDeployOptions{Replace: true, FullSync: true, DryRun: false})
 
 			// The run must be reported as failed ...
 			require.Error(t, err)
@@ -128,7 +128,7 @@ func TestPDDeployReturnsErrorOnPartialFailure(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "P2", "String.properties"), 0755)) // unreadable
 
 	_, pdAPI := newPDMock(t, []cpi.StringParameter{{Pid: "P1", ID: "OK", Value: "1"}})
-	_, err := PDDeploy(pdAPI, repo.NewPartnerDirectory(dir), PDDeployOptions{Replace: true, FullSync: false, DryRun: false})
+	_, err := PDDeploy(pdAPI, pdrepo.New(dir), PDDeployOptions{Replace: true, FullSync: false, DryRun: false})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "P2")
 }
@@ -138,7 +138,7 @@ func TestPDDeploySucceedsWhenNothingFails(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "P1", "String.properties"), "OK=1\n")
 
 	mock, pdAPI := newPDMock(t, []cpi.StringParameter{{Pid: "P1", ID: "OK", Value: "1"}})
-	_, err := PDDeploy(pdAPI, repo.NewPartnerDirectory(dir), PDDeployOptions{Replace: true, FullSync: true, DryRun: false})
+	_, err := PDDeploy(pdAPI, pdrepo.New(dir), PDDeployOptions{Replace: true, FullSync: true, DryRun: false})
 	require.NoError(t, err)
 	assert.Empty(t, mock.deletes)
 }

@@ -13,9 +13,9 @@ import (
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/file"
-	"github.com/cpars-innovation/cpicli/internal/manifest"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
 )
 
 // IFlowCopyOptions describe a copy of an integration flow under a new ID.

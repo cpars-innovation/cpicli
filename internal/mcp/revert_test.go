@@ -13,7 +13,7 @@ func TestLogLevelRevert(t *testing.T) {
 	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{"A": {Type: "Integration", DesignVersion: "1"}, "B": {Type: "Integration", DesignVersion: "1"}})
 	now := time.Date(2026, 10, 5, 10, 0, 0, 0, time.UTC)
 	rev := NewLogLevelReverter(mock.Executer())
-	rev.now = func() time.Time { return now }
+	rev.Now = func() time.Time { return now }
 	srv := NewServer("cpicli", "test", Instructions, Tools(Config{Exe: mock.Executer(), Root: t.TempDir(), LogLevels: rev}))
 
 	resp := serve(t, srv, call(1, "set_log_level", map[string]any{"artifact_id": "A", "level": "TRACE"}),

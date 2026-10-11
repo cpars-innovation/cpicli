@@ -12,10 +12,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/cpars-innovation/cpicli/internal/file"
-	"github.com/cpars-innovation/cpicli/internal/manifest"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/manifest"
 )
 
 // DefaultMaxContentBytes limits downloaded content returned inline.

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/cpars-innovation/cpicli/internal/models"
+	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
@@ -346,6 +346,7 @@ func MergeConfigs(configs []*DeployConfigFile) (*models.DeployConfig, error) {
 
 				// Update the package ID and display name with prefix
 				mergedPkg.ID = fullyQualifiedID
+				mergedPkg.MergedPrefix = configPrefix
 
 				// Update display name if it exists
 				if mergedPkg.DisplayName != "" {

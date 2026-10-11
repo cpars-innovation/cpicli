@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
-	"github.com/cpars-innovation/cpicli/internal/models"
+	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

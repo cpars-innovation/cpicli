@@ -1,14 +1,13 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/cpars-innovation/cpicli/internal/config"
-	"github.com/cpars-innovation/cpicli/internal/repo"
 	"github.com/cpars-innovation/cpicli/internal/str"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"slices"
 )
 
 func NewPDSnapshotCommand() *cobra.Command {
@@ -83,125 +82,13 @@ func runPDSnapshot(cmd *cobra.Command) error {
 	pdAPI := cpi.NewPartnerDirectory(exe)
 
 	// Initialise Partner Directory Repository
-	pdRepo := repo.NewPartnerDirectory(resourcesPath)
+	pdRepo := pdrepo.New(resourcesPath)
 
 	// Execute snapshot
-	if err := snapshotPartnerDirectory(pdAPI, pdRepo, replace, pids); err != nil {
+	if _, err := ops.PDSnapshot(pdAPI, pdRepo, replace, pids); err != nil {
 		return err
 	}
 
 	log.Info().Msg("🏆 Partner Directory Snapshot completed successfully")
 	return nil
-}
-
-func snapshotPartnerDirectory(pdAPI *cpi.PartnerDirectory, pdRepo *repo.PartnerDirectory, replace bool, pidsFilter []string) error {
-	log.Info().Msg("Starting Partner Directory Snapshot...")
-
-	// Download string parameters
-	stringCount, err := snapshotStringParameters(pdAPI, pdRepo, replace, pidsFilter)
-	if err != nil {
-		return fmt.Errorf("failed to download string parameters: %w", err)
-	}
-	log.Info().Msgf("Downloaded %d string parameters", stringCount)
-
-	// Download binary parameters
-	binaryCount, err := snapshotBinaryParameters(pdAPI, pdRepo, replace, pidsFilter)
-	if err != nil {
-		return fmt.Errorf("failed to download binary parameters: %w", err)
-	}
-	log.Info().Msgf("Downloaded %d binary parameters", binaryCount)
-
-	return nil
-}
-
-func snapshotStringParameters(pdAPI *cpi.PartnerDirectory, pdRepo *repo.PartnerDirectory, replace bool, pidsFilter []string) (int, error) {
-	log.Debug().Msg("Fetching string parameters from Partner Directory")
-
-	parameters, err := pdAPI.GetStringParameters("Pid,Id,Value")
-	if err != nil {
-		return 0, err
-	}
-
-	// Filter by PIDs if specified
-	if len(pidsFilter) > 0 {
-		filtered := make([]cpi.StringParameter, 0)
-		for _, param := range parameters {
-			if slices.Contains(pidsFilter, param.Pid) {
-				filtered = append(filtered, param)
-			}
-		}
-		parameters = filtered
-	}
-
-	log.Debug().Msgf("Fetched %d string parameters from Partner Directory", len(parameters))
-
-	// Group by PID
-	paramsByPid := make(map[string][]cpi.StringParameter)
-	for _, param := range parameters {
-		paramsByPid[param.Pid] = append(paramsByPid[param.Pid], param)
-	}
-
-	// Log all PIDs found
-	pids := make([]string, 0, len(paramsByPid))
-	for pid := range paramsByPid {
-		pids = append(pids, pid)
-	}
-	log.Info().Msgf("Found %d Partner IDs with string parameters: %v", len(pids), pids)
-
-	// Process each PID
-	for pid, pidParams := range paramsByPid {
-		log.Info().Msgf("Processing string parameters for PID: %s (%d parameters)", pid, len(pidParams))
-
-		if err := pdRepo.WriteStringParameters(pid, pidParams, replace); err != nil {
-			return 0, fmt.Errorf("failed to write string parameters for PID %s: %w", pid, err)
-		}
-	}
-
-	return len(parameters), nil
-}
-
-func snapshotBinaryParameters(pdAPI *cpi.PartnerDirectory, pdRepo *repo.PartnerDirectory, replace bool, pidsFilter []string) (int, error) {
-	log.Debug().Msg("Fetching binary parameters from Partner Directory")
-
-	parameters, err := pdAPI.GetBinaryParameters("")
-	if err != nil {
-		return 0, err
-	}
-
-	// Filter by PIDs if specified
-	if len(pidsFilter) > 0 {
-		filtered := make([]cpi.BinaryParameter, 0)
-		for _, param := range parameters {
-			if slices.Contains(pidsFilter, param.Pid) {
-				filtered = append(filtered, param)
-			}
-		}
-		parameters = filtered
-	}
-
-	log.Debug().Msgf("Fetched %d binary parameters from Partner Directory", len(parameters))
-
-	// Group by PID
-	paramsByPid := make(map[string][]cpi.BinaryParameter)
-	for _, param := range parameters {
-		paramsByPid[param.Pid] = append(paramsByPid[param.Pid], param)
-	}
-
-	// Log all PIDs found
-	pids := make([]string, 0, len(paramsByPid))
-	for pid := range paramsByPid {
-		pids = append(pids, pid)
-	}
-	log.Info().Msgf("Found %d Partner IDs with binary parameters: %v", len(pids), pids)
-
-	// Process each PID
-	for pid, pidParams := range paramsByPid {
-		log.Info().Msgf("Processing binary parameters for PID: %s (%d parameters)", pid, len(pidParams))
-
-		if err := pdRepo.WriteBinaryParameters(pid, pidParams, replace); err != nil {
-			return 0, fmt.Errorf("failed to write binary parameters for PID %s: %w", pid, err)
-		}
-	}
-
-	return len(parameters), nil
 }

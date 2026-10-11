@@ -110,7 +110,7 @@ func SetHeaders(mf []byte, headers map[string]string) []byte {
 	return []byte(strings.Join(out, eol) + eol)
 }
 
-// wrapLine splits a header into lines of at most 72 bytes;
+// WrapLine splits a header into lines of at most 72 bytes;
 // continuation lines start with a space. UTF-8 characters are not split.
 func WrapLine(s string) []string {
 	var lines []string

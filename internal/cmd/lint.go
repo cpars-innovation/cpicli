@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/config"
@@ -154,18 +153,8 @@ func deploymentCopies(cmd *cobra.Command, base string) (map[string][]lint.Deploy
 	}
 	out := map[string][]lint.DeploymentCopy{}
 	for _, f := range files {
-		if f.Config.DeploymentPrefix != "" {
-			continue // environment copies, not partner copies
-		}
-		for _, pkg := range f.Config.Packages {
-			for _, a := range pkg.Artifacts {
-				key := filepath.ToSlash(filepath.Join(cmp.Or(pkg.PackageDir, pkg.ID), cmp.Or(a.ArtifactDir, a.Id)))
-				c := lint.DeploymentCopy{ID: a.Id}
-				for k := range a.ConfigOverrides {
-					c.Overrides = append(c.Overrides, k)
-				}
-				out[key] = append(out[key], c)
-			}
+		for k, copies := range lint.DeploymentCopiesOf(f.Config) {
+			out[k] = append(out[k], copies...)
 		}
 	}
 	return out, nil

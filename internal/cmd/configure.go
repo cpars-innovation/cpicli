@@ -9,12 +9,12 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/deploy"
-	"github.com/cpars-innovation/cpicli/internal/models"
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/versioning"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -308,9 +308,7 @@ func runConfigure(cmd *cobra.Command, configPath, deploymentPrefix, packageFilte
 	// dry run: what the deployment phase would do
 	var plan []PlanItem
 	if dryRun && !mode.offline && len(deploymentTasks) > 0 {
-		collector := &planCollector{index: map[string]int{}}
-		planDeployments(deploymentTasks, collector, serviceDetails)
-		plan = collector.items
+		plan = ops.PlanDeployments(exe, deploymentTasks)
 		if err := logPlan(plan); err != nil {
 			log.Warn().Msg(err.Error())
 		}

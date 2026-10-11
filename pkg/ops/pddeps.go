@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
-	"github.com/cpars-innovation/cpicli/internal/repo"
+	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 )
 
 // PDReference is a literal Partner Directory reference of an artifact.
@@ -114,7 +114,7 @@ func FindPDDependencies(ctx context.Context, dir string, f PDDependenciesFilter)
 		return a.Pid+"\x00"+a.ID+"\x00"+a.Artifact+"\x00"+a.File < b.Pid+"\x00"+b.ID+"\x00"+b.Artifact+"\x00"+b.File
 	})
 	if f.ResourcesPath != "" {
-		local, err := repo.NewPartnerDirectory(f.ResourcesPath).GetLocalPIDs()
+		local, err := pdrepo.New(f.ResourcesPath).GetLocalPIDs()
 		if err != nil {
 			return nil, output.Usagef("cannot read %s: %v", f.ResourcesPath, err)
 		}
