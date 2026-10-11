@@ -108,6 +108,14 @@ server: [plugin.md](plugin.md).
 | `--tools` | all | Offer only these tools: names or patterns, e.g. `list_*,get_*,validate_artifact` |
 | `--disable-tools` | none | Do not offer these tools (names or patterns); wins over `--tools` |
 | `--versioning` | not set | Versioning mode of `upload_artifact` and `deploy` (`manifest`, `keep`, `tenant-bump`), see [versioning.md](versioning.md) |
+| `--loop-required` | `false` | Refuse tenant tools (errorCategory `loop_required`) while no loop is open, see [Build loops](#build-loops) |
+| `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors`, `--loop-max-minutes` | `0` (no cap) | Highest `max_iterations`, `max_deploys`, `same_error_limit`, `wall_clock_minutes` that `loop_start` accepts; they also lower the defaults |
+| `--mask-pattern` | none | Also mask the values of names matching this regular expression (case-insensitive, repeatable), see [Masking](#masking) |
+| `--redact-payloads` | `false` | Replace message bodies in results with a placeholder, size and sha256, see [Masking](#masking) |
+
+Every flag can also be set in `cpictl.yaml` (`loop-required: true`, `loop-max-deploys: 5`,
+`mask-pattern: ["^X-Customer", "iban"]`) or as an environment variable (`CPICTL_LOOP_REQUIRED=true`,
+`CPICTL_LOOP_MAX_DEPLOYS=5`), like the other flags.
 
 ### Modes
 
@@ -198,14 +206,31 @@ clients that put every tool into every request.
 
 The server enforces the limits itself, for every MCP client: disabled tools are not listed in
 `tools/list`, calls to them are rejected, and the server instructions tell the agent which tools
-are unavailable. A pattern that matches no tool stops the server with exit code 2, so a typo never
+are unavailable. A call to a disabled tool returns a normal tool result with `isError: true`,
+`errorCategory: "usage"` and an error that names the reason (`not offered in mode discover
+(read-only)`, `the server is read-only (--read-only) …`, `disabled by --disable-tools`, `not
+selected by --tools / --toolset`, `opt-in: offered only when --tools names it exactly …`); only a
+name that is no cpictl tool at all is a JSON-RPC error (-32602). A pattern that matches no tool stops the server with exit code 2, so a typo never
 leaves a tool enabled by accident.
 
 | Tool class | Tools | `--read-only` |
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
+| tenant changes / processing (classes below) | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
+
+For approvals, `help` also reports a finer **class** per tool (the effect `read` / `local` /
+`tenant` stays the filter criterion):
+
+| Class | Tools |
+|-------|-------|
+| `read` | every read tool |
+| `local` | every local-files tool |
+| `write` | designtime content and configuration: `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `set_value_mapping`, `generate_key_pair`, `upload_certificate_chain`, `create_access_policy`, `add_artifact_reference`, `create_alternative_partner`, `create_authorized_user` |
+| `deploy` | `deploy`, `undeploy`, `pd_deploy` |
+| `process` | triggers processing: `send_test_message`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state` |
+| `log` | `set_log_level` |
+| `destructive` | every `delete_*` tool and `unlock_artifact` |
 
 ```json
 "cpi-qa":   { "command": "cpictl", "args": ["mcp", "--root", ".", "--read-only"] },
@@ -332,8 +357,9 @@ the mode and tool filters, so it reports what is really available on this server
 
 | Call | Returns |
 |------|---------|
-| `help` | Mode, available and disabled tools, workflows (task -> skill, tools, docs), skills, CLI commands |
-| `help {"topic": "copy_iflow"}` | Description and input schema of a tool, or why it is not available here |
+| `help` | Mode, available and disabled tools (each with `effect` and `class`), toolsets, workflows (task -> skill, tools, docs), skills, CLI commands |
+| `help {"topic": "server"}` | The server's capabilities in one call: mode, effective `readOnly` (no available tool changes the tenant, whether by `--read-only`, the mode or the filters), disabled tools, the toolsets with their available tools and each tool's `effect` and `class` (`toolEffects`), an `other` toolset for available tools in no toolset, the loop policy (`loop.required`, `loop.caps`) and the masking options |
+| `help {"topic": "copy_iflow"}` | Description, input schema, effect and class of a tool, or why it is not available here |
 | `help {"topic": "cpi-test"}` | The skill's instructions (`SKILL.md`) and its reference files |
 | `help {"topic": "cpi-plan/brief-template.md"}` | One reference file of a skill |
 | `help {"topic": "iflow copy"}` | Usage, description and flags of a CLI command |
@@ -373,10 +399,44 @@ Every tool call returns the same structure, both as `structuredContent` and as J
 | `timeout` | 6 | Not finished in time: check `get_runtime_status` |
 | `partial` | 7 | Some items failed: look at the per-item results |
 | `stopped` | 8 | A loop limit was reached: tenant changes are refused; call `loop_end` and report |
+| `loop_required` | 2 | The server runs with `--loop-required` and no loop is open: call `loop_start` first |
 
 Tool failures are returned as tool results with `isError: true`, not as JSON-RPC errors,
-so the model sees them. JSON-RPC errors are only used for protocol problems (unknown tool,
-malformed request).
+so the model sees them; so are calls to tools the mode or filters removed (`usage`). JSON-RPC
+errors are only used for protocol problems (a name that is no tool, malformed request).
+
+Local paths in results (and in error texts) are relative to `--root`, slash-separated
+(`download_artifact`'s directory, `lint` and `layout_iflow` files, `discover_tenant` output,
+`download_log_archive` file, `loop_end` summary): absolute paths inside the root are rewritten
+for every tool, so the server's own directory never reaches the model.
+
+### Masking
+
+Every tool result passes one post-processor in the server before it is sent, so new tools are
+covered without their own code:
+
+- **Name/value lists**: in every object with a string `name` and `value` (custom header
+  properties and adapter attributes of `get_message_log` and `send_test_message`'s log, step
+  properties of `get_message_steps`, headers and exchange properties of `get_trace_message`, …)
+  the value is replaced by `***` when the name contains
+  `authorization`, `cookie`, `password`, `passwd`, `secret`, `token`, `credential`, `apikey` or
+  `api-key` (case-insensitive), or matches a `--mask-pattern`.
+- **Name/value maps** under `keys`, `headers` or `properties` (the key headers of
+  `get_trace_tree`): the same rule by key.
+- **Header search**: the `custom header <name> = "<value>"` filter text of
+  `find_messages_by_header` gets `"***"` as value when the name is masked.
+- **Payloads** (only with `--redact-payloads`): the bodies returned by `send_test_message`
+  (response), `get_message_attachment`, `get_message_store_entry`, `get_trace_message`
+  (payload), `get_data_store_entry` and `get_variable` become `{"size": …, "text": "[redacted]",
+  "sha256": "<hex>", "redacted": true}`; `size` is the full size, `sha256` is computed over the
+  bytes the tool returned (the first `max_bytes` when `truncated`). Resources, scripts and
+  Partner Directory values are content, not payloads, and stay readable.
+
+Not masked: error texts (`errorText`; the tenant's message may quote payload fragments), message
+IDs, artifact names, the business keys of `list_message_logs` (`applicationMessageId`,
+`correlationId`) and configuration parameters (`get_parameters` lists `key`/`value`: secure
+parameters name credentials, they do not hold secrets). Masking applies to results only; the loop
+ledger and the CLI see the original values.
 
 ## Typical agent loop
 
@@ -404,16 +464,41 @@ For autonomous build/test/fix loops the server enforces limits the model cannot 
 
 1. `loop_start {goal, max_iterations=5, same_error_limit=2, wall_clock_minutes=60, max_deploys=15}`
    returns a `loop_id` (one open loop per server).
-2. While it is open every tenant-changing call is counted. An **iteration** is a `deploy` (or a
-   `pd_deploy` that is not a dry run) after a failed test result (`send_test_message`,
-   `get_trace_tree` with `firstFailure`, `list_message_logs` with a FAILED message). Failures are
-   fingerprinted (artifact, step, error text without IDs, timestamps and long numbers).
+2. While it is open every tenant-changing call is counted. `max_deploys` counts `deploy` and
+   `pd_deploy` calls that are not dry runs (`deploy` with `dry_run: true` and `pd_deploy` without
+   `dry_run: false` are free). An **iteration** is such a deploy after a failed test result
+   (`send_test_message`, `get_trace_tree` with `firstFailure`, `list_message_logs` with a FAILED
+   or ESCALATED message). Failures are fingerprinted (artifact, step, error text without IDs,
+   timestamps and long numbers). Only failures that **belong to the loop** count: the message
+   started or ended after `loop_start`, or its artifact was uploaded, deployed or sent to in the
+   loop (dry runs touch nothing). Reading older failures of other flows while diagnosing does
+   not stop the loop.
 3. When a limit is reached (iterations, the same fingerprint `same_error_limit` times, wall clock,
    deploys), every tenant-changing tool returns `ok: false`, `errorCategory: "stopped"`, exit code
    8. Read tools keep working.
 4. `loop_status` shows the counters; `loop_end {loop_id, outcome}` always works and writes
    `.cpi/loops/<loop_id>.md` (goal, outcome, counters, every call). Each call is also appended to
    `.cpi/loops/<loop_id>.jsonl` as it happens.
+
+Without server flags the loop is the agent's choice and its limits are its arguments (within the
+schema ranges). The server's **loop policy** takes that out of the model's hands:
+
+- `--loop-required`: every tenant tool (effect `tenant`: write, deploy, process, log,
+  destructive) is refused while no loop is open, with `ok: false`, `errorCategory:
+  "loop_required"`, exit code 2 and an error that says to call `loop_start`. Nothing reaches the
+  tenant. Read and local tools work without a loop; after `loop_end` tenant tools are refused
+  again.
+- `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors`,
+  `--loop-max-minutes`: caps for `max_iterations`, `max_deploys`, `same_error_limit`,
+  `wall_clock_minutes`. A higher value in `loop_start` is refused (`usage`, e.g. `max_deploys 20
+  exceeds this server's cap of 5 (--loop-max-deploys); use at most 5`); an omitted limit gets the
+  default lowered to the cap. The `loop_start` input schema shows the caps as `maximum`, the server
+  instructions and `help {"topic": "server"}` (`loop`) state them.
+
+```json
+"cpi-dev": { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "develop",
+             "--loop-required", "--loop-max-deploys", "10", "--loop-max-minutes", "45"] }
+```
 
 ## Safety
 

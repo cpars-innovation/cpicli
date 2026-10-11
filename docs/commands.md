@@ -2195,7 +2195,22 @@ Limit the tools per server, e.g. for a QA or production tenant:
   --mode discover|operate|develop|full presets (combined with the above, the most
                                   restrictive wins)
 Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS. Disabled tools are not
-listed and cannot be called; a pattern that matches no tool is an error.
+listed; a call to one is an error result (errorCategory usage) that says why; a
+pattern that matches no tool is an error.
+
+Loop policy (the model cannot change it):
+  --loop-required                 tenant tools are refused (errorCategory loop_required)
+                                  until loop_start opened a loop
+  --loop-max-iterations, --loop-max-deploys, --loop-max-same-errors, --loop-max-minutes
+                                  the highest limits loop_start accepts (higher: usage error);
+                                  they also lower the defaults
+
+Masking: values of sensitive names (authorization, cookie, password, secret, token,
+credential, API key) in all name/value lists of results are masked as ***;
+--mask-pattern adds name patterns, --redact-payloads replaces message bodies with
+a placeholder, size and sha256. Local paths in results are relative to --root.
+All flags can also be set in cpictl.yaml (e.g. loop-required: true) or as
+CPICTL_* environment variables.
 ```
 
 **Usage:** `cpictl mcp [flags]`
@@ -2206,10 +2221,17 @@ listed and cannot be called; a pattern that matches no tool is an error.
       --cache-ttl int                       Seconds list_packages and list_artifacts results are reused (0: no cache); any tool that changes the tenant clears them (default 60)
       --disable-tools strings               Do not offer these tools (names or patterns); wins over --tools
       --dynamic-toolsets                    List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start
+      --loop-max-deploys int                Highest max_deploys loop_start accepts (0: no cap); also lowers the default
+      --loop-max-iterations int             Highest max_iterations loop_start accepts (0: no cap); also lowers the default
+      --loop-max-minutes int                Highest wall_clock_minutes loop_start accepts (0: no cap); also lowers the default
+      --loop-max-same-errors int            Highest same_error_limit loop_start accepts (0: no cap); also lowers the default
+      --loop-required                       Refuse tools that change the tenant or trigger processing (errorCategory loop_required) while no loop is open (loop_start)
+      --mask-pattern stringArray            Also mask the values of names (headers, properties, attributes, parameters) matching this regular expression (case-insensitive; repeatable)
       --max-checks int                      Default maximum number of deploy/undeploy status checks (default 30)
       --mode string                         Preset: discover (read-only), operate (read tools + set_log_level), develop (all tools, no pd_deploy full_sync), full (all tools, no restrictions)
       --poll-interval int                   Default seconds between deploy/undeploy status checks (default 10)
       --read-only                           Offer only tools that do not change the tenant or trigger processing
+      --redact-payloads                     Replace message bodies in results (test message responses, attachments, message store entries, trace payloads, data store entries, variables) with a placeholder, size and sha256
       --root string                         Directory that local paths of tool calls are confined to (default ".")
       --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
       --runtime-oauth-clientsecret string   OAuth client secret for runtime endpoints
