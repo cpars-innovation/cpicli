@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.12.0
+
 - `send` / `send_test_message`: `--path` (MCP `path`) appends a sub-path and query to the flow's
   endpoint, and `--url` may be a URL below a listed endpoint, for flows that route on the path
   (a SOAP sender at `/out/` reached as `/cxf/out/test`, HTTPS addresses ending in `/*`). Other
