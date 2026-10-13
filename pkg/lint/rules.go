@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/pkg/catalog"
+	"net/url"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -1030,6 +1031,32 @@ var (
 	reIdentifier   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.\-]*$`)
 )
 
+// reAddressKey matches parameter names of addresses: TokenURL, Token_Uri,
+// TokenEndpoint, TokenPath, TokenHost.
+var reAddressKey = regexp.MustCompile(`(?i)(url|uri|endpoint|path|host|address)$`)
+
+// secretQueryParams are query parameters that carry a secret.
+var secretQueryParams = map[string]bool{"token": true, "access_token": true, "signature": true, "sig": true, "key": true,
+	"apikey": true, "api_key": true, "password": true, "pwd": true, "secret": true, "client_secret": true, "code": true}
+
+// urlSecret reports whether v is an absolute URL and whether it carries a
+// secret: a password in the user info or a secret query parameter.
+func urlSecret(v string) (isURL, carries bool) {
+	u, err := url.Parse(v)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return false, false
+	}
+	if _, ok := u.User.Password(); ok {
+		return true, true
+	}
+	for k := range u.Query() {
+		if secretQueryParams[strings.ToLower(k)] {
+			return true, true
+		}
+	}
+	return true, false
+}
+
 func ruleSecrets(lc *lintContext, a *lintArtifact) []Finding {
 	var out []Finding
 	for _, file := range sortedKeys(a.Scripts) {
@@ -1049,6 +1076,15 @@ func ruleSecrets(lc *lintContext, a *lintArtifact) []Finding {
 		}
 		// the name of a credential or secure parameter, not the secret itself
 		if reSecretRefKey.MatchString(key) && reIdentifier.MatchString(v) {
+			continue
+		}
+		// an address (CI_ODataAPI_TokenURL = https://.../oauth/token) is
+		// not a secret unless it carries one
+		if isURL, carries := urlSecret(v); isURL || reAddressKey.MatchString(key) {
+			if carries {
+				out = append(out, a.finding("hardcoded-secret", ops.ResourcesDir+"/parameters.prop", "", "", key,
+					"the parameter "+key+" holds a URL with credentials (user info or a secret query parameter)", "use a credential name instead of the value"))
+			}
 			continue
 		}
 		for _, s := range []string{"password", "secret", "apikey", "api_key", "token"} {

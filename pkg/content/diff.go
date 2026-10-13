@@ -60,6 +60,15 @@ func normalizedTree(fsys fs.FS, root string) (map[string][]string, error) {
 	return tree, err
 }
 
+// fileLines are the significant lines of a single compared file: the
+// entries of a .prop file (metainfo.prop), else its lines without comments.
+func fileLines(name string, data []byte) []string {
+	if strings.HasSuffix(name, ".prop") {
+		return propLines(data)
+	}
+	return normalizeLines(data, "#")
+}
+
 func equalLines(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -110,7 +119,7 @@ func DiffFile(firstFile string, secondFile string) bool {
 	if errA != nil || errB != nil {
 		return true
 	}
-	if !equalLines(normalizeLines(a, "#"), normalizeLines(b, "#")) {
+	if !equalLines(fileLines(firstFile, a), fileLines(secondFile, b)) {
 		log.Info().Msgf("File differs: %v", path.Base(firstFile))
 		return true
 	}
@@ -174,7 +183,7 @@ func hashOf(fsys fs.FS, skipVersion bool, dirs, files []string) (string, error) 
 	}
 	for _, f := range files {
 		if data, err := fs.ReadFile(fsys, f); err == nil {
-			add(f, normalizeLines(bytes.TrimSpace(data), "#"))
+			add(f, fileLines(f, bytes.TrimSpace(data)))
 		}
 	}
 	sum := h.Sum(nil)

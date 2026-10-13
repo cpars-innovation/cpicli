@@ -440,3 +440,49 @@ func uploadProblem(zipData []byte) string {
 	}
 	return ""
 }
+
+// tenantSerialised returns an uploaded archive as a tenant stores it: the
+// tenant rewrites metainfo.prop with java.util.Properties (a comment line,
+// ':' and '=' in values escaped), so a download differs from the upload
+// byte for byte. Other files are kept. An archive the mock cannot read is
+// returned as is.
+func tenantSerialised(zipData []byte) []byte {
+	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return zipData
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	changed := false
+	for _, f := range zr.File {
+		rc, err := f.Open()
+		if err != nil {
+			return zipData
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			return zipData
+		}
+		if f.Name == "metainfo.prop" {
+			props, order := parseProperties(data)
+			var b strings.Builder
+			b.WriteString("#Store metainfo properties\r\n")
+			for _, k := range order {
+				b.WriteString(k + "=" + strings.NewReplacer(":", `\:`, "=", `\=`).Replace(props[k]) + "\r\n")
+			}
+			data, changed = []byte(b.String()), true
+		}
+		w, err := zw.Create(f.Name)
+		if err != nil {
+			return zipData
+		}
+		if _, err := w.Write(data); err != nil {
+			return zipData
+		}
+	}
+	if !changed || zw.Close() != nil {
+		return zipData
+	}
+	return buf.Bytes()
+}

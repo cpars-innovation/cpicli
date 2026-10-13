@@ -43,3 +43,13 @@ func TestRestoreProperties(t *testing.T) {
 	got = RestoreProperties(tenant, nil, map[string]bool{"Host": true})
 	assert.Equal(t, "Host=herrenberg.example\nPort=443\nUser=t\n", string(got), "no local value: the tenant's")
 }
+
+// The tenant writes metainfo.prop with a comment line and ':' escaped: the
+// same description as an unescaped local file.
+func TestPropLinesUnescape(t *testing.T) {
+	tenant := []byte("#Store metainfo properties\r\ndescription=cpictl test harness\\: forwards \\u00e4 \\\\ x\r\n")
+	local := []byte("description=cpictl test harness: forwards ä \\\\ x\n")
+	assert.Equal(t, propLines(tenant), propLines(local))
+	assert.NotEqual(t, propLines(local), propLines([]byte("description=other\n")))
+	assert.Equal(t, propLines([]byte("a = one \\\n    two\n")), propLines([]byte("a=one two\n")))
+}

@@ -93,7 +93,7 @@ func TestUploadArtifactRejectsDraftAndWrongPackage(t *testing.T) {
 	})
 	_, err := UploadArtifact(mock.Executer(), UploadRequest{ID: "OrderIntake", Type: "Integration", PackageID: "Orders", Dir: dir})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found in package Orders")
+	assert.Contains(t, err.Error(), "OrderIntake already exists in package Other, not in Orders")
 	assert.Equal(t, exitcode.Error, output.ExitCode(err))
 	assert.Zero(t, mock.Artifacts["OrderIntake"].Uploads)
 }

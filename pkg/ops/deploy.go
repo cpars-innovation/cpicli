@@ -539,6 +539,10 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 	if lastErr != nil {
 		err = fmt.Errorf("%w; last error: %v", err, lastErr)
 	}
+	if runtimeStatus == "NOT_DEPLOYED" || runtimeStatus == "" {
+		// the deployment never reached the runtime: not a flow problem
+		err = fmt.Errorf("%w; it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments", err)
+	}
 	return timeout(r, err)
 }
 

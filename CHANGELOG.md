@@ -5,6 +5,24 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Upload compares `metainfo.prop` (and other `.prop` files) by their entries as Java reads them:
+  the tenant rewrites the description with `:` escaped and a comment line, so an unchanged
+  artifact was reported as changed and, with versioning manifest, refused ("content differs but
+  Bundle-Version equals the tenant's"). This made `cpictl test tools install` fail on a second run
+  ([#7](https://github.com/cpars-innovation/cpicli/issues/7)). The mock tenant now stores
+  `metainfo.prop` like a tenant.
+- An artifact that exists in another package: the error names that package ("X already exists in
+  package P, not in Q") instead of "not found in package Q". A deployment that never reaches the
+  runtime says so in its timeout error (check that the tenant's runtime is up).
+- Lint `hardcoded-secret`: an address parameter (`*URL`, `*Uri`, `*Endpoint`, `*Path`, `*Host`) or a
+  URL value is not a secret unless the URL carries credentials (user info, `token=`, `sig=`,
+  `key=`, ...); such a URL is now reported under any parameter name
+  ([#8](https://github.com/cpars-innovation/cpicli/issues/8)).
+- Lint leaves SAP-delivered content out by default: findings carry the package `vendor` (from the
+  snapshot's `<package>.json`, `SAP` for `com.sap.` IDs without one); `ignoreVendors` in
+  `.cpi/lint.yaml` (default `[SAP]`, `[]` checks all) and `Result.SkippedVendor`
+  ([#9](https://github.com/cpars-innovation/cpicli/issues/9)).
+
 ## 0.14.0
 
 - Test tooling: the user role of the harness's and the stub's HTTPS senders is externalised

@@ -233,3 +233,73 @@ func DropOrphanParameters(dir string, keep bool) ([]string, error) {
 	}
 	return orphans, os.WriteFile(p, NormalizeProperties([]byte(strings.Join(out, "\n")+"\n")), 0o644)
 }
+
+// propLines returns the entries of a properties file as sorted
+// "key=value" lines with keys and values unescaped as java.util.Properties
+// reads them, so that "a\:b" and "a:b" (the tenant escapes ':' in
+// metainfo.prop) compare equal; then normalized like normalizeLines.
+func propLines(data []byte) []string {
+	entries, _ := splitProperties(strings.ReplaceAll(string(data), "\r\n", "\n"))
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		// join continuation lines: drop the trailing backslash and the
+		// next line's leading whitespace
+		var b strings.Builder
+		for i, l := range e.lines {
+			if i > 0 {
+				l = strings.TrimLeft(l, " \t\f")
+			}
+			if i < len(e.lines)-1 {
+				l = l[:len(l)-1]
+			}
+			b.WriteString(l)
+		}
+		line := strings.TrimLeft(b.String(), " \t\f")
+		key := propKey(line)
+		rest := strings.TrimLeft(line[len(key):], " \t\f")
+		if rest != "" && (rest[0] == '=' || rest[0] == ':') {
+			rest = rest[1:]
+		}
+		out = append(out, unescapeProp(key)+"="+unescapeProp(strings.TrimLeft(rest, " \t\f")))
+	}
+	sort.Strings(out)
+	return normalizeLines([]byte(strings.Join(out, "\n")), "")
+}
+
+// unescapeProp resolves the escapes of a properties key or value.
+func unescapeProp(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 == len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		i++
+		switch c := s[i]; c {
+		case 't':
+			b.WriteByte('\t')
+		case 'n':
+			b.WriteByte('\n')
+		case 'r':
+			b.WriteByte('\r')
+		case 'f':
+			b.WriteByte('\f')
+		case 'u':
+			var r rune
+			if i+4 < len(s) {
+				if _, err := fmt.Sscanf(s[i+1:i+5], "%04x", &r); err == nil {
+					b.WriteRune(r)
+					i += 4
+					continue
+				}
+			}
+			b.WriteByte(c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}

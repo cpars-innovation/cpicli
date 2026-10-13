@@ -363,7 +363,7 @@ func (s *Synchroniser) UploadArtifact(artifactId, artifactName, artifactType, pa
 		return outcome, fmt.Errorf("versioning manifest: %s has no Bundle-Version in META-INF/MANIFEST.MF", artifactDir)
 	}
 
-	exists, err := artifactExists(artifactId, artifactType, packageId, dt, s.ip)
+	exists, err := artifactExists(s.exe, artifactId, artifactType, packageId, dt, s.ip)
 	if err != nil {
 		return outcome, err
 	}
@@ -625,7 +625,7 @@ func IsDraft(err error) bool {
 	return errors.As(err, &d)
 }
 
-func artifactExists(artifactId string, artifactType string, packageId string, dt cpi.DesigntimeArtifact, ip *cpi.IntegrationPackage) (bool, error) {
+func artifactExists(exe *httpclnt.HTTPExecuter, artifactId string, artifactType string, packageId string, dt cpi.DesigntimeArtifact, ip *cpi.IntegrationPackage) (bool, error) {
 	_, _, exists, err := dt.Get(artifactId, "active")
 	if err != nil {
 		return false, err
@@ -640,6 +640,11 @@ func artifactExists(artifactId string, artifactType string, packageId string, dt
 		}
 		artifact := cpi.FindArtifactById(artifactId, details)
 		if artifact == nil {
+			// IDs are unique per tenant: it is in another package
+			if info, _, err := cpi.GetDesigntimeInfo(exe, artifactType, artifactId, "active"); err == nil && info != nil && info.PackageID != "" && info.PackageID != packageId {
+				return false, fmt.Errorf("%v already exists in package %v, not in %v (artifact IDs are unique per tenant): upload it to package %v, or delete it there first",
+					artifactId, info.PackageID, packageId, info.PackageID)
+			}
 			return false, fmt.Errorf("Artifact %v not found in package %v", artifactId, packageId)
 		}
 		if artifact.IsDraft {

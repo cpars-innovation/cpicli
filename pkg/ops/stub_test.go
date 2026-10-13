@@ -228,3 +228,22 @@ func TestStubCalls(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, later, "since filters")
 }
+
+// A tool in another package: the error names that package.
+func TestInstallTestToolsOtherPackage(t *testing.T) {
+	m := liveMock(t)
+	exe := m.Executer()
+	_, err := InstallTestTools(context.Background(), exe, TestToolsOptions{PackageID: "ZZSandbox", Only: testtools.ToolHarness})
+	require.NoError(t, err)
+
+	res, err := InstallTestTools(context.Background(), exe, TestToolsOptions{Only: testtools.ToolHarness})
+	require.Error(t, err)
+	require.Len(t, res.Artifacts, 1)
+	assert.Contains(t, res.Artifacts[0].Error, "CPICTL_Test_Harness already exists in package ZZSandbox, not in CPICTLTesting")
+
+	// installing again where it is: unchanged, no version conflict
+	res, err = InstallTestTools(context.Background(), exe, TestToolsOptions{PackageID: "ZZSandbox", Only: testtools.ToolHarness, Deploy: true, DeployOptions: fastDeploy})
+	require.NoError(t, err)
+	assert.Equal(t, "UNCHANGED", res.Artifacts[0].Upload.Action)
+	assert.Equal(t, StatusDeployed, res.Artifacts[0].Deploy.Status)
+}

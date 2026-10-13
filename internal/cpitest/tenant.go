@@ -1573,7 +1573,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			m.Artifacts[body.Id] = a
 		}
 		a.Type, a.DesignVersion, a.Package, a.Name = typ, "1.0.0", body.PackageId, body.Name
-		a.applyContent(zipData)
+		a.applyContent(tenantSerialised(zipData))
 		a.Uploads++
 		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r) // as on every save on a tenant
 		w.WriteHeader(http.StatusCreated)
@@ -1599,7 +1599,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			odataError(w, http.StatusInternalServerError, "Internal Server Error", msg)
 			return
 		}
-		a.applyContent(zipData)
+		a.applyContent(tenantSerialised(zipData))
 		a.Uploads++
 		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r)
 		w.WriteHeader(http.StatusOK)
@@ -1643,7 +1643,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			notFound(w)
 			return
 		}
-		d := map[string]string{"Id": mm[2], "Version": a.DesignVersion}
+		d := map[string]string{"Id": mm[2], "Version": a.DesignVersion, "PackageId": a.Package}
 		if !a.ModifiedAt.IsZero() {
 			d["ModifiedAt"] = odataDate(a.ModifiedAt)
 		}

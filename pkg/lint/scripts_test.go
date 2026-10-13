@@ -118,3 +118,65 @@ func TestScriptDocAndTests(t *testing.T) {
 	require.Len(t, cov, 2)
 	assert.Contains(t, cov[0].Message, "changed after the coverage report was written")
 }
+
+// A token URL is an address, not a secret (SAP's pipeline flows,
+// CI_ODataAPI_TokenURL); a URL that carries credentials still is.
+func TestSecretURLs(t *testing.T) {
+	content := t.TempDir()
+	tFlow{pkg: "P", id: "Flow", params: "CI_ODataAPI_TokenURL=https\\://host/oauth/token\n" +
+		"Token_Path=/oauth/token\n" +
+		"WebhookToken=https\\://host/hook?token=abc123\n" +
+		"Api_Url=https\\://user\\:pw@host/api\n" +
+		"ClientSecret=s3cr3tvalue\n"}.write(t, content)
+	res, err := Run(context.Background(), Options{Dir: content})
+	require.NoError(t, err)
+	var keys []string
+	for _, f := range findingsOf(res, "hardcoded-secret", "Flow") {
+		keys = append(keys, f.Message)
+	}
+	assert.ElementsMatch(t, []string{
+		"the parameter WebhookToken holds a URL with credentials (user info or a secret query parameter)",
+		"the parameter Api_Url holds a URL with credentials (user info or a secret query parameter)",
+		"the parameter ClientSecret holds a value that looks like a secret",
+	}, keys)
+}
+
+// SAP-delivered content (package vendor SAP, or com.sap. IDs without package
+// details) is left out by default; ignoreVendors: [] checks it.
+func TestIgnoreVendors(t *testing.T) {
+	content := t.TempDir()
+	secret := "Password=hunter22\n"
+	tFlow{pkg: "SAPPkg", id: "Std_Flow", params: secret}.write(t, content)
+	writeProjectFile(t, content, "SAPPkg/SAPPkg.json", `{"d":{"Id":"SAPPkg","Name":"SAP content","Vendor":"SAP"}}`)
+	tFlow{pkg: "Loose", id: "com.sap.integration.cloud.pipeline.step02", params: secret}.write(t, content)
+	tFlow{pkg: "Mine", id: "My_Flow", params: secret}.write(t, content)
+	writeProjectFile(t, content, "Mine/Mine.json", `{"d":{"Id":"Mine","Name":"Mine","Vendor":"ACME"}}`)
+
+	res, err := Run(context.Background(), Options{Dir: content})
+	require.NoError(t, err)
+	assert.Equal(t, 2, res.SkippedVendor)
+	assert.Equal(t, 1, res.Checked)
+	require.Len(t, findingsOf(res, "hardcoded-secret", "My_Flow"), 1)
+	assert.Equal(t, "ACME", findingsOf(res, "hardcoded-secret", "My_Flow")[0].Vendor)
+	assert.Empty(t, findingsOf(res, "hardcoded-secret", "Std_Flow"))
+
+	cfg := DefaultConfig()
+	cfg.IgnoreVendors = nil
+	res, err = Run(context.Background(), Options{Dir: content, Config: cfg})
+	require.NoError(t, err)
+	assert.Zero(t, res.SkippedVendor)
+	assert.Equal(t, "SAP", findingsOf(res, "hardcoded-secret", "Std_Flow")[0].Vendor)
+	assert.Equal(t, "SAP", findingsOf(res, "hardcoded-secret", "com.sap.integration.cloud.pipeline.step02")[0].Vendor)
+}
+
+func TestIgnoreVendorsConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeProjectFile(t, dir, ".cpi/lint.yaml", "ignoreVendors: []\n")
+	cfg, err := LoadConfig(filepath.Join(dir, ".cpi", "lint.yaml"))
+	require.NoError(t, err)
+	assert.Empty(t, cfg.IgnoreVendors)
+	writeProjectFile(t, dir, ".cpi/lint.yaml", "rules: {}\n")
+	cfg, err = LoadConfig(filepath.Join(dir, ".cpi", "lint.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"SAP"}, cfg.IgnoreVendors)
+}

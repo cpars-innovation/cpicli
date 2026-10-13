@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/pkg/catalog"
+	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"io/fs"
@@ -41,6 +42,9 @@ type Finding struct {
 	Group    string `json:"group"`
 	Severity string `json:"severity"`
 	Package  string `json:"package,omitempty"`
+	// Vendor is the package's vendor (its <package>.json from snapshot),
+	// "SAP" for an artifact ID starting with com.sap. without one.
+	Vendor   string `json:"vendor,omitempty"`
 	Artifact string `json:"artifact"`
 	// Path is the artifact folder below the linted directory.
 	Path string `json:"path"`
@@ -84,6 +88,10 @@ type Config struct {
 	// ScriptTests are where the tests of script collection scripts are and
 	// how much of them they must cover.
 	ScriptTests ScriptTestConfig `yaml:"scriptTests" json:"scriptTests"`
+	// IgnoreVendors leaves the artifacts of these package vendors out of
+	// the findings (default SAP: content SAP delivers, which customers do
+	// not edit); [] checks every vendor. Cross-flow rules still see them.
+	IgnoreVendors []string `yaml:"ignoreVendors" json:"ignoreVendors"`
 	// Ignore suppresses findings: artifact and rule patterns ("*" for all).
 	Ignore []struct {
 		Artifact string `yaml:"artifact" json:"artifact"`
@@ -160,7 +168,8 @@ func DefaultConfig() *Config {
 		Settings: Settings{DuplicateMinFlows: 2, RouterMinValues: 4, LookupMinEntries: 10, LargeScriptLines: 300},
 		ScriptCollections: ScriptCollectionConfig{PackageCollection: "{package}_Scripts",
 			SharedPackage: "SharedScripts", SharedCollection: "Shared_Scripts"},
-		ScriptTests: ScriptTestConfig{Dir: "tests/scripts", CoverageReport: "build/reports/jacoco/test/jacocoTestReport.xml", MinCoverage: 80},
+		IgnoreVendors: []string{"SAP"},
+		ScriptTests:   ScriptTestConfig{Dir: "tests/scripts", CoverageReport: "build/reports/jacoco/test/jacocoTestReport.xml", MinCoverage: 80},
 	}
 }
 
@@ -253,6 +262,35 @@ type Result struct {
 	New map[string]int `json:"new"`
 	// ByRule counts the findings per rule.
 	ByRule map[string]int `json:"byRule"`
+	// SkippedVendor counts the artifacts left out by Config.IgnoreVendors.
+	SkippedVendor int `json:"skippedVendor,omitempty"`
+}
+
+// vendorCache reads the vendor of each package once.
+type vendorCache map[string]string
+
+// of returns the vendor of an artifact's package: the Vendor of
+// <package folder>/<package>.json (written by snapshot), else "SAP" for an
+// artifact ID starting with com.sap. (SAP's content, linted without its
+// package details), else "".
+func (c vendorCache) of(la ops.LocalArtifact) string {
+	if la.PackageID != "" {
+		pkgDir := filepath.Dir(la.Dir)
+		v, ok := c[pkgDir]
+		if !ok {
+			if d, err := cpi.GetPackageDetails(filepath.Join(pkgDir, la.PackageID+".json")); err == nil && d != nil {
+				v = strings.TrimSpace(d.Root.Vendor)
+			}
+			c[pkgDir] = v
+		}
+		if v != "" {
+			return v
+		}
+	}
+	if strings.HasPrefix(la.ID, "com.sap.") {
+		return "SAP"
+	}
+	return ""
 }
 
 // lintArtifact is an artifact as the rules see it.
@@ -265,19 +303,21 @@ type lintArtifact struct {
 	Scripts map[string][]byte
 	Files   []string
 	Params  map[string]string
+	Vendor  string
 	inScope bool
 }
 
 func (a *lintArtifact) finding(rule, file, element, elementName, key, msg, suggestion string) Finding {
-	return Finding{Rule: rule, Package: a.PackageID, Artifact: a.ID, Path: a.Rel, File: file, Element: element,
+	return Finding{Rule: rule, Package: a.PackageID, Vendor: a.Vendor, Artifact: a.ID, Path: a.Rel, File: file, Element: element,
 		ElementName: elementName, Message: msg, Suggestion: suggestion, key: key}
 }
 
 type lintContext struct {
-	opts      Options
-	cfg       *Config
-	artifacts []*lintArtifact
-	byID      map[string]*lintArtifact
+	skippedVendor int
+	opts          Options
+	cfg           *Config
+	artifacts     []*lintArtifact
+	byID          map[string]*lintArtifact
 }
 
 // runLint checks the artifacts of a content tree against the rules. Only
@@ -302,6 +342,7 @@ func runLint(ctx context.Context, o Options) (*Result, *lintContext, error) {
 			return nil, nil, err
 		}
 	}
+	vendors := vendorCache{}
 	var walkErr error
 	err := ops.WalkLocalArtifacts(ctx, o.Dir, func(la ops.LocalArtifact) {
 		a, err := loadLintArtifact(la)
@@ -309,7 +350,12 @@ func runLint(ctx context.Context, o Options) (*Result, *lintContext, error) {
 			walkErr = errors.Join(walkErr, fmt.Errorf("%s: %w", la.Rel, err))
 			return
 		}
+		a.Vendor = vendors.of(la)
 		a.inScope = ops.MatchAny(o.Packages, a.PackageID) && ops.MatchAny(o.Artifacts, a.ID) && (changed == nil || changed[a.Rel])
+		if a.inScope && a.Vendor != "" && slices.ContainsFunc(o.Config.IgnoreVendors, func(v string) bool { return strings.EqualFold(v, a.Vendor) }) {
+			a.inScope = false
+			lc.skippedVendor++
+		}
 		lc.artifacts = append(lc.artifacts, a)
 		lc.byID[a.ID] = a
 	}, func(err error) { walkErr = errors.Join(walkErr, err) })
@@ -321,7 +367,7 @@ func runLint(ctx context.Context, o Options) (*Result, *lintContext, error) {
 	}
 	sort.Slice(lc.artifacts, func(i, j int) bool { return lc.artifacts[i].Rel < lc.artifacts[j].Rel })
 
-	res := &Result{Dir: o.Dir, Artifacts: len(lc.artifacts), Findings: []Finding{}, Counts: map[string]int{}, New: map[string]int{}, ByRule: map[string]int{}}
+	res := &Result{Dir: o.Dir, Artifacts: len(lc.artifacts), SkippedVendor: lc.skippedVendor, Findings: []Finding{}, Counts: map[string]int{}, New: map[string]int{}, ByRule: map[string]int{}}
 	var all []Finding
 	for _, a := range lc.artifacts {
 		if a.inScope {

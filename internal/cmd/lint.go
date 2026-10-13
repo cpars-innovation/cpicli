@@ -248,6 +248,9 @@ func logLint(res *lint.Result) {
 	log.Info().Msgf("%d artifact(s), %d checked: %d error(s), %d warning(s), %d info; new: %d error(s), %d warning(s), %d info",
 		res.Artifacts, res.Checked, res.Counts[lint.SevError], res.Counts[lint.SevWarning], res.Counts[lint.SevInfo],
 		res.New[lint.SevError], res.New[lint.SevWarning], res.New[lint.SevInfo])
+	if res.SkippedVendor > 0 {
+		log.Info().Msgf("%d artifact(s) of vendors in ignoreVendors not checked (SAP-delivered content by default; ignoreVendors: [] in .cpi/lint.yaml checks them)", res.SkippedVendor)
+	}
 }
 
 // loadComponents reads a component catalogue; a missing file is no catalogue.

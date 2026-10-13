@@ -53,7 +53,7 @@ cpictl lint --list-rules
 | | `component-newer-than-tenant` | error | a step or adapter version newer than the tenant's editor offers (needs a [component catalogue](components.md) from the editor metadata): the tenant's Check and deploy fail. Typical after copying a flow from a newer tenant | |
 | configuration | `hardcoded-endpoint` | warning | a receiver address that is not a `{{parameter}}` or `${...}` (HTTP, SOAP, OData, IDoc, SFTP, ...) | |
 | | `hardcoded-url-in-script` | warning | a URL in a script (namespaces excluded) | |
-| | `hardcoded-secret` | error | a password, token or key assigned in a script or parameter | |
+| | `hardcoded-secret` | error | a password, token or key assigned in a script or parameter; a URL only when it carries credentials (user info, `token=`, `sig=`, `key=` ...) | |
 | | `odata-hardcoded-query` | info | literal OData query options or resource path with environment-specific values: `sap-client=<nnn>`, `CompanyCode`/`BUKRS`, `SalesOrganization`/`VKORG`, `Plant`/`WERKS`, `ControllingArea`/`KOKRS eq '<literal>'` | |
 | | `idoc-sap-client-literal` | warning | an IDoc receiver address that is partly externalised but keeps a literal host or `sap-client` (a fully literal address is `hardcoded-endpoint`, reported once) | |
 | | `idoc-control-record-literal` | info | the control record partners `EDI_DC40` `SNDPRN`, `RCVPRN`, `SNDPOR`, `RCVPOR` set to literals: in a content modifier body, an XSLT (literal result element) or a message mapping (target field from the `const` function) | |
@@ -101,10 +101,18 @@ scriptTests:                # paths relative to the project root (the folder hol
   dir: tests/scripts        # tests in the layout <package>/<collection>/
   coverageReport: build/reports/jacoco/test/jacocoTestReport.xml
   minCoverage: 80           # line coverage per collection script, percent
+ignoreVendors: [SAP]        # default: SAP-delivered content is not checked; [] checks every vendor
 ignore:                     # findings that stay (say why in a comment)
   - artifact: Legacy_*
     rule: "*"
 ```
+
+**Vendors.** Each finding carries `vendor`: the `Vendor` of the package details that snapshot
+writes (`<package>/<package>.json`), or `SAP` for an artifact ID that starts with `com.sap.` when
+there are none. Content of the vendors in `ignoreVendors` (default `SAP`: packages SAP delivers,
+which customers do not edit) is not reported; cross-flow rules still compare against it. The
+result says how many artifacts were left out (`skippedVendor`). A copy of an SAP package that you
+edit keeps vendor SAP: set `ignoreVendors: []`, or give the copy your own vendor.
 
 `--rules` points to another file. An unknown rule or severity is an error (exit code 2).
 

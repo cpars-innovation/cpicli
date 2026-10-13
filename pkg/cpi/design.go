@@ -32,6 +32,7 @@ type designtimeArtifactData struct {
 		Version     string `json:"Version"`
 		Description string `json:"Description"`
 		ModifiedAt  string `json:"ModifiedAt"`
+		PackageId   string `json:"PackageId"`
 	} `json:"d"`
 }
 
@@ -40,6 +41,9 @@ type designtimeArtifactData struct {
 type DesigntimeInfo struct {
 	Version     string
 	Description string
+	// PackageID is the package that holds the artifact ("" when the tenant
+	// does not report it).
+	PackageID string
 	// ModifiedAt is the last change of the designtime artifact; zero when
 	// the tenant does not report it (or in a format cpictl cannot read).
 	ModifiedAt time.Time
@@ -75,7 +79,7 @@ func GetDesigntimeInfo(exe *httpclnt.HTTPExecuter, artifactType, id, version str
 	if err != nil || !exists {
 		return nil, exists, err
 	}
-	info = &DesigntimeInfo{Version: data.Root.Version, Description: data.Root.Description}
+	info = &DesigntimeInfo{Version: data.Root.Version, Description: data.Root.Description, PackageID: data.Root.PackageId}
 	if info.ModifiedAt, err = ParseODataTime(data.Root.ModifiedAt); err != nil {
 		log.Debug().Msgf("Ignoring unparseable ModifiedAt %q of %v designtime artifact %v: %v", data.Root.ModifiedAt, artifactType, id, err)
 		info.ModifiedAt = time.Time{}
