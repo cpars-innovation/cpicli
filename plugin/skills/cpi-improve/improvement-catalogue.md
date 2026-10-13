@@ -12,6 +12,7 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `similar-script` | the differences are accidental | unify (keep the best version), then as `duplicate-script` | medium: test every variant's flow |
 | `duplicate-mapping` | 2+ flows | one message mapping artifact in the package, the flows reference it | medium: mapping step reference changes |
 | `missing-script-collection` | always | snapshot the package holding it, or fix the ID | the flow does not deploy without it |
+| `collection-script-doc` | always for collections | a `/** */` comment per public function: purpose (first sentence, what search finds), reads, writes, errors, how to call it ([script-tests.md](../cpi-build/script-tests.md)) | none (comments only); re-upload the collection |
 
 ## Partner Directory
 
@@ -47,6 +48,8 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 |------|----------|-----|------|
 | `no-exception-subprocess` | conventions require one (usually) | add the house exception subprocess (copy it from the template flow) | low |
 | `swallowed-exception` | always | rethrow, or handle it explicitly (set a status, log, route) | medium: errors now become visible (that is the point) |
+| `collection-script-tests` | always for collections | tests in `tests/scripts/<package>/<collection>/` calling every public function with today's inputs ([script-tests.md](../cpi-build/script-tests.md)) | none (test code, not uploaded) |
+| `collection-script-coverage` | below the minimum, or no report | more test cases for the uncovered branches (JaCoCo HTML report); run the tests before lint | none |
 
 ## Performance and data protection
 
@@ -70,5 +73,6 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | Rule | Act when | How | Risk |
 |------|----------|-----|------|
 | `outdated-component` | the flow is changed anyway | update the step version in the Web UI editor (it migrates the settings) | medium: newer versions change defaults; test |
+| `script-doc` | the flow is changed anyway | one sentence at the top of the script: what the step does | none |
 | `default-step-name` | the flow is changed anyway | name steps after what they do | none |
 | `naming` | new flows; existing ones only with a migration | `iflow copy` to a new ID, switch, undeploy the old | high for existing flows |

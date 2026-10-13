@@ -59,6 +59,7 @@ var lintRules = []lintRule{
 	{id: "similar-script", group: GroupReuse, severity: SevInfo, title: "Scripts that differ only in comments and formatting", cross: ruleSimilarScripts},
 	{id: "duplicate-mapping", group: GroupReuse, severity: SevWarning, title: "The same message mapping or XSLT is in several flows: make it a shared mapping artifact", cross: ruleDuplicateMappings},
 	{id: "missing-script-collection", group: GroupReuse, severity: SevWarning, title: "A referenced script collection is not in the repository", artifact: ruleMissingCollection},
+	{id: "collection-script-doc", group: GroupReuse, severity: SevWarning, title: "A function of a script collection has no doc comment (what it does, how to call it)", artifact: ruleCollectionScriptDoc},
 	// partner directory
 	{id: "router-literals", group: GroupPartnerDir, severity: SevWarning, title: "A router decides on many literal values: a routing table for the Partner Directory", artifact: ruleRouterLiterals},
 	{id: "lookup-table-in-script", group: GroupPartnerDir, severity: SevInfo, title: "A script holds a lookup table: Partner Directory or a value mapping", artifact: ruleLookupTables},
@@ -78,6 +79,8 @@ var lintRules = []lintRule{
 	// robustness
 	{id: "no-exception-subprocess", group: GroupRobustness, severity: SevWarning, title: "The integration process has no exception subprocess", artifact: ruleNoExceptionSubprocess},
 	{id: "swallowed-exception", group: GroupRobustness, severity: SevWarning, title: "A script catches an exception and ignores it", artifact: ruleSwallowedExceptions},
+	{id: "collection-script-tests", group: GroupRobustness, severity: SevWarning, title: "A function of a script collection is not called by any test", artifact: ruleCollectionScriptTests},
+	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
 	// performance and data protection
 	{id: "body-as-string", group: GroupPerformance, severity: SevInfo, title: "A script reads the whole body as a string", artifact: ruleBodyAsString},
 	{id: "payload-attachment", group: GroupPerformance, severity: SevWarning, title: "A script logs the payload as an attachment", artifact: rulePayloadAttachment},
@@ -91,6 +94,7 @@ var lintRules = []lintRule{
 	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},
 	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than the tenant offers or other flows use", cross: ruleOutdatedComponents},
 	{id: "component-newer-than-tenant", group: GroupRobustness, severity: SevError, title: "A step or adapter version is newer than the tenant offers (Check and deploy fail)", artifact: ruleComponentNewerThanTenant},
+	{id: "script-doc", group: GroupHygiene, severity: SevInfo, title: "A flow script has no comment saying what it does", artifact: ruleScriptDoc},
 	{id: "default-step-name", group: GroupHygiene, severity: SevInfo, title: "A step has its default name", artifact: ruleDefaultNames},
 	{id: "layout", group: GroupHygiene, severity: SevInfo, title: "The diagram has overlapping or undrawn shapes, or lines through steps", artifact: ruleLayout},
 	{id: "naming", group: GroupHygiene, severity: SevWarning, title: "The flow ID does not follow the naming rule of .cpi/lint.yaml", artifact: ruleNaming},

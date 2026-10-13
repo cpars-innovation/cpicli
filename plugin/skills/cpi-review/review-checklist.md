@@ -42,6 +42,11 @@ Apply `.cpi/conventions.md` first; its "Review checklist additions" are mandator
 ## Scripts and mappings
 - Scripts: null checks, no `println`, exceptions with meaningful messages, no unused imports,
   no reading the whole body as String for large messages unless needed.
+- Every script says what it does (comment at the top or above its function).
+- Script collections: each changed or new public function has a doc comment (purpose, reads,
+  writes, errors, how to call it) that matches the code, and tests in
+  `tests/scripts/<package>/<collection>/` call it; lint shows no `collection-script-doc`,
+  `collection-script-tests` or `collection-script-coverage` finding for it.
 - Mappings: mandatory fields, value mappings instead of hard-coded code lists.
 
 ## Tests

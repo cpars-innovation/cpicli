@@ -25,6 +25,7 @@ cpictl lint --list-rules
 | | `similar-script` | info | scripts that differ only in comments and formatting | |
 | | `duplicate-mapping` | warning | the same message mapping or XSLT in several flows | |
 | | `missing-script-collection` | warning | a referenced collection not in the repository | |
+| | `collection-script-doc` | warning | a public function of a script collection without a doc comment (what it does, what it reads and writes, how to call it); the first sentence is what discovery and `graph_search` show | |
 | partner-directory | `router-literals` | warning | a router deciding on 4+ literal values of one header or property | |
 | | `lookup-table-in-script` | info | a script with 10+ literal map entries or case branches | |
 | | `deployment-copies` | info | one folder deployed under several IDs with different `configOverrides` (from the deploy config) | |
@@ -40,6 +41,8 @@ cpictl lint --list-rules
 | | `large-script` | info | a script over 300 lines | |
 | robustness | `no-exception-subprocess` | warning | an integration process without exception subprocess | |
 | | `swallowed-exception` | warning | an empty `catch` block | |
+| | `collection-script-tests` | warning | a public function of a script collection that no test in `scriptTests.dir/<package>/<collection>/` calls ([script tests](#script-collection-tests)) | |
+| | `collection-script-coverage` | warning | a script collection script below `scriptTests.minCoverage` line coverage in the JaCoCo report, not in the report, or changed after it; no report at all | |
 | performance | `body-as-string` | info | `getBody(String)` (whole payload in memory) | |
 | | `payload-attachment` | warning | the payload written into the message processing log | |
 | | `logging-in-loop` | warning | log attachments inside a loop | |
@@ -50,6 +53,7 @@ cpictl lint --list-rules
 | | `hardcoded-secret` | error | a password, token or key assigned in a script or parameter | |
 | hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
 | hygiene | `outdated-component` | info | a step or adapter older than the tenant offers (with a [component catalogue](components.md)), else older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
+| | `script-doc` | info | a flow's local script with no comment saying what it does (at the top or above its function) | |
 | | `default-step-name` | info | "Groovy Script 1", "Content Modifier 2", ... | |
 | | `layout` | info | the diagram has steps or lines that are not drawn, overlapping shapes, shapes outside their pool, lines through steps or shapes that nearly touch ([diagram layout](#diagram-layout)) | yes |
 | | `naming` | warning | a flow ID not matching `naming.iflowId` | |
@@ -82,12 +86,42 @@ layout:                     # cpictl iflow layout and the layout rule's fix
   mode: tidy                # tidy (keep the order of branches) or full
   hgap: 60                  # space between columns of steps
   vgap: 40                  # space between rows
+scriptTests:                # paths relative to the project root (the folder holding .cpi)
+  dir: tests/scripts        # tests in the layout <package>/<collection>/
+  coverageReport: build/reports/jacoco/test/jacocoTestReport.xml
+  minCoverage: 80           # line coverage per collection script, percent
 ignore:                     # findings that stay (say why in a comment)
   - artifact: Legacy_*
     rule: "*"
 ```
 
 `--rules` points to another file. An unknown rule or severity is an error (exit code 2).
+
+## Script collection tests
+
+A script collection is a library that many flows call, so its scripts are documented and tested.
+The tests live outside the artifact folders (upload would send them to the tenant, and snapshot
+replaces artifact folders), in the same layout as the content tree:
+
+```
+packages/Orders/Orders_Scripts/src/main/resources/script/Headers.groovy
+tests/scripts/Orders/Orders_Scripts/HeadersTest.groovy
+```
+
+cpictl does not run Groovy. A small Gradle build at the project root compiles the collection
+scripts in place with stubs of SAP's `Message` API, runs the tests and writes a JaCoCo report;
+lint then reads the report. The build, the stubs and an example test are in the build skill's
+[script-tests.md](../plugin/skills/cpi-build/script-tests.md). In CI, run the tests before lint:
+
+```bash
+gradle test            # writes build/reports/jacoco/test/jacocoTestReport.xml
+cpictl lint --fail-on warning
+```
+
+`collection-script-tests` looks for a call of each public function (`name(`) in the test sources
+(`.groovy`, `.java`). `collection-script-coverage` matches scripts by file name, so script names
+must be unique across the collections in one build. Private functions are helpers: no doc comment
+and no direct test needed.
 
 ## CI: baseline and gate
 

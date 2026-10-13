@@ -34,6 +34,11 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   logging and error handling framework.
 - `get_parameters` of a few flows: how are parameters named and grouped?
 - `list_credentials`: how are credentials named (compare with `summary.credentialRefs`)?
+- Script collections are in `discovery.json` (`scriptCollections`): each script with its summary
+  and functions (from their doc comments), and `iflows[].collectionScripts` says which flows call
+  which function. `graph_search` with `types: ["script"]` finds them by purpose. Note collections
+  whose functions have no comments: the conventions should name them as reuse candidates that
+  need documenting (lint `collection-script-doc`).
 - The graph shows how flows work together: `graph_search` with `types: ["endpoint"]` lists the
   ProcessDirect and JMS addresses (naming of internal interfaces), `graph_neighbors` on a
   common script or header shows which flows share it, `sends_to` edges show whether flows are

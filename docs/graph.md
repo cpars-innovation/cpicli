@@ -33,7 +33,7 @@ or a unique name.
 | `endpoint` | `<adapter>:<address>` of a sender, or of a ProcessDirect / JMS receiver | `endpoint:ProcessDirect:/billing/in`, `endpoint:HTTPS:/orders/in`, `endpoint:JMS:Q.Invoices` |
 | `system` | host of a receiver URL (HTTP, SOAP, OData, ...) | `system:s4.example.com` |
 | `credential` | credential name or key alias | `credential:SFTP_User` |
-| `script` | content hash (identical copies in several flows are one node); name: the file name | `script:3f2a9c0d1e4b` |
+| `script` | a flow's script: content hash (identical copies in several flows are one node), name the file name, `summary` from its comment; a script collection's script: `<collection>/<file>` with `collection`, `summary` and `functions` (public functions with the first sentence of their doc comments), linked by `uses_script` from each flow that calls it (`via` is the function) | `script:3f2a9c0d1e4b`, `script:Orders_Scripts/Headers.groovy` |
 | `header`, `property` | name set by a Content Modifier | `header:SAP_ApplicationID` |
 | `customheader` | custom header property a script writes to the message log | `customheader:OrderId` |
 | `pd` | literal Partner Directory parameter `PID:ID` (`:ID` when only the ID is literal) | `pd:SAP_SYSTEM_001:Identity` |

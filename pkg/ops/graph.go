@@ -93,7 +93,8 @@ type GraphEdge struct {
 	// Adapter is the adapter of exposes, calls and calls_system edges.
 	Adapter string `json:"adapter,omitempty"`
 	// Via explains derived edges: the endpoint of sends_to, the parameter
-	// whose value made the address.
+	// whose value made the address; for uses_script of a collection script
+	// the function the step calls.
 	Via string `json:"via,omitempty"`
 }
 
@@ -154,6 +155,26 @@ func BuildGraph(d *Discovery) *Graph {
 	for _, p := range d.Packages {
 		b.node(NodePackage, p.ID, firstNonEmpty(p.Name, p.ID), nil)
 	}
+	// scripts of script collections: one node per collection script, with
+	// what it says it does (summary, functions) so that search finds it
+	collectionScript := func(collection, script string) string {
+		return b.node(NodeScript, collection+"/"+script, collection+"/"+script, map[string]string{"collection": collection})
+	}
+	for _, c := range d.ScriptCollections {
+		for _, s := range c.Scripts {
+			var fns []string
+			for _, fn := range s.Functions {
+				if !fn.Private {
+					fns = append(fns, strings.TrimSpace(fn.Name+": "+fn.Summary))
+				}
+			}
+			script := b.node(NodeScript, c.ID+"/"+s.Name, c.ID+"/"+s.Name, map[string]string{"collection": c.ID, "package": c.PackageID,
+				"language": s.Language, "lines": fmt.Sprint(s.Lines), "summary": s.Summary, "functions": strings.Join(fns, "; ")})
+			for _, h := range s.CustomHeaders {
+				b.edge(GraphEdge{From: script, To: b.node(NodeCustomHeader, h, h, nil), Type: EdgeLogsHeader})
+			}
+		}
+	}
 	for _, f := range d.IFlows {
 		flow := b.node(NodeIFlow, f.ID, firstNonEmpty(f.Name, f.ID), map[string]string{
 			"package": f.PackageID, "version": f.Version, "runtimeStatus": f.RuntimeStatus, "path": f.Path,
@@ -188,8 +209,11 @@ func BuildGraph(d *Discovery) *Graph {
 				b.edge(GraphEdge{From: flow, To: b.node(NodeCredential, c, c, nil), Type: EdgeUsesCredential})
 			}
 		}
+		for _, r := range f.CollectionScripts {
+			b.edge(GraphEdge{From: flow, To: collectionScript(r.Collection, r.Script), Type: EdgeUsesScript, Via: r.Function})
+		}
 		for _, s := range f.Scripts {
-			script := b.node(NodeScript, s.Hash, s.Name, map[string]string{"language": s.Language, "lines": fmt.Sprint(s.Lines)})
+			script := b.node(NodeScript, s.Hash, s.Name, map[string]string{"language": s.Language, "lines": fmt.Sprint(s.Lines), "summary": s.Summary})
 			b.edge(GraphEdge{From: flow, To: script, Type: EdgeUsesScript})
 			for _, h := range s.CustomHeaders {
 				b.edge(GraphEdge{From: script, To: b.node(NodeCustomHeader, h, h, nil), Type: EdgeLogsHeader})

@@ -58,12 +58,15 @@ type IFlowFacts struct {
 	CredentialRefs []string `json:"credentialRefs"`
 	// Components are the cmdVariantUri of the flow's adapters and steps
 	// (versions the tenant accepted; see the component catalogue).
-	Components    []string       `json:"components,omitempty"`
-	HeadersSet    []string       `json:"headersSet"`
-	PropertiesSet []string       `json:"propertiesSet"`
-	Scripts       []ScriptFacts  `json:"scripts"`
-	Resources     map[string]int `json:"resources"`
-	Error         string         `json:"error,omitempty"`
+	Components    []string      `json:"components,omitempty"`
+	HeadersSet    []string      `json:"headersSet"`
+	PropertiesSet []string      `json:"propertiesSet"`
+	Scripts       []ScriptFacts `json:"scripts"`
+	// CollectionScripts are the scripts of script collections the flow's
+	// steps call.
+	CollectionScripts []CollectionScriptRef `json:"collectionScripts,omitempty"`
+	Resources         map[string]int        `json:"resources"`
+	Error             string                `json:"error,omitempty"`
 }
 
 // Trigger is one way a flow is started.
@@ -90,6 +93,18 @@ type ScriptFacts struct {
 	CustomHeaders []string `json:"customHeaders,omitempty"`
 	// LogsAttachments is true when the script adds log attachments.
 	LogsAttachments bool `json:"logsAttachments,omitempty"`
+	// Summary is what the script says it does (its file comment, else the
+	// first documented function); Functions are its top-level functions
+	// with their doc comments (Groovy).
+	Summary   string           `json:"summary,omitempty"`
+	Functions []ScriptFunction `json:"functions,omitempty"`
+}
+
+// CollectionScriptRef is a step calling a script of a script collection.
+type CollectionScriptRef struct {
+	Collection string `json:"collection"`
+	Script     string `json:"script"`
+	Function   string `json:"function,omitempty"`
 }
 
 const ResourcesDir = "src/main/resources"
@@ -195,6 +210,10 @@ func analyzeScript(name string, data []byte) ScriptFacts {
 	}
 	s.CustomHeaders = sortedUnique(s.CustomHeaders)
 	s.LogsAttachments = bytes.Contains(data, []byte("addAttachmentAs"))
+	if s.Language == "groovy" {
+		doc := ParseScriptDoc(data)
+		s.Summary, s.Functions = doc.Summary, doc.Functions
+	}
 	return s
 }
 
@@ -257,6 +276,10 @@ func (f *IFlowFacts) addModel(data []byte) error {
 
 func (f *IFlowFacts) addElement(el *modelElement) {
 	p := el.props
+	if bundle := p["scriptBundleId"]; bundle != "" && p["script"] != "" {
+		f.CollectionScripts = append(f.CollectionScripts, CollectionScriptRef{Collection: bundle, Script: path.Base(p["script"]),
+			Function: p["scriptFunction"]})
+	}
 	if uri := p["cmdVariantUri"]; uri != "" {
 		f.Components = append(f.Components, uri)
 	}
@@ -368,4 +391,41 @@ func sortedUnique(list []string) []string {
 	}
 	sort.Strings(list)
 	return slices.Compact(list)
+}
+
+// ScriptCollectionFacts is a script collection and its scripts.
+type ScriptCollectionFacts struct {
+	ID        string        `json:"id"`
+	Name      string        `json:"name,omitempty"`
+	Version   string        `json:"version,omitempty"`
+	PackageID string        `json:"packageId,omitempty"`
+	Path      string        `json:"path,omitempty"`
+	Scripts   []ScriptFacts `json:"scripts"`
+	Error     string        `json:"error,omitempty"`
+}
+
+// AnalyzeScriptCollection reads a script collection from fsys (the root
+// holds META-INF and src/main/resources). It always returns facts.
+func AnalyzeScriptCollection(fsys fs.FS) (*ScriptCollectionFacts, error) {
+	f := &ScriptCollectionFacts{Scripts: []ScriptFacts{}}
+	mf, err := fs.ReadFile(fsys, "META-INF/MANIFEST.MF")
+	if err != nil {
+		return f, fmt.Errorf("META-INF/MANIFEST.MF: %w", err)
+	}
+	h := parseManifest(mf)
+	f.ID, _, _ = strings.Cut(h["Bundle-SymbolicName"], ";")
+	f.ID = strings.TrimSpace(f.ID)
+	f.Name, f.Version = h["Bundle-Name"], h["Bundle-Version"]
+	err = fs.WalkDir(fsys, ResourcesDir+"/script", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		data, rerr := fs.ReadFile(fsys, p)
+		if rerr != nil {
+			return rerr
+		}
+		f.Scripts = append(f.Scripts, analyzeScript(strings.TrimPrefix(p, ResourcesDir+"/script/"), data))
+		return nil
+	})
+	return f, err
 }

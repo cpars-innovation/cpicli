@@ -3,6 +3,7 @@
 package lint
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -80,11 +81,53 @@ type Config struct {
 	// Layout is the spacing and mode of the layout rule's fix and of
 	// cpictl iflow layout.
 	Layout iflow.LayoutOptions `yaml:"layout" json:"layout"`
+	// ScriptTests are where the tests of script collection scripts are and
+	// how much of them they must cover.
+	ScriptTests ScriptTestConfig `yaml:"scriptTests" json:"scriptTests"`
 	// Ignore suppresses findings: artifact and rule patterns ("*" for all).
 	Ignore []struct {
 		Artifact string `yaml:"artifact" json:"artifact"`
 		Rule     string `yaml:"rule" json:"rule"`
 	} `yaml:"ignore" json:"ignore,omitempty"`
+	// baseDir resolves the relative paths of the config: the project root
+	// (the folder holding .cpi) for .cpi/lint.yaml.
+	baseDir string
+}
+
+// ScriptTestConfig locates the tests of script collection scripts and their
+// coverage report. Relative paths are relative to the project root (the
+// folder that holds .cpi).
+type ScriptTestConfig struct {
+	// Dir holds the tests in the layout of the content tree:
+	// <dir>/<package>/<collection>/ (default tests/scripts).
+	Dir string `yaml:"dir" json:"dir"`
+	// CoverageReport is the JaCoCo XML report of the test run (default
+	// build/reports/jacoco/test/jacocoTestReport.xml).
+	CoverageReport string `yaml:"coverageReport" json:"coverageReport"`
+	// MinCoverage is the line coverage per script in percent (default 80).
+	MinCoverage float64 `yaml:"minCoverage" json:"minCoverage"`
+}
+
+// path resolves a path of the config.
+func (c *Config) path(p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(c.baseDir, filepath.FromSlash(p))
+}
+
+// configBase is the project root of a rules file: the parent of .cpi, else
+// the file's folder.
+func configBase(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Dir(abs)
+	if filepath.Base(dir) == ".cpi" {
+		return filepath.Dir(dir)
+	}
+	return dir
 }
 
 // Settings are the thresholds.
@@ -117,6 +160,7 @@ func DefaultConfig() *Config {
 		Settings: Settings{DuplicateMinFlows: 2, RouterMinValues: 4, LookupMinEntries: 10, LargeScriptLines: 300},
 		ScriptCollections: ScriptCollectionConfig{PackageCollection: "{package}_Scripts",
 			SharedPackage: "SharedScripts", SharedCollection: "Shared_Scripts"},
+		ScriptTests: ScriptTestConfig{Dir: "tests/scripts", CoverageReport: "build/reports/jacoco/test/jacocoTestReport.xml", MinCoverage: 80},
 	}
 }
 
@@ -124,6 +168,7 @@ func DefaultConfig() *Config {
 // defaults).
 func LoadConfig(path string) (*Config, error) {
 	cfg := DefaultConfig()
+	cfg.baseDir = configBase(path)
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return cfg, nil
@@ -157,6 +202,12 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.ScriptCollections.PackageCollection == "" {
 		cfg.ScriptCollections.PackageCollection = "{package}_Scripts"
+	}
+	dt := DefaultConfig().ScriptTests
+	cfg.ScriptTests.Dir = cmp.Or(cfg.ScriptTests.Dir, dt.Dir)
+	cfg.ScriptTests.CoverageReport = cmp.Or(cfg.ScriptTests.CoverageReport, dt.CoverageReport)
+	if cfg.ScriptTests.MinCoverage <= 0 || cfg.ScriptTests.MinCoverage > 100 {
+		cfg.ScriptTests.MinCoverage = dt.MinCoverage
 	}
 	return cfg, nil
 }
@@ -276,10 +327,13 @@ func runLint(ctx context.Context, o Options) (*Result, *lintContext, error) {
 		if a.inScope {
 			res.Checked++
 		}
-		if !a.inScope || a.Type != "Integration" {
+		if !a.inScope || (a.Type != "Integration" && a.Type != "ScriptCollection") {
 			continue
 		}
 		for _, r := range lintRules {
+			if a.Type == "ScriptCollection" && !collectionRules[r.id] {
+				continue
+			}
 			if r.artifact != nil && lc.enabled(r) {
 				for _, f := range r.artifact(lc, a) {
 					all = append(all, lc.complete(r, f))

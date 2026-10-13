@@ -3,6 +3,7 @@ package ops
 import (
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,7 +33,10 @@ type Discovery struct {
 	Summary     DiscoverySummary    `json:"summary"`
 	Packages    []DiscoveredPackage `json:"packages"`
 	IFlows      []IFlowFacts        `json:"iflows"`
-	Errors      []string            `json:"errors,omitempty"`
+	// ScriptCollections are the script collections with what their scripts
+	// say about themselves (summary, functions, doc comments).
+	ScriptCollections []ScriptCollectionFacts `json:"scriptCollections,omitempty"`
+	Errors            []string                `json:"errors,omitempty"`
 }
 
 // DiscoveredPackage is a package with its artifact counts per type.
@@ -141,7 +145,7 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 	}
 
 	type job struct{ pkg, id, name, version string }
-	var jobs []job
+	var jobs, collections []job
 	for _, p := range pkgs {
 		if len(opts.PackageIDs) > 0 && !slices.Contains(opts.PackageIDs, p.Root.Id) {
 			continue
@@ -160,6 +164,9 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 			dp.Artifacts[a.ArtifactType]++
 			if a.ArtifactType == "Integration" && (opts.MaxIFlows == 0 || len(jobs) < opts.MaxIFlows) {
 				jobs = append(jobs, job{pkg: p.Root.Id, id: a.Id, name: a.Name, version: a.Version})
+			}
+			if a.ArtifactType == "ScriptCollection" {
+				collections = append(collections, job{pkg: p.Root.Id, id: a.Id, name: a.Name, version: a.Version})
 			}
 		}
 		d.Packages = append(d.Packages, dp)
@@ -222,6 +229,33 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 		}
 	}
 	d.IFlows = results
+	for i, j := range collections {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		prog.report(0, "analysed script collection %s (%d/%d)", j.id, i+1, len(collections))
+		facts := &ScriptCollectionFacts{}
+		zipped, err := cpi.DownloadArtifact(exe, "ScriptCollection", j.id, "active")
+		if err == nil {
+			var zr *zip.Reader
+			if zr, err = zip.NewReader(bytes.NewReader(zipped), int64(len(zipped))); err == nil {
+				var root fs.FS
+				if root, err = archiveRoot(zr); err == nil {
+					facts, err = AnalyzeScriptCollection(root)
+				}
+			}
+		}
+		facts.ID, facts.PackageID, facts.Version = j.id, j.pkg, j.version
+		facts.Name = cmp.Or(facts.Name, j.name)
+		if err != nil {
+			if httpclnt.IsAuthError(err) {
+				return nil, err
+			}
+			facts.Error = err.Error()
+			d.Errors = append(d.Errors, fmt.Sprintf("script collection %s: %v", j.id, err))
+		}
+		d.ScriptCollections = append(d.ScriptCollections, *facts)
+	}
 	d.Summary = summarize(d)
 	return d, nil
 }
@@ -268,6 +302,18 @@ func DiscoverDir(ctx context.Context, dir string) (*Discovery, error) {
 				d.Errors = append(d.Errors, fmt.Sprintf("iflow %s: %v", a.Rel, err))
 			}
 			d.IFlows = append(d.IFlows, *facts)
+		}
+		if a.Type == "ScriptCollection" {
+			facts, err := AnalyzeScriptCollection(os.DirFS(a.Dir))
+			facts.PackageID, facts.Path = a.PackageID, a.Rel
+			if facts.ID == "" {
+				facts.ID = path.Base(a.Rel)
+			}
+			if err != nil {
+				facts.Error = err.Error()
+				d.Errors = append(d.Errors, fmt.Sprintf("script collection %s: %v", a.Rel, err))
+			}
+			d.ScriptCollections = append(d.ScriptCollections, *facts)
 		}
 	}, func(err error) { d.Errors = append(d.Errors, err.Error()) })
 	if err != nil {

@@ -35,7 +35,15 @@ Read [iflow-structure.md](iflow-structure.md) before editing a model for the fir
    - scripts: start from `.cpi/templates/scripts/` and the reference flow's scripts; write a
      new script only for logic that none of them covers. New scripts use the Groovy script step
      version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under
-     `script/v2/`); see iflow-structure.md.
+     `script/v2/`); see iflow-structure.md. Before writing a function, search the script
+     collections for one that does it (`graph_search` with `types: ["script"]` and words of the
+     purpose: collection scripts carry their functions and doc comments) and call it from the
+     step instead of copying it.
+   - every script says what it does: a comment at the top or above its function. A function you
+     add to or change in a **script collection** gets a doc comment (purpose, reads, writes,
+     errors, how to call it) and a test in `tests/scripts/<package>/<collection>/`; see
+     [script-tests.md](script-tests.md). lint checks both (`collection-script-doc`,
+     `collection-script-tests`, `collection-script-coverage`).
 
 ## The loop
 

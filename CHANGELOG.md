@@ -5,6 +5,20 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Script collections as documented, tested libraries. New lint rules: `collection-script-doc` (a
+  public function of a script collection without a doc comment), `collection-script-tests` (a
+  function no test calls; tests in `tests/scripts/<package>/<collection>/`, outside the artifact
+  folders), `collection-script-coverage` (line coverage per script from a JaCoCo report, default
+  minimum 80 %, also when the report is missing or older than the script) and `script-doc` (info:
+  a flow script that says nothing about what it does). Settings: `scriptTests` in `.cpi/lint.yaml`.
+- Discovery reads script collections (`scriptCollections`: each script's summary and functions
+  with their doc comments) and which collection functions flows call (`collectionScripts`);
+  `graph_search` finds collection scripts by what their comments say. Go: `ops.ParseScriptDoc`.
+- Plugin (0.3.0): the build skill looks for an existing collection function before writing one,
+  documents and tests what it adds to a collection ([script-tests.md](plugin/skills/cpi-build/script-tests.md):
+  Gradle build, `Message` stubs, example test, verified with Groovy 4 and JaCoCo); improve, discover
+  and the review checklist follow.
+
 ## 0.10.0
 
 - Plugin (0.2.1): the reviewer reads .iflw changes with `compare` `model: true` instead of the

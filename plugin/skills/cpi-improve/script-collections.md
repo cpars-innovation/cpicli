@@ -37,6 +37,21 @@ per package, also for scripts reused across packages; a shared package can follo
 - `lint_fix` keeps the file name; a name that already holds other content in the collection gets a
   hash suffix (`Log_3fa2b1.groovy`): rename it while reviewing.
 
+## Documentation and tests
+
+A collection script is a contract, so it says what it does and is tested (rules
+`collection-script-doc`, `collection-script-tests`, `collection-script-coverage`):
+
+- After `lint_fix` moved a script into a collection, add a doc comment to each public function:
+  the first sentence is what discovery and `graph_search` show to the next person looking for it,
+  then what it reads and writes, the errors, and how a step calls it (collection, file, function).
+  Make helpers that flows must not call `private`.
+- Write tests in `tests/scripts/<package>/<collection>/` that call every public function, with the
+  inputs the flows send today (take them from the flows' test cases or traces). The test build
+  and stubs are in the build skill's [script-tests.md](../cpi-build/script-tests.md).
+- A proposal that creates or changes a collection lists the tests it adds; the coverage minimum
+  (`scriptTests.minCoverage`, default 80 %) is part of done.
+
 ## Deployment
 
 1. The collection is an artifact: add it to the deploy config of its package (orchestrator) and
