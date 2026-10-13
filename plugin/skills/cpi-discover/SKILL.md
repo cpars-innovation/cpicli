@@ -34,12 +34,6 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   logging and error handling framework.
 - `get_parameters` of a few flows: how are parameters named and grouped?
 - `list_credentials`: how are credentials named (compare with `summary.credentialRefs`)?
-- OData and IDoc: `discovery.json` records per channel the OData version, operation, entity set,
-  query options and paging, and the IDoc types per flow; the graph has `odata_entity` and
-  `idoc_type` nodes. Write down in the conventions how the tenant does it: address parameters
-  (`{{S4_OData_Address}}`), paging, `$batch`, which header carries the IDoc number
-  (`SAP_ApplicationID`), idempotency and JMS decoupling for IDoc inbound, where EDMX and IDoc
-  XSDs live. Background: [sap-adapters.md](../cpi-build/sap-adapters.md).
 - Script collections are in `discovery.json` (`scriptCollections`): each script with its summary
   and functions (from their doc comments), and `iflows[].collectionScripts` says which flows call
   which function. `graph_search` with `types: ["script"]` finds them by purpose. Note collections
@@ -55,8 +49,10 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   (`idocTypes`, with where they were found). In the graph, `graph_search` with `types:
   ["odata_entity"]` or `["idoc_type"]` lists them; `graph_neighbors` on an entity or IDoc type
   shows which flows read, write, receive or send it. Describe how the tenant does it: paging,
-  `$batch`, externalised clients and hosts, idempotency for inbound IDocs (lint
-  `odata-query-without-paging`, `idoc-no-idempotency`, `idoc-sap-client-literal`).
+  `$batch`, externalised clients and hosts (`{{S4_OData_Address}}`), which header carries the IDoc
+  number (`SAP_ApplicationID`), idempotency and JMS decoupling for inbound IDocs, where EDMX and
+  IDoc XSDs live (lint `odata-query-without-paging`, `idoc-no-idempotency`,
+  `idoc-sap-client-literal`). Background: [sap-adapters.md](../cpi-build/sap-adapters.md).
 - `list_integration_connections`: the tenant's own view of which systems the deployed flows
   connect (sender host -> flows -> receiver host); compare it with the graph's `calls` edges and
   use the host names when you describe the landscape.
