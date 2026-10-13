@@ -191,6 +191,8 @@ repositories { mavenCentral() }
 
 dependencies {
     implementation 'org.apache.groovy:groovy:4.0.21'
+    implementation 'org.apache.groovy:groovy-json:4.0.21'  // JsonSlurper, JsonOutput (the runtime has them)
+    implementation 'org.apache.groovy:groovy-xml:4.0.21'   // XmlSlurper, XmlUtil, MarkupBuilder
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

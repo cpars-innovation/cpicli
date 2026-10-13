@@ -43,3 +43,6 @@
 
 # Component catalogue of the mock tenant's runtime profile (go:embed)
 !internal/cpitest/components.json
+
+# Test tooling artifacts embedded in the binary (go:embed)
+!pkg/testtools/artifacts/**

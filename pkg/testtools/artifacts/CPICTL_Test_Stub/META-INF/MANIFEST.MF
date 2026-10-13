@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: cpictl receiver stub
+Bundle-SymbolicName: CPICTL_Test_Stub; singleton:=true
+Bundle-Version: 1.0.0
+SAP-BundleType: IntegrationFlow
+SAP-NodeType: IFLMAP
+SAP-RuntimeProfile: iflmap
+Origin-Bundle-Name: cpictl receiver stub
+Origin-Bundle-SymbolicName: CPICTL_Test_Stub

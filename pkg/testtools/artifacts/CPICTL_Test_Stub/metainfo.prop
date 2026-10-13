@@ -1,0 +1,1 @@
+description=cpictl receiver stub: records requests to /cpictl/stub/* and answers per rule from the Partner Directory (PID CPICTL_Stub) (installed by cpictl test tools install; do not transport)
