@@ -378,3 +378,48 @@ func TestBodyFileRelativeToCase(t *testing.T) {
 	msg, _ = r.message(cases[0])
 	assert.Equal(t, 5*time.Second, msg.Wait)
 }
+
+// Phases are reported in order; a restore that failed can be retried in
+// this process (Result.RetryRestore).
+func TestRunPhasesAndRetryRestore(t *testing.T) {
+	m, newExe := demo(t)
+	flow := m.Artifacts["Orders_IDoc_In"]
+	before := flow.Parameters["ORDER_API_URL"]
+	cases, err := Load(fixtures, Filter{Flows: []string{"Orders_IDoc_In"}})
+	require.NoError(t, err)
+	var events []string
+	res, err := Run(context.Background(), m.Executer(), newExe, cases, fast(Options{ApplyConfig: true,
+		Phase: func(e PhaseEvent) {
+			name := e.Phase + ":" + e.State
+			if e.Case != "" {
+				name = e.Case + "/" + name
+			}
+			events = append(events, name)
+			assert.False(t, e.At.IsZero())
+		},
+		// the restore fails: the tenant refuses the update
+		Progress: func(CaseResult) { flow.ConfigUpdateStatus = http.StatusInternalServerError },
+	}))
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Passed, "%+v", res.Cases)
+	c := cases[0].Name
+	assert.Equal(t, []string{
+		"apply_config:started", "deploy:started", "deploy:done", "apply_config:done",
+		c + "/send:started", c + "/send:done", c + "/wait_log:started", c + "/wait_log:done",
+		"restore_config:started", "restore_config:failed",
+	}, events)
+	require.Len(t, res.Config, 1)
+	assert.NotEmpty(t, res.Config[0].RestoreError)
+	assert.Equal(t, exitcode.DeployFailed, output.ExitCode(res.Err()))
+	assert.NotEqual(t, before, flow.Parameters["ORDER_API_URL"], "not restored yet")
+
+	// the tenant accepts updates again: retry
+	flow.ConfigUpdateStatus = 0
+	events = nil
+	require.NoError(t, res.RetryRestore(context.Background()))
+	assert.Equal(t, before, flow.Parameters["ORDER_API_URL"], "restored")
+	assert.Empty(t, res.Config[0].RestoreError)
+	assert.Equal(t, []string{"ORDER_API_URL"}, res.Config[0].Restored)
+	assert.Equal(t, []string{"restore_config:started", "deploy:started", "deploy:done", "restore_config:done"}, events)
+	assert.NoError(t, res.RetryRestore(context.Background()), "nothing left to retry")
+}

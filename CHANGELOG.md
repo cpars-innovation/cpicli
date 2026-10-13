@@ -5,6 +5,20 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Receiver stub 1.2.0: conditional answers per rule (`when`: `pathContains`, `header`,
+  `bodyContains`, each entry overriding the answer fields it sets) and delays (`delayMs`, up to
+  60 s). The recorded call names the chosen answer (`StubCall.Matched`) and carries the stub's
+  processing time (`StubCall.DurationMs`). CLI `test stub set --delay --when-file`, MCP
+  `set_stub_response` `delay_ms`, `when`. Run `cpictl test tools install --deploy` to update the
+  stub ([#11](https://github.com/cpars-innovation/cpicli/issues/11)).
+- Test runs report their phases (`testrun.Options.Phase`, `PhaseEvent`): apply, deploy and
+  restore of the configuration, and per case send, wait_log, stub_calls and diagnose. A restore
+  that failed can be retried in the same process (`Result.RetryRestore`). `SendTestMessage`
+  reports once when the endpoint answered and the wait for the log begins
+  ([#11](https://github.com/cpars-innovation/cpicli/issues/11)).
+- The test case schema has a `title` and `examples` for every field (form editors such as CPI
+  Studio's) ([#11](https://github.com/cpars-innovation/cpicli/issues/11)).
+
 - Test messages through the harness: when no deployed flow consumes the ProcessDirect address,
   `send` / `send_test_message` / test runs fail at once with that reason instead of waiting the
   whole timeout for a flow log that cannot appear. The mock tenant's "no consumer" error lists the

@@ -66,7 +66,20 @@ func testToolingTools(cfg Config) []Tool {
 				"content_type": str("Content-Type of the answer, default application/json"),
 				"body":         str("Body of the answer (text)"),
 				"headers":      map[string]any{"type": "object", "description": "Additional response headers", "additionalProperties": map[string]any{"type": "string"}},
-				"clear":        boolean("Remove the rule's answer instead (the stub then answers 200 with {})"),
+				"delay_ms":     map[string]any{"type": "integer", "minimum": 0, "maximum": ops.MaxStubDelayMs, "description": "Delay the answer (milliseconds), e.g. to test receiver timeouts"},
+				"when": map[string]any{"type": "array", "description": "Conditional answers: the first entry whose conditions all hold answers instead; the answer fields it sets override the rule's. The recorded call names it (matched).",
+					"items": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+						"name":          str("Name reported as matched (default when[<index>])"),
+						"path_contains": str("Condition: the path after /cpictl/stub/ contains this"),
+						"header":        map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}, "description": "Condition: request headers with these values (names case-insensitive)"},
+						"body_contains": str("Condition: the request body contains this"),
+						"status":        map[string]any{"type": "integer", "minimum": 100, "maximum": 599},
+						"content_type":  str("Content-Type of this answer"),
+						"body":          str("Body of this answer"),
+						"headers":       map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+						"delay_ms":      map[string]any{"type": "integer", "minimum": 0, "maximum": ops.MaxStubDelayMs},
+					}}},
+				"clear": boolean("Remove the rule's answer instead (the stub then answers 200 with {})"),
 			}, "rule"),
 			Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -76,7 +89,19 @@ func testToolingTools(cfg Config) []Tool {
 					ContentType string            `json:"content_type"`
 					Body        string            `json:"body"`
 					Headers     map[string]string `json:"headers"`
-					Clear       bool              `json:"clear"`
+					DelayMs     int               `json:"delay_ms"`
+					When        []struct {
+						Name         string            `json:"name"`
+						PathContains string            `json:"path_contains"`
+						Header       map[string]string `json:"header"`
+						BodyContains string            `json:"body_contains"`
+						Status       int               `json:"status"`
+						ContentType  string            `json:"content_type"`
+						Body         *string           `json:"body"`
+						Headers      map[string]string `json:"headers"`
+						DelayMs      int               `json:"delay_ms"`
+					} `json:"when"`
+					Clear bool `json:"clear"`
 				}
 				if err := decode(raw, &a); err != nil {
 					return nil, err
@@ -85,15 +110,19 @@ func testToolingTools(cfg Config) []Tool {
 					return nil, err
 				}
 				if a.Clear {
-					if a.Status != 0 || a.ContentType != "" || a.Body != "" || len(a.Headers) > 0 {
-						return nil, output.Usagef("clear takes no status, content_type, body or headers")
+					if a.Status != 0 || a.ContentType != "" || a.Body != "" || len(a.Headers) > 0 || a.DelayMs != 0 || len(a.When) > 0 {
+						return nil, output.Usagef("clear takes no status, content_type, body, headers, delay_ms or when")
 					}
 					if err := ops.ClearStubResponse(cfg.Exe, a.Rule); err != nil {
 						return nil, err
 					}
 					return map[string]any{"rule": a.Rule, "pid": testtools.StubPID, "action": "CLEARED"}, nil
 				}
-				r := ops.StubResponse{Status: a.Status, ContentType: a.ContentType, Body: a.Body, Headers: a.Headers}
+				r := ops.StubResponse{Status: a.Status, ContentType: a.ContentType, Body: a.Body, Headers: a.Headers, DelayMs: a.DelayMs}
+				for _, w := range a.When {
+					r.When = append(r.When, ops.StubWhen{Name: w.Name, PathContains: w.PathContains, Header: w.Header, BodyContains: w.BodyContains,
+						Status: w.Status, ContentType: w.ContentType, Body: w.Body, Headers: w.Headers, DelayMs: w.DelayMs})
+				}
 				if err := ops.SetStubResponse(cfg.Exe, a.Rule, r); err != nil {
 					return nil, err
 				}

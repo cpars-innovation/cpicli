@@ -344,6 +344,7 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	}
 	if m.Wait > 0 && !authFailed {
 		prog := newProgress(m.Progress)
+		prog.report(0, "endpoint answered HTTP %d, waiting for the message processing log", resp.StatusCode)
 		if sent.Harness != "" {
 			sent.Log, err = waitForHarnessTarget(ctx, exe, sent, m.Wait, m.PollInterval, prog)
 		} else {

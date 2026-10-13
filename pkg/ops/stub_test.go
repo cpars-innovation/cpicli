@@ -25,6 +25,16 @@ func liveMock(t *testing.T) *cpitest.Tenant {
 	return m
 }
 
+// shipped is the version of a tool this cpictl ships.
+func shipped(id string) string {
+	for _, a := range testtools.Artifacts() {
+		if a.ID == id {
+			return a.Version
+		}
+	}
+	return ""
+}
+
 func TestInstallTestTools(t *testing.T) {
 	m := liveMock(t)
 	exe := m.Executer()
@@ -58,7 +68,7 @@ func TestInstallTestTools(t *testing.T) {
 		byID[a.ID] = a
 		require.NotNil(t, a.Deploy, a.ID)
 		assert.Equal(t, StatusDeployed, a.Deploy.Status, a.ID)
-		assert.Equal(t, "1.1.0", a.Version)
+		assert.Equal(t, shipped(a.ID), a.Version)
 		assert.Equal(t, testtools.DefaultRole, a.Role, a.ID)
 	}
 	assert.Equal(t, "CREATED", byID[testtools.HarnessID].Upload.Action)
@@ -73,7 +83,7 @@ func TestInstallTestTools(t *testing.T) {
 	require.NoError(t, err)
 	for _, s := range status {
 		assert.True(t, s.Installed && s.Deployed && s.UpToDate, "%+v", s)
-		assert.Equal(t, "1.1.0", s.RuntimeVersion)
+		assert.Equal(t, shipped(s.ID), s.RuntimeVersion)
 		assert.Equal(t, testtools.DefaultRole, s.Role, s.ID)
 	}
 	assert.Equal(t, []string{m.URL() + "/http/cpictl/test"}, status[0].Endpoints)
@@ -246,4 +256,52 @@ func TestInstallTestToolsOtherPackage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "UNCHANGED", res.Artifacts[0].Upload.Action)
 	assert.Equal(t, StatusDeployed, res.Artifacts[0].Deploy.Status)
+}
+
+// Conditional answers ("when") and delays: the first matching entry answers,
+// the recorded call names it and carries the processing time.
+func TestStubWhenAndDelay(t *testing.T) {
+	m := cpitest.NewTenant(t, nil)
+	require.NoError(t, cpitest.SeedDemo(m, "dev", time.Now()))
+	exe := m.Executer()
+	_, err := InstallTestTools(context.Background(), exe, TestToolsOptions{Only: testtools.ToolStub, Deploy: true, DeployOptions: fastDeploy})
+	require.NoError(t, err)
+	since := time.Now().Add(-time.Second)
+
+	rejected := "rejected"
+	require.NoError(t, SetStubResponse(exe, "erp", StubResponse{Body: "ok", Headers: map[string]string{"X-A": "1"}, When: []StubWhen{
+		{Name: "bad-order", BodyContains: "BAD", Status: 422, Body: &rejected},
+		{PathContains: "slow", Header: map[string]string{"x-mode": "test"}, Status: 504, DelayMs: 30000},
+	}}))
+	url := m.URL() + "/http/cpictl/stub/erp/"
+	resp := send(t, url+"orders", "<o>BAD</o>", nil)
+	assert.Equal(t, 422, resp.StatusCode)
+	resp = send(t, url+"slow", "<o/>", map[string]string{"X-Mode": "test"})
+	assert.Equal(t, 504, resp.StatusCode)
+	resp = send(t, url+"slow", "<o/>", map[string]string{"X-Mode": "other"})
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, "1", resp.Header.Get("X-A"))
+
+	calls, err := StubCalls(context.Background(), exe, since)
+	require.NoError(t, err)
+	require.Len(t, calls, 3)
+	assert.Equal(t, "bad-order", calls[0].Matched)
+	assert.Equal(t, "when[1]", calls[1].Matched)
+	assert.GreaterOrEqual(t, calls[1].DurationMs, int64(30000), "the delay is processing time")
+	assert.Equal(t, "default", calls[2].Matched)
+	assert.Less(t, calls[2].DurationMs, int64(30000))
+
+	for _, bad := range []StubResponse{
+		{DelayMs: 60001},
+		{When: []StubWhen{{Status: 500}}},
+		{When: []StubWhen{{PathContains: "x", Status: 700}}},
+		{When: []StubWhen{{Name: "a", PathContains: "x"}, {Name: "a", BodyContains: "y"}}},
+		{When: []StubWhen{{Header: map[string]string{"bad name": "1"}}}},
+	} {
+		assert.Equal(t, exitcode.Usage, output.ExitCode(SetStubResponse(exe, "erp", bad)), "%+v", bad)
+	}
+	got, err := GetStubResponse(exe, "erp")
+	require.NoError(t, err)
+	require.Len(t, got.When, 2, "round trip")
+	assert.Equal(t, 30000, got.When[1].DelayMs)
 }

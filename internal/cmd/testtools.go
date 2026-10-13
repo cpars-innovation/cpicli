@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"cmp"
+	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
@@ -138,8 +140,9 @@ func NewTestStubCommand() *cobra.Command {
 		Long: `The receiver stub (` + testtools.StubID + `, see 'test tools install') answers a request
 to <runtime>/http/cpictl/stub/<rule>/... with the response configured for <rule>,
 a Partner Directory string parameter (PID ` + testtools.StubPID + `, ID = rule, JSON value
-{"status":200,"contentType":"application/json","body":"...","headers":{}}).
-Without one it answers 200 with {}. Every request is recorded in the stub's
+{"status":200,"contentType":"application/json","body":"...","headers":{},"delayMs":0,"when":[...]}).
+Without one it answers 200 with {}. "when" entries answer instead when their
+conditions hold (pathContains, header, bodyContains; see docs/testing.md). Every request is recorded in the stub's
 message log (attachment ` + testtools.StubAttachment + `, custom headers ` + testtools.StubRuleHeader + ` and
 ` + testtools.StubPathHeader + `).`,
 	}
@@ -148,7 +151,9 @@ message log (attachment ` + testtools.StubAttachment + `, custom headers ` + tes
 		Use:   "set <rule>",
 		Short: "Set the stub's answer for a rule",
 		Example: `  cpictl test stub set erp --status 500 --body '{"error":"down"}'
-  cpictl test stub set orders --body-file order-response.json --content-type application/json --header X-Request-Id=42`,
+  cpictl test stub set orders --body-file order-response.json --content-type application/json --header X-Request-Id=42
+  cpictl test stub set erp --delay 30000          # answer after 30 s (receiver timeout tests)
+  cpictl test stub set erp --when-file erp-when.json`,
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -160,7 +165,17 @@ message log (attachment ` + testtools.StubAttachment + `, custom headers ` + tes
 				return err
 			}
 			status, _ := cmd.Flags().GetInt("status")
-			r := ops.StubResponse{Status: status, ContentType: config.GetString(cmd, "content-type"), Body: string(body), Headers: map[string]string{}}
+			delay, _ := cmd.Flags().GetInt("delay")
+			r := ops.StubResponse{Status: status, ContentType: config.GetString(cmd, "content-type"), Body: string(body), Headers: map[string]string{}, DelayMs: delay}
+			if f := config.GetString(cmd, "when-file"); f != "" {
+				data, err := os.ReadFile(f)
+				if err != nil {
+					return output.Usage(err)
+				}
+				if err := json.Unmarshal(data, &r.When); err != nil {
+					return output.Usagef("%s: a JSON array of conditional answers expected: %v", f, err)
+				}
+			}
 			for _, h := range config.GetStringSlice(cmd, "header") {
 				k, v, ok := strings.Cut(h, "=")
 				if !ok || k == "" {
@@ -181,6 +196,8 @@ message log (attachment ` + testtools.StubAttachment + `, custom headers ` + tes
 	set.Flags().String("body-file", "", "Read the body from this file ('-' for stdin)")
 	set.Flags().String("content-type", "application/json", "Content-Type of the answer")
 	set.Flags().StringSlice("header", nil, "Additional response header name=value (repeatable)")
+	set.Flags().Int("delay", 0, "Delay the answer by this many milliseconds (0-60000)")
+	set.Flags().String("when-file", "", `JSON array of conditional answers: [{"name":"...","pathContains":"...","header":{"X":"v"},"bodyContains":"...","status":422,"body":"...","delayMs":0}]`)
 
 	clear := &cobra.Command{
 		Use:          "clear <rule>",

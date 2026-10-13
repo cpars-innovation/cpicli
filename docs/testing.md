@@ -182,6 +182,17 @@ other cases do not interfere.
 
 The runner is `pkg/testrun` (`Load`, `Run`, `WriteJUnit`), see [go-api.md](go-api.md#test-runs-pkgtestrun).
 
+- `Options.Progress` receives each case result when it is final; `Options.Phase` receives the
+  phases as they start and end (`PhaseEvent{Flow, Case, Phase, State, Error, At}`): per flow
+  `apply_config`, `deploy`, `restore_config`; per case `send` (until the endpoint answered),
+  `wait_log`, `stub_calls`, `diagnose`. States are `started`, `done`, `failed`. Parameter values
+  are never part of an event.
+- A configuration that could not be restored is in `Result.Config[].RestoreError` (exit code 5);
+  `Result.RetryRestore(ctx)` tries again in the same process (the previous values are kept in
+  memory only, never in the result).
+- The case schema `docs/test-case.schema.json` has a `title` and `examples` for every field, for
+  editors that build a form from it.
+
 ## Direct: HTTP-based senders
 
 ```bash
@@ -324,8 +335,29 @@ cpictl test stub set orders --body-file order-response.json --content-type appli
 cpictl test stub clear erp                # back to 200 {}
 ```
 
+**Conditional answers and delays.** A rule can answer differently per request: `when` lists
+entries with conditions (`pathContains`, `header` name -> value, `bodyContains`; all set ones must
+hold, at least one is required) and the answer fields that differ (`status`, `contentType`,
+`body`, `headers`, `delayMs`); the first matching entry answers, else the rule's own answer.
+`delayMs` (0-60000) delays the answer, e.g. to test a receiver's timeout.
+
+```json
+[
+  {"name": "bad-order", "bodyContains": "<OrderType>XX</OrderType>", "status": 422, "body": "{\"error\":\"invalid type\"}"},
+  {"name": "slow", "header": {"X-Test-Mode": "slow"}, "delayMs": 30000}
+]
+```
+
+```bash
+cpictl test stub set erp --body '{"status":"ok"}' --when-file erp-when.json
+cpictl test stub set erp --delay 30000
+```
+
+Each recorded call says which answer was chosen (`matched`: the entry's name, `when[<i>]`, or
+`default`; empty when the rule has no answer configured) and its processing time (`durationMs`).
+
 Rules are letters, digits, `_`, `.` and `-`. MCP: `set_stub_response` (rule, status,
-content_type, body, headers; `clear`). Go: `ops.SetStubResponse`, `ops.ClearStubResponse`, and
+content_type, body, headers, delay_ms, when; `clear`). Go: `ops.SetStubResponse`, `ops.ClearStubResponse`, and
 `ops.StubCalls(ctx, exe, since)` returns the recorded requests since a time, oldest first (the
 stub's message logs of any status, each with its attachment and message GUID).
 

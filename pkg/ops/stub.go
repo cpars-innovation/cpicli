@@ -33,6 +33,13 @@ type StubCall struct {
 	Headers     map[string]string `json:"headers,omitempty"`
 	Body        string            `json:"body,omitempty"`
 	MessageGuid string            `json:"messageGuid"`
+	// Matched is the answer the stub chose: the name of the StubWhen entry
+	// (when[<i>] without a name), "default" (the rule's own answer) or ""
+	// (no answer configured: 200 {}).
+	Matched string `json:"matched,omitempty"`
+	// DurationMs is the processing time of the stub's message (delay
+	// included).
+	DurationMs int64 `json:"durationMs,omitempty"`
 }
 
 // maxStubLogs caps the stub messages StubCalls reads.
@@ -82,6 +89,9 @@ func StubCalls(ctx context.Context, exe *httpclnt.HTTPExecuter, since time.Time)
 			if c.Time.IsZero() {
 				c.Time = l.LogStart
 			}
+			if !l.LogStart.IsZero() && l.LogEnd.After(l.LogStart) {
+				c.DurationMs = l.LogEnd.Sub(l.LogStart).Milliseconds()
+			}
 			calls = append(calls, c)
 			break
 		}
@@ -100,7 +110,33 @@ type StubResponse struct {
 	Body        string `json:"body"`
 	// Headers are additional response headers.
 	Headers map[string]string `json:"headers"`
+	// DelayMs delays the answer (0-60000), e.g. to test receiver timeouts.
+	DelayMs int `json:"delayMs,omitempty"`
+	// When lists conditional answers: the first entry whose conditions all
+	// hold answers; without a match the rule's own answer does.
+	When []StubWhen `json:"when,omitempty"`
 }
+
+// StubWhen is a conditional answer of a stub rule. Conditions (at least
+// one): PathContains (the path after /cpictl/stub/), Header (name ->
+// value, the name case-insensitive, the value equal), BodyContains. The
+// answer fields it sets override the rule's answer; the others are the
+// rule's (Body nil: the rule's body).
+type StubWhen struct {
+	Name         string            `json:"name,omitempty"`
+	PathContains string            `json:"pathContains,omitempty"`
+	Header       map[string]string `json:"header,omitempty"`
+	BodyContains string            `json:"bodyContains,omitempty"`
+
+	Status      int               `json:"status,omitempty"`
+	ContentType string            `json:"contentType,omitempty"`
+	Body        *string           `json:"body,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	DelayMs     int               `json:"delayMs,omitempty"`
+}
+
+// MaxStubDelayMs is the longest delay of a stub answer.
+const MaxStubDelayMs = 60000
 
 var (
 	reStubRule   = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
@@ -129,6 +165,31 @@ func (r StubResponse) normalize() (StubResponse, error) {
 	for k := range r.Headers {
 		if !reHeaderName.MatchString(k) {
 			return r, output.Usagef("invalid header name %q", k)
+		}
+	}
+	if r.DelayMs < 0 || r.DelayMs > MaxStubDelayMs {
+		return r, output.Usagef("invalid delay %d ms (0-%d)", r.DelayMs, MaxStubDelayMs)
+	}
+	names := map[string]bool{}
+	for i, w := range r.When {
+		label := cmp.Or(w.Name, fmt.Sprintf("when[%d]", i))
+		switch {
+		case w.PathContains == "" && len(w.Header) == 0 && w.BodyContains == "":
+			return r, output.Usagef("%s has no condition (pathContains, header or bodyContains)", label)
+		case w.Status != 0 && (w.Status < 100 || w.Status > 599):
+			return r, output.Usagef("%s: invalid status %d (100-599)", label, w.Status)
+		case w.DelayMs < 0 || w.DelayMs > MaxStubDelayMs:
+			return r, output.Usagef("%s: invalid delay %d ms (0-%d)", label, w.DelayMs, MaxStubDelayMs)
+		case names[label]:
+			return r, output.Usagef("duplicate name %s in when", label)
+		}
+		names[label] = true
+		for _, h := range []map[string]string{w.Header, w.Headers} {
+			for k := range h {
+				if !reHeaderName.MatchString(k) {
+					return r, output.Usagef("%s: invalid header name %q", label, k)
+				}
+			}
 		}
 	}
 	return r, nil

@@ -39,36 +39,93 @@ type stubAnswer struct {
 	ContentType string
 	Body        string
 	Headers     map[string]string
+	// Delay is the configured delay; Matched the chosen answer (the "when"
+	// entry's name or when[<i>], default, "" without configuration).
+	Delay   time.Duration
+	Matched string
 }
 
-// stubAnswerFor is the configured answer of a rule (the script's lookup).
-func (m *Tenant) stubAnswerFor(rule string) stubAnswer {
+// stubConfig is a rule's configuration (ops.StubResponse).
+type stubConfig struct {
+	Name         string            `json:"name"`
+	PathContains string            `json:"pathContains"`
+	Header       map[string]string `json:"header"`
+	BodyContains string            `json:"bodyContains"`
+	Status       int               `json:"status"`
+	ContentType  string            `json:"contentType"`
+	Body         *string           `json:"body"`
+	Headers      map[string]any    `json:"headers"`
+	DelayMs      *int              `json:"delayMs"`
+	When         []stubConfig      `json:"when"`
+}
+
+// matches is the script's matches: every condition set holds, at least one.
+func (w stubConfig) matches(req stubRequest, path string) bool {
+	if w.PathContains == "" && len(w.Header) == 0 && w.BodyContains == "" {
+		return false
+	}
+	if w.PathContains != "" && !strings.Contains(path, w.PathContains) {
+		return false
+	}
+	for name, want := range w.Header {
+		found := false
+		for k, v := range req.Headers {
+			if strings.EqualFold(k, name) {
+				found = v == want
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return w.BodyContains == "" || strings.Contains(req.Body, w.BodyContains)
+}
+
+// stubAnswerFor is the configured answer of a rule for a request (the
+// script's lookup and choice of a "when" entry).
+func (m *Tenant) stubAnswerFor(rule, path string, req stubRequest) stubAnswer {
 	ans := stubAnswer{Status: http.StatusOK, ContentType: "application/json", Body: "{}"}
 	value, ok := m.PDStrings[testtools.StubPID+"/"+rule]
 	if rule == "" || !ok {
 		return ans
 	}
-	var r struct {
-		Status      int            `json:"status"`
-		ContentType string         `json:"contentType"`
-		Body        *string        `json:"body"`
-		Headers     map[string]any `json:"headers"`
-	}
+	var r stubConfig
 	if err := json.Unmarshal([]byte(value), &r); err != nil {
 		return stubAnswer{Status: http.StatusInternalServerError, ContentType: "text/plain",
 			Body: "cpictl stub: the Partner Directory value of rule " + rule + " is not valid JSON: " + err.Error()}
 	}
-	ans.Status = cmp.Or(r.Status, http.StatusOK)
-	ans.ContentType = cmp.Or(r.ContentType, ans.ContentType)
-	ans.Body = ""
-	if r.Body != nil {
-		ans.Body = *r.Body
+	chosen, matched := stubConfig{}, "default"
+	for i, w := range r.When {
+		if w.matches(req, path) {
+			chosen, matched = w, cmp.Or(w.Name, fmt.Sprintf("when[%d]", i))
+			break
+		}
 	}
-	for k, v := range r.Headers {
+	ans.Matched = matched
+	ans.Status = cmp.Or(chosen.Status, r.Status, http.StatusOK)
+	ans.ContentType = cmp.Or(chosen.ContentType, r.ContentType, ans.ContentType)
+	body := cmp.Or(chosen.Body, r.Body)
+	ans.Body = ""
+	if body != nil {
+		ans.Body = *body
+	}
+	headers := r.Headers
+	if chosen.Headers != nil {
+		headers = chosen.Headers
+	}
+	for k, v := range headers {
 		if ans.Headers == nil {
 			ans.Headers = map[string]string{}
 		}
 		ans.Headers[k] = fmt.Sprint(v)
+	}
+	delay := r.DelayMs
+	if chosen.DelayMs != nil {
+		delay = chosen.DelayMs
+	}
+	if delay != nil {
+		ans.Delay = time.Duration(min(max(*delay, 0), 60000)) * time.Millisecond
 	}
 	return ans
 }
@@ -102,8 +159,10 @@ func (x *executor) runStub(id string, req stubRequest, correlation, predecessor 
 	if len(body) > testtools.StubMaxBody {
 		body, truncated = body[:testtools.StubMaxBody], true
 	}
+	ans := x.m.stubAnswerFor(rule, path, req)
 	record, _ := json.Marshal(map[string]any{"time": start.UTC().Format(time.RFC3339Nano), "rule": rule, "method": req.Method,
-		"path": path, "query": req.Query, "headers": recordedHeaders(req.Headers), "body": body, "bodyTruncated": truncated})
+		"path": path, "query": req.Query, "headers": recordedHeaders(req.Headers), "body": body, "bodyTruncated": truncated,
+		"matched": ans.Matched})
 	l := MessageLog{Guid: x.guid(), Artifact: id, Package: a.Package, Status: "COMPLETED", CorrelationID: correlation,
 		Predecessor: predecessor, Start: start, Attachments: map[string]string{testtools.StubAttachment: string(record)}}
 	for k, v := range map[string]string{testtools.StubRuleHeader: rule, testtools.StubPathHeader: path} {
@@ -114,14 +173,15 @@ func (x *executor) runStub(id string, req stubRequest, correlation, predecessor 
 			l.Headers[k] = v
 		}
 	}
-	t := start.Add(time.Duration(5+x.rng.IntN(10)) * time.Millisecond)
+	// the delay is processing time of the message (the mock does not sleep)
+	t := start.Add(time.Duration(5+x.rng.IntN(10))*time.Millisecond + ans.Delay)
 	for i, el := range fi.steps {
 		t = t.Add(time.Duration(5+x.rng.IntN(20)) * time.Millisecond)
 		l.Steps = append(l.Steps, Step{StepID: fmt.Sprintf("%s-%d", l.Guid, i+1), ModelStepID: el.ID, Activity: stepName(el), Status: "COMPLETED"})
 	}
 	l.End = t
 	x.logs = append(x.logs, l)
-	return runResult{guid: l.Guid, status: l.Status, end: t}, x.m.stubAnswerFor(rule)
+	return runResult{guid: l.Guid, status: l.Status, end: t}, ans
 }
 
 // handleStub answers a request to a deployed stub's endpoint (Live mode).

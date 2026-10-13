@@ -3480,8 +3480,9 @@ Configure the answers of the receiver stub per rule
 The receiver stub (CPICTL_Test_Stub, see 'test tools install') answers a request
 to <runtime>/http/cpictl/stub/<rule>/... with the response configured for <rule>,
 a Partner Directory string parameter (PID CPICTL_Stub, ID = rule, JSON value
-{"status":200,"contentType":"application/json","body":"...","headers":{}}).
-Without one it answers 200 with {}. Every request is recorded in the stub's
+{"status":200,"contentType":"application/json","body":"...","headers":{},"delayMs":0,"when":[...]}).
+Without one it answers 200 with {}. "when" entries answer instead when their
+conditions hold (pathContains, header, bodyContains; see docs/testing.md). Every request is recorded in the stub's
 message log (attachment cpictl-stub-request, custom headers CpictlStubRule and
 CpictlStubPath).
 ```
@@ -3510,8 +3511,10 @@ Set the stub's answer for a rule
       --body string           Body of the answer
       --body-file string      Read the body from this file ('-' for stdin)
       --content-type string   Content-Type of the answer (default "application/json")
+      --delay int             Delay the answer by this many milliseconds (0-60000)
       --header strings        Additional response header name=value (repeatable)
       --status int            HTTP status of the answer (100-599) (default 200)
+      --when-file string      JSON array of conditional answers: [{"name":"...","pathContains":"...","header":{"X":"v"},"bodyContains":"...","status":422,"body":"...","delayMs":0}]
 ```
 
 **Examples:**
@@ -3519,6 +3522,8 @@ Set the stub's answer for a rule
 ```
   cpictl test stub set erp --status 500 --body '{"error":"down"}'
   cpictl test stub set orders --body-file order-response.json --content-type application/json --header X-Request-Id=42
+  cpictl test stub set erp --delay 30000          # answer after 30 s (receiver timeout tests)
+  cpictl test stub set erp --when-file erp-when.json
 ```
 
 ## test tools

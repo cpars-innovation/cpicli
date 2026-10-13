@@ -196,3 +196,32 @@ func TestFixturesValidateAgainstSchema(t *testing.T) {
 	_, err = Load(dir, Filter{})
 	assert.Error(t, err)
 }
+
+// Every field has a title and examples for editors that build a form from the
+// schema (CPI Studio); request and expect are objects with a title only.
+func TestSchemaTitlesAndExamples(t *testing.T) {
+	root := loadSchema(t)
+	var check func(path string, props map[string]any)
+	check = func(path string, props map[string]any) {
+		for name, raw := range props {
+			p := raw.(map[string]any)
+			field := path + name
+			assert.NotEmpty(t, p["title"], "%s has no title", field)
+			node := resolve(root, p)
+			if _, isRef := p["$ref"]; isRef && node["properties"] != nil {
+				check(field+".", node["properties"].(map[string]any))
+				continue
+			}
+			assert.NotEmpty(t, p["examples"], "%s has no examples", field)
+			if sub, ok := p["properties"].(map[string]any); ok {
+				check(field+".", sub)
+			}
+			if items, ok := p["items"].(map[string]any); ok {
+				if sub, ok := items["properties"].(map[string]any); ok {
+					check(field+"[].", sub)
+				}
+			}
+		}
+	}
+	check("", root["properties"].(map[string]any))
+}

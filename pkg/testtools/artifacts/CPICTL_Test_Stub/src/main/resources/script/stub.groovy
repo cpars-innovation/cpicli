@@ -11,8 +11,11 @@ import groovy.json.JsonSlurper
 // custom header properties CpictlStubRule and CpictlStubPath, so test runs find it
 // (cpictl: ops.StubCalls). The answer is the response configured for the rule in the Partner
 // Directory: PID CPICTL_Stub, string parameter ID = rule, value
-// {"status":200,"contentType":"application/json","body":"...","headers":{}}
-// (`cpictl test stub set`). Without one the stub answers 200 with {}.
+// {"status":200,"contentType":"application/json","body":"...","headers":{},"delayMs":0,
+//  "when":[{"name":"...","pathContains":"...","header":{"X":"v"},"bodyContains":"...", answer fields}]}
+// (`cpictl test stub set`): the first "when" entry whose conditions all hold answers, its answer
+// fields overriding the rule's; else the rule's answer. Without one the stub answers 200 with {}.
+// The recorded request names the answer in "matched" (entry name, when[<i>], default).
 //
 // Script API version 1 (com.sap.gateway.ip.core.customdev.util.Message): the Partner Directory
 // API (ITApiFactory, PartnerDirectoryService) is documented for it.
@@ -37,6 +40,43 @@ def Message processData(Message message) {
     }
     def body = message.getBody(String) ?: ""
     def truncated = body.length() > MAX_BODY
+
+    def status = 200
+    def contentType = "application/json"
+    def answer = "{}"
+    def extra = [:]
+    def delay = 0
+    def matched = ""
+    def configured = rule ? lookup(rule) : null
+    if (configured != null) {
+        try {
+            def r = new JsonSlurper().parseText(configured)
+            def chosen = [:]
+            matched = "default"
+            if (r.when instanceof List) {
+                for (int i = 0; i < r.when.size(); i++) {
+                    def w = r.when[i]
+                    if (w instanceof Map && matches(w, path, headers, body)) {
+                        chosen = w
+                        matched = (w.name ?: "when[" + i + "]").toString()
+                        break
+                    }
+                }
+            }
+            status = (chosen.status ?: r.status ?: 200) as int
+            contentType = (chosen.contentType ?: r.contentType ?: contentType).toString()
+            def b = chosen.containsKey("body") ? chosen.body : r.body
+            answer = b != null ? b.toString() : ""
+            def h = chosen.headers instanceof Map ? chosen.headers : r.headers
+            extra = h instanceof Map ? h : [:]
+            delay = Math.min(Math.max(((chosen.delayMs != null ? chosen.delayMs : r.delayMs) ?: 0) as int, 0), 60000)
+        } catch (Exception e) {
+            status = 500
+            contentType = "text/plain"
+            answer = "cpictl stub: the Partner Directory value of rule " + rule + " is not valid JSON: " + e.getMessage()
+        }
+    }
+
     def request = [
         time         : java.time.Instant.now().toString(),
         rule         : rule,
@@ -45,7 +85,8 @@ def Message processData(Message message) {
         query        : query,
         headers      : recorded,
         body         : truncated ? body.take(MAX_BODY) : body,
-        bodyTruncated: truncated
+        bodyTruncated: truncated,
+        matched      : matched
     ]
     def log = messageLogFactory.getMessageLog(message)
     if (log != null) {
@@ -58,23 +99,8 @@ def Message processData(Message message) {
         }
     }
 
-    def status = 200
-    def contentType = "application/json"
-    def answer = "{}"
-    def extra = [:]
-    def configured = rule ? lookup(rule) : null
-    if (configured != null) {
-        try {
-            def r = new JsonSlurper().parseText(configured)
-            status = (r.status ?: 200) as int
-            contentType = (r.contentType ?: contentType).toString()
-            answer = r.body != null ? r.body.toString() : ""
-            extra = r.headers instanceof Map ? r.headers : [:]
-        } catch (Exception e) {
-            status = 500
-            contentType = "text/plain"
-            answer = "cpictl stub: the Partner Directory value of rule " + rule + " is not valid JSON: " + e.getMessage()
-        }
+    if (delay > 0) {
+        Thread.sleep(delay as long)
     }
     message.setBody(answer)
     extra.each { k, v -> message.setHeader(k.toString(), v == null ? "" : v.toString()) }
@@ -100,6 +126,35 @@ def String stubPath(Map headers) {
     // CamelHttpPath may hold only the part below the sender's address
     def rest = headers.get("CamelHttpPath")?.toString() ?: ""
     return rest.split("\\?")[0].replaceAll("^/+", "")
+}
+
+// matches reports whether all conditions of a "when" entry hold: pathContains, header (name
+// case-insensitive, value equal), bodyContains. An entry without conditions never matches.
+def boolean matches(Map w, String path, Map headers, String body) {
+    def any = false
+    if (w.pathContains) {
+        any = true
+        if (!path.contains(w.pathContains.toString())) {
+            return false
+        }
+    }
+    if (w.header instanceof Map && !w.header.isEmpty()) {
+        any = true
+        for (e in w.header) {
+            def name = e.key.toString()
+            def actual = headers.find { k, v -> k.toString().equalsIgnoreCase(name) }?.value
+            if (actual == null || actual.toString() != (e.value == null ? "" : e.value.toString())) {
+                return false
+            }
+        }
+    }
+    if (w.bodyContains) {
+        any = true
+        if (!body.contains(w.bodyContains.toString())) {
+            return false
+        }
+    }
+    return any
 }
 
 // lookup returns the configured response of a rule, null without one.

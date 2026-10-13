@@ -81,6 +81,39 @@ type ConfigChange struct {
 	Deploys      int    `json:"deploys"`
 	Error        string `json:"error,omitempty"`
 	RestoreError string `json:"restoreError,omitempty"`
+
+	// restore sets the previous values again and redeploys (nil: nothing
+	// to restore); Result.RetryRestore calls it again after a failure.
+	restore func(ctx context.Context, ch *ConfigChange)
+}
+
+// Phases of a run reported to Options.Phase.
+const (
+	PhaseApplyConfig   = "apply_config"   // set config.yaml values (flow level)
+	PhaseDeploy        = "deploy"         // redeploy after apply or restore (flow level)
+	PhaseSend          = "send"           // send the case's message (ends when the endpoint answered)
+	PhaseWaitLog       = "wait_log"       // wait for the message processing log
+	PhaseStubCalls     = "stub_calls"     // wait for the receiver stub's calls
+	PhaseDiagnose      = "diagnose"       // read what locates a failure
+	PhaseRestoreConfig = "restore_config" // set the previous values again (flow level)
+)
+
+// Phase states.
+const (
+	PhaseStarted = "started"
+	PhaseDone    = "done"
+	PhaseFailed  = "failed"
+)
+
+// PhaseEvent is one step of a run: a flow-level phase (Case empty) or a
+// phase of one case. Values of parameters are never included.
+type PhaseEvent struct {
+	Flow  string    `json:"flow"`
+	Case  string    `json:"case,omitempty"`
+	Phase string    `json:"phase"`
+	State string    `json:"state"`
+	Error string    `json:"error,omitempty"`
+	At    time.Time `json:"at"`
 }
 
 // Result is the outcome of a test run.
@@ -107,6 +140,11 @@ type Options struct {
 	// Progress receives each case result when it is final (one call at a
 	// time).
 	Progress func(CaseResult)
+	// Phase receives the phases of the run as they start and end (one call
+	// at a time, also with Progress): apply and restore of the
+	// configuration with their redeployments, and per case send, wait_log,
+	// stub_calls and diagnose.
+	Phase func(PhaseEvent)
 	// Harness is the test harness flow for process_direct_address (default
 	// ops.DefaultHarnessID).
 	Harness string
@@ -216,15 +254,11 @@ func Run(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe ops.EndpointExe
 			for _, f := range sortedKeys(c.FlowConfig) {
 				targets = append(targets, target{f, c.FlowConfig[f]})
 			}
-			var restores []func()
 			var changes []*ConfigChange
 			var applyErr error
 			for _, t := range targets {
-				change, restore, err := r.applyConfig(ctx, t.flow, t.values)
+				change, err := r.applyConfig(ctx, t.flow, t.values)
 				changes = append(changes, change)
-				if restore != nil {
-					restores = append(restores, restore)
-				}
 				if err != nil {
 					applyErr = fmt.Errorf("applying %s (%s): %w", ConfigFile, t.flow, err)
 					break
@@ -238,8 +272,10 @@ func Run(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe ops.EndpointExe
 			} else {
 				r.runGroup(ctx, cases, g, res.Cases)
 			}
-			for i := len(restores) - 1; i >= 0; i-- {
-				restores[i]()
+			for i := len(changes) - 1; i >= 0; i-- {
+				if ch := changes[i]; ch.restore != nil {
+					ch.restore(ctx, ch)
+				}
 			}
 			for _, ch := range changes { // after the restores, which fill them in
 				res.Config = append(res.Config, *ch)
@@ -265,6 +301,22 @@ func Run(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe ops.EndpointExe
 	}
 	res.DurationMs = o.Now().Sub(res.StartedAt).Milliseconds()
 	return res, nil
+}
+
+// RetryRestore restores the configurations whose restore failed again (in
+// reverse order of the apply) and returns the result's error afterwards.
+// It works on the Result of Run in this process only: the previous values
+// are never part of the result.
+func (r *Result) RetryRestore(ctx context.Context) error {
+	for i := len(r.Config) - 1; i >= 0; i-- {
+		ch := &r.Config[i]
+		if ch.RestoreError == "" || ch.restore == nil {
+			continue
+		}
+		ch.RestoreError, ch.Restored = "", []string{}
+		ch.restore(ctx, ch)
+	}
+	return r.Err()
 }
 
 func hasRunnable(cases []Case, g []int) bool {
@@ -308,6 +360,29 @@ func (r *runner) runGroup(ctx context.Context, cases []Case, g []int, out []Case
 		out[i] = r.runCase(ctx, cases[i])
 		r.progress(out[i])
 	}
+}
+
+// phase reports a phase to Options.Phase.
+func (r *runner) phase(flow, kase, phase, state string, err error) {
+	if r.o.Phase == nil {
+		return
+	}
+	ev := PhaseEvent{Flow: flow, Case: kase, Phase: phase, State: state, At: r.o.Now().UTC()}
+	if err != nil {
+		ev.Error = err.Error()
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.o.Phase(ev)
+}
+
+// phaseEnd reports the end of a phase: done, or failed with err.
+func (r *runner) phaseEnd(flow, kase, phase string, err error) {
+	if err != nil {
+		r.phase(flow, kase, phase, PhaseFailed, err)
+		return
+	}
+	r.phase(flow, kase, phase, PhaseDone, nil)
 }
 
 func (r *runner) progress(c CaseResult) {
@@ -389,7 +464,25 @@ func (r *runner) runCase(ctx context.Context, c Case) CaseResult {
 	if err != nil {
 		return finish(r.errorResult(c, err))
 	}
+	r.phase(c.Flow, c.Name, PhaseSend, PhaseStarted, nil)
+	waiting := false
+	inner := msg.Progress
+	msg.Progress = func(p ops.Progress) {
+		if !waiting { // the first poll: the endpoint answered
+			waiting = true
+			r.phase(c.Flow, c.Name, PhaseSend, PhaseDone, nil)
+			r.phase(c.Flow, c.Name, PhaseWaitLog, PhaseStarted, nil)
+		}
+		if inner != nil {
+			inner(p)
+		}
+	}
 	sent, err := ops.SendTestMessage(ctx, r.exe, r.newExe, msg)
+	if waiting {
+		r.phaseEnd(c.Flow, c.Name, PhaseWaitLog, err)
+	} else {
+		r.phaseEnd(c.Flow, c.Name, PhaseSend, err)
+	}
 	elapsed := r.o.Now().Sub(start)
 	if sent != nil {
 		res.HTTPStatus, res.MessageGuid = sent.HTTPStatus, cmp.Or(sent.MessageGuid, sent.HarnessMessageGuid)
@@ -401,7 +494,7 @@ func (r *runner) runCase(ctx context.Context, c Case) CaseResult {
 		er := r.errorResult(c, err)
 		er.HTTPStatus, er.MessageGuid, er.MessageStatus = res.HTTPStatus, res.MessageGuid, res.MessageStatus
 		if sent != nil && res.MessageGuid != "" {
-			er.Diagnostics = r.diagnose(ctx, sent)
+			er.Diagnostics = r.diagnoseCase(ctx, c, sent)
 		}
 		return finish(er)
 	}
@@ -414,13 +507,15 @@ func (r *runner) runCase(ctx context.Context, c Case) CaseResult {
 		}
 	}
 	if len(c.Expect.StubCalls) > 0 {
+		r.phase(c.Flow, c.Name, PhaseStubCalls, PhaseStarted, nil)
 		obs.stubs, obs.stubsErr = r.stubCalls(ctx, c, start)
+		r.phaseEnd(c.Flow, c.Name, PhaseStubCalls, obs.stubsErr)
 	}
 	res.Failures = check(c.Expect, obs)
 	res.Status = StatusPassed
 	if len(res.Failures) > 0 {
 		res.Status = StatusFailed
-		res.Diagnostics = r.diagnose(ctx, sent)
+		res.Diagnostics = r.diagnoseCase(ctx, c, sent)
 	}
 	return finish(res)
 }
@@ -456,6 +551,14 @@ func (r *runner) stubCalls(ctx context.Context, c Case, start time.Time) ([]ops.
 		case <-time.After(r.o.PollInterval):
 		}
 	}
+}
+
+// diagnoseCase is diagnose as a phase of case c.
+func (r *runner) diagnoseCase(ctx context.Context, c Case, sent *ops.SentMessage) *Diagnostics {
+	r.phase(c.Flow, c.Name, PhaseDiagnose, PhaseStarted, nil)
+	d := r.diagnose(ctx, sent)
+	r.phase(c.Flow, c.Name, PhaseDiagnose, PhaseDone, nil)
+	return d
 }
 
 // diagnose reads what locates a failure; what cannot be read is a warning.

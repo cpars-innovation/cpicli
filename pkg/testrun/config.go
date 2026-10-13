@@ -2,6 +2,7 @@ package testrun
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -71,11 +72,21 @@ func (r *runner) configWarnings(cases []Case) []string {
 // applyConfig sets the test values of flow, redeploys it and returns a
 // restore function that sets the previous values back and redeploys again.
 // restore is set whenever something was changed, also with an error.
-func (r *runner) applyConfig(ctx context.Context, flow string, values map[string]string) (*ConfigChange, func(), error) {
-	change := &ConfigChange{Flow: flow, Applied: []string{}, Restored: []string{}}
-	fail := func(err error) (*ConfigChange, func(), error) {
+// deployPhase is deploy reported as the deploy phase of flow.
+func (r *runner) deployPhase(ctx context.Context, flow string) error {
+	r.phase(flow, "", PhaseDeploy, PhaseStarted, nil)
+	err := r.deploy(ctx, flow)
+	r.phaseEnd(flow, "", PhaseDeploy, err)
+	return err
+}
+
+func (r *runner) applyConfig(ctx context.Context, flow string, values map[string]string) (change *ConfigChange, err error) {
+	change = &ConfigChange{Flow: flow, Applied: []string{}, Restored: []string{}}
+	r.phase(flow, "", PhaseApplyConfig, PhaseStarted, nil)
+	defer func() { r.phaseEnd(flow, "", PhaseApplyConfig, err) }()
+	fail := func(err error) (*ConfigChange, error) {
 		change.Error = err.Error()
-		return change, nil, err
+		return change, err
 	}
 	tenant := ops.NewTenant(r.exe)
 	design, exists, err := tenant.DesigntimeVersion("Integration", flow)
@@ -122,46 +133,53 @@ func (r *runner) applyConfig(ctx context.Context, flow string, values map[string
 		return fail(output.Usagef("%s has no parameter(s) %s", flow, strings.Join(unknown, ", ")))
 	}
 	if len(set) == 0 {
-		return change, nil, nil
+		return change, nil
 	}
 
 	upd, err := ops.UpdateConfiguration(r.exe, flow, "", set, false)
 	if upd != nil {
 		change.Applied = append(change.Applied, upd.Updated...)
 	}
-	restore := func() {
+	// restore works on ch, the change or its copy in the Result (retry)
+	change.restore = func(ctx context.Context, ch *ConfigChange) {
 		fresh, cancel := context.WithTimeout(context.WithoutCancel(ctx), restoreTimeout)
 		defer cancel()
+		r.phase(flow, "", PhaseRestoreConfig, PhaseStarted, nil)
 		back := map[string]string{}
-		for _, k := range change.Applied {
+		for _, k := range ch.Applied {
 			back[k] = previous[k]
 		}
 		exe := r.exe.WithContext(fresh)
 		res, err := ops.UpdateConfiguration(exe, flow, "", back, false)
 		if res != nil {
-			change.Restored = append(change.Restored, res.Updated...)
-			change.Restored = append(change.Restored, res.Unchanged...)
-			slices.Sort(change.Restored)
+			ch.Restored = append(ch.Restored, res.Updated...)
+			ch.Restored = append(ch.Restored, res.Unchanged...)
+			slices.Sort(ch.Restored)
 		}
 		if err != nil {
-			change.RestoreError = err.Error()
+			ch.RestoreError = err.Error()
+			r.phaseEnd(flow, "", PhaseRestoreConfig, err)
 			return
 		}
-		change.Deploys++
-		if err := r.deploy(fresh, flow); err != nil {
-			change.RestoreError = "the previous values are set but the redeployment failed: " + err.Error()
+		ch.Deploys++
+		if err := r.deployPhase(fresh, flow); err != nil {
+			ch.RestoreError = "the previous values are set but the redeployment failed: " + err.Error()
+			r.phaseEnd(flow, "", PhaseRestoreConfig, errors.New(ch.RestoreError))
+			return
 		}
+		r.phaseEnd(flow, "", PhaseRestoreConfig, nil)
+		ch.restore = nil // restored: nothing to retry
 	}
 	if err != nil {
 		change.Error = err.Error()
-		return change, restore, err
+		return change, err
 	}
 	change.Deploys++
-	if err := r.deploy(ctx, flow); err != nil {
+	if err := r.deployPhase(ctx, flow); err != nil {
 		change.Error = err.Error()
-		return change, restore, err
+		return change, err
 	}
-	return change, restore, nil
+	return change, nil
 }
 
 // deploy redeploys flow and waits until it is started.
