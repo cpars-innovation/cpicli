@@ -66,8 +66,53 @@ type Diagnostics struct {
 	// correlation ID); FirstFailure its earliest failed message.
 	TraceRoot    *ops.TraceNode    `json:"traceRoot,omitempty"`
 	FirstFailure *ops.TraceFailure `json:"firstFailure,omitempty"`
+	// Path is the message's way through the flow: the model steps (.iflw
+	// element IDs) that ran, in the order they first ran, the failing one
+	// with state failed. A model step that is not listed was not reached.
+	// Empty when the tenant recorded no steps (log level below DEBUG).
+	Path []PathStep `json:"path,omitempty"`
 	// Warnings list diagnostics that could not be read.
 	Warnings []string `json:"warnings,omitempty"`
+}
+
+// PathStep is a model step on the message's path.
+type PathStep struct {
+	ModelStepID string `json:"modelStepId"`
+	Activity    string `json:"activity,omitempty"`
+	// State is ran or failed.
+	State string `json:"state"`
+}
+
+// Path step states.
+const (
+	PathRan    = "ran"
+	PathFailed = "failed"
+)
+
+// pathOf returns the model steps of the runs in the order they first ran;
+// a step that failed in any run is failed.
+func pathOf(steps *ops.MessageSteps) []PathStep {
+	var out []PathStep
+	at := map[string]int{}
+	for _, r := range steps.Runs {
+		for _, st := range r.Steps {
+			if st.ModelStepID == "" {
+				continue
+			}
+			s := strings.ToUpper(st.Status)
+			failed := st.Error != "" || strings.Contains(s, "FAIL") || strings.Contains(s, "ERROR")
+			i, seen := at[st.ModelStepID]
+			if !seen {
+				at[st.ModelStepID] = len(out)
+				out = append(out, PathStep{ModelStepID: st.ModelStepID, Activity: st.Activity, State: PathRan})
+				i = len(out) - 1
+			}
+			if failed {
+				out[i].State = PathFailed
+			}
+		}
+	}
+	return out
 }
 
 // ConfigChange is what --apply-config did for one flow: the keys set to
@@ -595,6 +640,9 @@ func (r *runner) diagnose(ctx context.Context, sent *ops.SentMessage) *Diagnosti
 		d.Warnings = append(d.Warnings, "steps: "+err.Error())
 	} else {
 		d.FailedStep = steps.FailedStep
+		if d.Path = pathOf(steps); len(d.Path) == 0 {
+			d.Warnings = append(d.Warnings, "no steps recorded: with log level DEBUG the path through the flow is shown (cpictl log-level)")
+		}
 	}
 	tree, err := ops.MessagePathFor(ctx, r.exe, ops.MessagePathQuery{MessageGuid: guid, MaxMessages: 50})
 	if err != nil {

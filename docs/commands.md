@@ -150,6 +150,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`test`](#test) | Run the test cases of deployed integration flows (.cpi/tests); test harness and receiver stub |
 | [`test list`](#test-list) | List the test cases (offline) |
 | [`test run`](#test-run) | Run test cases against the deployed flows and check the expectations |
+| [`test scripts`](#test-scripts) | Run the tests of script collection scripts and report them per function (offline) |
 | [`test stub`](#test-stub) | Configure the answers of the receiver stub per rule |
 | [`test stub clear`](#test-stub-clear) | Remove the stub's answer for a rule (it then answers 200 with {}) |
 | [`test stub set`](#test-stub-set) | Set the stub's answer for a rule |
@@ -3470,6 +3471,46 @@ be run; otherwise the cause of the cases that could not be run (2 usage, 3 auth,
   cpictl test run --flow Orders_In --case valid-order --junit report.xml
   cpictl test run --tag smoke --parallel 4 --events -
   cpictl test run --flow Orders_Route --apply-config
+```
+
+## test scripts
+
+Run the tests of script collection scripts and report them per function (offline)
+
+```
+Run the project's Gradle build for the script collection tests (./gradlew test
+when the project has a wrapper, else gradle test; --command for another one),
+then read the JUnit reports and the JaCoCo coverage report and report:
+
+  - every test with its status and duration;
+  - every public function of every collection script with its line coverage,
+    the test files that call it and their outcome (passed, failed, untested).
+
+The build and the layout are the build skill's script-tests.md; the tests folder
+and the coverage report are the lint configuration's (scriptTests in
+.cpi/lint.yaml), so lint's collection-script-tests and collection-script-coverage
+rules see the same results. --no-run only reads the reports of an earlier run.
+Nothing is sent to the tenant. Exit code 5 when a test failed.
+```
+
+**Usage:** `cpictl test scripts [flags]`
+
+**Flags:**
+
+```
+      --command string   Test command (default ./gradlew test, or gradle test without a wrapper)
+      --content string   Content tree with the script collections (default <project>/packages)
+      --no-run           Only read the reports of an earlier run
+      --project string   Project root: the folder with .cpi and the Gradle build (default ".")
+      --rules string     Lint configuration with scriptTests (relative to --project) (default ".cpi/lint.yaml")
+```
+
+**Examples:**
+
+```
+  cpictl test scripts
+  cpictl test scripts --no-run --output json
+  cpictl test scripts --command "gradle test --offline"
 ```
 
 ## test stub

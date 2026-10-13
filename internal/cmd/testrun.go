@@ -27,7 +27,7 @@ and the expected outcome (HTTP status, message status, response, error, custom
 headers, steps, duration, receiver stub calls). See docs/testing.md (Test runs)
 and docs/test-case.schema.json.`,
 	}
-	c.AddCommand(newTestListCommand(), newTestRunCommand())
+	c.AddCommand(newTestListCommand(), newTestRunCommand(), newTestScriptsCommand())
 	addTestToolingCommands(c)
 	return c
 }

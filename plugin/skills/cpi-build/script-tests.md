@@ -218,7 +218,9 @@ jacocoTestReport {
 }
 ```
 
-Run `gradle test` (or `./gradlew test`), then `cpictl lint` (MCP `lint`). In CI: test first, then
+Run `cpictl test scripts` (runs `./gradlew test` or `gradle test` and reports every test and every
+collection function: coverage, the tests that call it, passed/failed/untested; `--output json`),
+then `cpictl lint` (MCP `lint`). In CI: test first, then
 lint, so the coverage rule sees the current report. Script file names must be unique across the
 collections the build compiles (the class name is the file name).
 
@@ -230,7 +232,7 @@ collections the build compiles (the class name is the file name).
 3. Write or extend the test in `tests/scripts/<package>/<collection>/`; create the stubs and
    `build.gradle` from this page if the repository has none (ask before adding a build to a
    repository that has its own).
-4. Run the tests (`gradle test`) when a JDK and Gradle are available; otherwise say so in the
+4. Run the tests (`cpictl test scripts`) when a JDK and Gradle are available; otherwise say so in the
    summary, so a person or CI runs them.
 5. `lint` on the collection: no `collection-script-doc`, `collection-script-tests` or
    `collection-script-coverage` findings.

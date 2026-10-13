@@ -193,6 +193,26 @@ The runner is `pkg/testrun` (`Load`, `Run`, `WriteJUnit`), see [go-api.md](go-ap
 - The case schema `docs/test-case.schema.json` has a `title` and `examples` for every field, for
   editors that build a form from it.
 
+## Script collection tests
+
+`cpictl test scripts` runs the Gradle build of the script collection tests (the build skill's
+[script-tests.md](../plugin/skills/cpi-build/script-tests.md): `./gradlew test`, or `gradle test`
+without a wrapper; `--command` for another one) and reads its JUnit and JaCoCo reports:
+
+```bash
+cpictl test scripts                       # run and report
+cpictl test scripts --no-run --output json  # only read the reports of an earlier run
+```
+
+The result lists every test (class, name, status, duration, failure message) and every public
+function of every collection script with its line coverage, the test files and test methods that
+call it, and a status: `passed`, `failed` (a test that calls it failed), `skipped` (its tests did
+not run) or `untested` (no test calls it). A test method calls a function when its body contains
+the call; a function called only from a helper or setup method counts every test of the class.
+The paths are lint's (`scriptTests` in `.cpi/lint.yaml`). Exit code 5 when a test failed. Go:
+`pkg/scripttest` (`Run`, `Options`, `Result`). Nothing is sent to the tenant. Scripts inside
+flows (not in a collection) are not covered yet.
+
 ## Direct: HTTP-based senders
 
 ```bash

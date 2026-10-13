@@ -127,9 +127,11 @@ packages/Orders/Orders_Scripts/src/main/resources/script/Headers.groovy
 tests/scripts/Orders/Orders_Scripts/HeadersTest.groovy
 ```
 
-cpictl does not run Groovy. A small Gradle build at the project root compiles the collection
-scripts in place with stubs of SAP's `Message` API, runs the tests and writes a JaCoCo report;
-lint then reads the report. The build, the stubs and an example test are in the build skill's
+A small Gradle build at the project root compiles the collection scripts in place with stubs
+of SAP's `Message` API, runs the tests and writes a JaCoCo report; lint then reads the report.
+`cpictl test scripts` runs that build and reports every test and every collection function
+(coverage, the tests that call it, passed/failed/untested; see
+[testing.md](testing.md#script-collection-tests)). The build, the stubs and an example test are in the build skill's
 [script-tests.md](../plugin/skills/cpi-build/script-tests.md). In CI, run the tests before lint:
 
 ```bash

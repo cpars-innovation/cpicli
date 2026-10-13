@@ -5,6 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `cpictl test scripts` (Go `pkg/scripttest`): runs the Gradle build of the script collection
+  tests and reports every test and every collection function with its line coverage (JaCoCo, per
+  method), the test files and methods that call it and its status (passed, failed, skipped,
+  untested). `--no-run` reads the reports of an earlier run
+  ([#11](https://github.com/cpars-innovation/cpicli/issues/11)).
+- Test run diagnostics have the message's path through the flow (`Diagnostics.Path`): the model
+  steps that ran in order, the failing one marked; steps not listed were not reached
+  ([#11](https://github.com/cpars-innovation/cpicli/issues/11)).
+
 - Receiver stub 1.2.0: conditional answers per rule (`when`: `pathContains`, `header`,
   `bodyContains`, each entry overriding the answer fields it sets) and delays (`delayMs`, up to
   60 s). The recorded call names the chosen answer (`StubCall.Matched`) and carries the stub's

@@ -117,6 +117,10 @@ type ScriptTestConfig struct {
 }
 
 // path resolves a path of the config.
+// Path resolves a path of the config (scriptTests.dir, coverageReport)
+// against the project root.
+func (c *Config) Path(p string) string { return c.path(p) }
+
 func (c *Config) path(p string) string {
 	if p == "" || filepath.IsAbs(p) {
 		return p

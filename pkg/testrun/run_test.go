@@ -17,6 +17,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/stretchr/testify/assert"
@@ -138,6 +139,13 @@ func TestRunFailureDiagnostics(t *testing.T) {
 	assert.Contains(t, c.Diagnostics.LastError, "Read timed out")
 	require.NotNil(t, c.Diagnostics.FailedStep)
 	assert.Equal(t, "ServiceTask_0", c.Diagnostics.FailedStep.ModelStepID)
+	// the path: the steps that ran in order, the failing one last
+	require.NotEmpty(t, c.Diagnostics.Path)
+	last := c.Diagnostics.Path[len(c.Diagnostics.Path)-1]
+	assert.Equal(t, PathStep{ModelStepID: "ServiceTask_0", Activity: last.Activity, State: PathFailed}, last)
+	for _, p := range c.Diagnostics.Path[:len(c.Diagnostics.Path)-1] {
+		assert.Equal(t, PathRan, p.State, p.ModelStepID)
+	}
 	require.NotNil(t, c.Diagnostics.TraceRoot)
 	assert.Equal(t, ops.DefaultHarnessID, c.Diagnostics.TraceRoot.ArtifactID, "the path starts at the harness")
 	require.NotNil(t, c.Diagnostics.FirstFailure)
@@ -422,4 +430,17 @@ func TestRunPhasesAndRetryRestore(t *testing.T) {
 	assert.Equal(t, []string{"ORDER_API_URL"}, res.Config[0].Restored)
 	assert.Equal(t, []string{"restore_config:started", "deploy:started", "deploy:done", "restore_config:done"}, events)
 	assert.NoError(t, res.RetryRestore(context.Background()), "nothing left to retry")
+}
+
+func TestPathOf(t *testing.T) {
+	steps := &ops.MessageSteps{Runs: []ops.MessageRunWithSteps{
+		{Steps: []cpi.MessageRunStep{{ModelStepID: "Start"}, {ModelStepID: "Map", Activity: "Map Order"}, {StepID: "internal"}, {ModelStepID: "Map"}}},
+		{Steps: []cpi.MessageRunStep{{ModelStepID: "Call", Status: "FAILED"}, {ModelStepID: "Map", Error: "boom"}}},
+	}}
+	assert.Equal(t, []PathStep{
+		{ModelStepID: "Start", State: PathRan},
+		{ModelStepID: "Map", Activity: "Map Order", State: PathFailed},
+		{ModelStepID: "Call", State: PathFailed},
+	}, pathOf(steps))
+	assert.Empty(t, pathOf(&ops.MessageSteps{}))
 }
