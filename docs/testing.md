@@ -92,17 +92,76 @@ cpictl sends the address in the header `CpictlTargetAddress` to the harness
 harness message's correlation ID; with `--wait` cpictl finds that flow's message log by
 correlation ID and `--artifact-id`, and reports its status.
 
-Setting up the harness (once per development tenant; the cpi-test skill of the Claude Code
-plugin builds it by copying the components from existing flows of the tenant):
+The harness ships with cpictl: install it once per development tenant with
+`cpictl test tools install --deploy` (MCP `install_test_tools`), see below.
 
-- Integration flow ID `CPICTL_Test_Harness`, in a package for test tooling. Do not transport it.
-- HTTPS sender: address `/cpictl/test`, user role `ESBMessaging.send`, CSRF protection
-  off (or on: cpictl handles the token).
-- Request Reply step with a ProcessDirect receiver whose address is
-  `${header.CpictlTargetAddress}` (dynamic address). Verify on your tenant that the ProcessDirect
-  receiver accepts the dynamic address.
-- Runtime configuration, *Allowed Header(s)*: `CpictlTargetAddress` and the headers your test
-  cases send (or `*` on the development tenant).
+## Test tooling: harness and receiver stub
+
+cpictl embeds two small flows for testing and installs them on a development tenant:
+
+```bash
+cpictl test tools install --deploy        # package CPICTLTesting, created when missing
+cpictl test tools status                  # installed, deployed, version, endpoints, stub URL
+```
+
+| Flow | Model | Used for |
+|------|-------|----------|
+| `CPICTL_Test_Harness` | HTTPS sender `/cpictl/test` -> Request Reply -> ProcessDirect receiver `${header.CpictlTargetAddress}` | `send --process-direct`, test runs of ProcessDirect flows |
+| `CPICTL_Test_Stub` | HTTPS sender `/cpictl/stub/*` -> Groovy script | a receiver for the flow under test: records each request and answers per rule |
+
+- `install` creates the package (`--package`, default `CPICTLTesting`: package IDs take letters
+  and digits only) and creates or updates both flows (`--only harness|stub` for one). The
+  versions are the ones this cpictl ships (versioning manifest); a running flow keeps running
+  until it is deployed again: `--deploy` deploys and waits. Never transport the package.
+- Both HTTPS senders use the user role `ESBMessaging.send` and CSRF protection off. *Allowed
+  Header(s)*: the harness passes `CpictlTargetAddress`, `traceparent` and `X-Test-*`; the stub
+  takes every header (`*`) so that it can record what the flow under test sent.
+- On a tenant whose tier is prod, `test tools install` and `test stub set` (MCP
+  `install_test_tools`, `set_stub_response`) are refused unless `--allow-production`.
+
+### Receiver stub
+
+Point a receiver of the flow under test (for example the HTTP receiver's address parameter) at
+the stub URL from `test tools status`, with a **rule** as the first path segment:
+`https://<runtime>/http/cpictl/stub/<rule>/<anything>`.
+
+For every request the stub's script
+
+- records method, the path after `/cpictl/stub/`, query, headers (without `Authorization`,
+  cookies, tokens, passwords, secrets and other sensitive names, and without `Camel*` and `SAP_*`
+  internal headers) and body (the first 64 KiB) as the message processing log attachment
+  `cpictl-stub-request` (JSON);
+- sets the custom header properties `CpictlStubRule` (the rule) and `CpictlStubPath` (the path),
+  so the runs are found by header (`cpictl logs`, `find_messages_by_header`);
+- answers with the response configured for the rule in the Partner Directory: PID `CPICTL_Stub`,
+  string parameter ID = rule, value
+  `{"status":200,"contentType":"application/json","body":"...","headers":{}}`. Without one it
+  answers 200 with `{}`. It sets `CamelHttpResponseCode` and `Content-Type`; the stub's message
+  is COMPLETED whatever status it answers.
+
+```bash
+cpictl test stub set erp --status 500 --body '{"error":"posting period closed"}'
+cpictl test stub set orders --body-file order-response.json --content-type application/json --header X-Request-Id=42
+cpictl test stub clear erp                # back to 200 {}
+```
+
+Rules are letters, digits, `_`, `.` and `-`. MCP: `set_stub_response` (rule, status,
+content_type, body, headers; `clear`). Go: `ops.SetStubResponse`, `ops.ClearStubResponse`, and
+`ops.StubCalls(ctx, exe, since)` returns the recorded requests since a time, oldest first (the
+stub's message logs of any status, each with its attachment and message GUID).
+
+The script is a Groovy script step of version 1 (`com.sap.gateway.ip.core.customdev.util.Message`):
+the Partner Directory API it reads the answers with (`ITApiFactory.getService(PartnerDirectoryService.class, null)`,
+`getParameter(rule, "CPICTL_Stub", String.class)`) is documented for that script API; for script
+API version 2 it was not verified. The path is taken from `CamelHttpUri` (or `CamelHttpUrl`,
+`CamelHttpPath`) after `/cpictl/stub/`.
+
+Not yet verified on a real tenant: the *Allowed Header(s)* value format (`|`-separated, with `*`
+wildcards), the ProcessDirect receiver's dynamic address, which of the `CamelHttp*` headers the
+HTTPS sender sets for a `/*` address, and the Partner Directory script API call. Check
+`cpictl test tools status` and one request to the stub after the first install.
+
+The [mock tenant](mock-tenant.md#test-tooling) emulates both flows, so test runs work offline.
 
 ## Test entry: polling and scheduled flows
 

@@ -708,6 +708,10 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	body, _ := io.ReadAll(r.Body)
+	if a := m.Artifacts[in.Artifact]; m.Live && a != nil && a.isStub() {
+		m.handleStub(w, r, in.Artifact, rest, body)
+		return
+	}
 	switch in.Kind {
 	case inboundIDoc:
 		m.handleIDoc(w, r, in, body)
@@ -717,7 +721,7 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.Received = append(m.Received, ReceivedMessage{Method: r.Method, Path: r.URL.Path, Header: r.Header.Clone(), Body: string(body)})
-	ran, failed := m.inboundRun(w, r, in, message{key: m.messageKey(r, string(body)), payload: string(body)})
+	ran, failed := m.inboundRun(w, r, in, message{key: m.messageKey(r, string(body)), payload: string(body), headers: firstValues(r.Header)})
 	switch {
 	case ran && failed != "":
 		w.Header().Set("Content-Type", "text/plain")

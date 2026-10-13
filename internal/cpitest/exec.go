@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
 
 // The mock executes flows the way the message processing logs show them: one
@@ -29,6 +30,9 @@ type message struct {
 	keyHeaders  []string
 	// docnum is the IDoc number (DOCNUM) of a message an IDoc sender received.
 	docnum string
+	// headers are the message headers (the HTTP headers a sender received);
+	// dynamic addresses ${header.<name>} resolve against them.
+	headers map[string]string
 }
 
 // runResult is the outcome of one flow run.
@@ -57,6 +61,9 @@ type flowInfo struct {
 	// attachments are the attachment names the script of a step writes to
 	// the message processing log, by step ID.
 	attachments map[string][]string
+	// stub: a script records requests as testtools.StubAttachment (the
+	// receiver stub, emulated by runStub).
+	stub bool
 }
 
 var (
@@ -82,6 +89,9 @@ func (a *Artifact) info() *flowInfo {
 		}
 		if strings.Contains(string(r.Content), "SAP_ApplicationID") {
 			fi.setsAppID = true
+		}
+		if strings.Contains(string(r.Content), testtools.StubAttachment) {
+			fi.stub = true
 		}
 	}
 	for _, s := range fm.Senders {
@@ -283,7 +293,7 @@ func (x *executor) trace(msg message, l MessageLog) Trace {
 // call sends the message through one receiver channel; it returns the time
 // after the call and an error text when it failed.
 func (x *executor) call(ch channel, a *Artifact, msg message, t time.Time, guid string, depth int) (time.Time, string) {
-	address := resolve(ch.Address, a.Parameters)
+	address := resolveHeaders(resolve(ch.Address, a.Parameters), msg.headers)
 	switch ch.Adapter {
 	case "ProcessDirect":
 		id, _ := x.flowBySender("ProcessDirect", address)
@@ -303,6 +313,9 @@ func (x *executor) call(ch channel, a *Artifact, msg message, t time.Time, guid 
 	}
 	if name := cmp.Or(ch.Props["credentialName"], ch.Props["credential_name"]); name != "" && x.m.Credentials != nil && !x.m.hasCredential(name) {
 		return t.Add(20 * time.Millisecond), fmt.Sprintf("com.sap.it.nm.security.SecurityException: credential %s not found on this tenant", name)
+	}
+	if u, ok := x.m.selfURL(address); ok { // a runtime endpoint of this tenant
+		return x.callSelf(ch, msg, u, t, depth)
 	}
 	host := receiverHost(ch, address)
 	sys, ok := x.system(host)

@@ -291,6 +291,11 @@ executed: the payload passes through unchanged.
   the flow does not run again). No consumer: the message stays in the queue (nothing is logged).
   Queues exist once a flow that reads them is deployed; `jms activate` / `deactivate` set their
   state.
+- **Dynamic addresses** `${header.<name>}` resolve against the headers the message came in with
+  (the test harness's ProcessDirect receiver `${header.CpictlTargetAddress}`).
+- A receiver whose address is a runtime URL of the mock itself (`<mock>/http/...`) calls that
+  endpoint: the receiver stub answers (below), another deployed flow runs with the same correlation
+  ID.
 - **Other receivers** (HTTP, OData, SOAP, SFTP, …) are answered by the landscape's **systems**: the
   receiver's host (from the URL or the `host` property, parameters applied) is matched against
   each system's `match` pattern. The system's `latencyMs` adds to the run; with `failRate` the call
@@ -344,6 +349,24 @@ executed: the payload passes through unchanged.
   landscape and the tier (or `seed`), so a tier always generates the same history and tiers
   differ. `--live-traffic <speed>` keeps generating messages in real time (`60`: an hour per
   minute): at most one message per millisecond and rule, however high the speed.
+
+## Test tooling
+
+`cpictl test tools install --deploy` works against the mock like against a tenant (the flows pass
+its Check). Once deployed, the mock emulates them (live mode):
+
+- **Harness** (`/http/cpictl/test`): runs like any flow; its ProcessDirect receiver goes to the
+  address in the `CpictlTargetAddress` header, so `send --process-direct` reaches ProcessDirect
+  flows.
+- **Receiver stub** (`/http/cpictl/stub/<rule>/...`, any flow whose script writes the attachment
+  `cpictl-stub-request`): it answers with the Partner Directory answer of the rule
+  (`CPICTL_Stub/<rule>`, `cpictl test stub set`; none: 200 `{}`) and logs a COMPLETED message
+  with the attachment (the recorded request as JSON) and the custom headers `CpictlStubRule` and
+  `CpictlStubPath`, as the script does on a tenant. Requests come directly or from a receiver of
+  another flow whose address points at the mock's stub URL (for example
+  `cpictl params set --artifact-id Orders_Route --param ERP_URL=<mock>/http/cpictl/stub/erp`
+  on the demo): the stub's message then has the calling flow's correlation ID, and an answer with
+  status 300 or more fails the call (`HTTP <status> from <host>`).
 
 ## Component catalogue
 

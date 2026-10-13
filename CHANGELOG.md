@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Test tooling ships with cpictl: `cpictl test tools install [--package CPICTLTesting] [--deploy]
+  [--only harness|stub]` (MCP `install_test_tools`) uploads the test harness `CPICTL_Test_Harness`
+  (HTTPS `/cpictl/test` -> ProcessDirect `${header.CpictlTargetAddress}`) and the new receiver stub
+  `CPICTL_Test_Stub` (HTTPS `/cpictl/stub/*`) into their package; `test tools status` shows
+  versions, deployment and the stub URL. The stub records every request as the message log
+  attachment `cpictl-stub-request` with the custom headers `CpictlStubRule` and `CpictlStubPath`, and
+  answers per rule from the Partner Directory (`CPICTL_Stub/<rule>`): `cpictl test stub set <rule>
+  --status --body-file --content-type --header` / `test stub clear <rule>` (MCP
+  `set_stub_response`). Go API: `ops.StubCalls`, `ops.SetStubResponse`, `ops.ClearStubResponse`.
+  Install and `stub set` are refused on a production tier unless `--allow-production`. The mock
+  tenant emulates both flows (dynamic `${header.*}` addresses, receivers pointing at the mock's
+  own `/http/...` URLs). See [docs/testing.md](docs/testing.md#test-tooling-harness-and-receiver-stub).
 - Production guard: a `tier` setting (profile key, `--tier`, `CPICTL_TIER`). On `prod`
   (`production`, `prd`), `send` and MCP `send_test_message` are refused unless `--allow-production`
   (for MCP: when the server is started with it; no tool argument lifts it). A project

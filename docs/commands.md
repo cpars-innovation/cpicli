@@ -147,6 +147,13 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`tenant-settings`](#tenant-settings) | Show tenant-wide runtime settings: external logging, archiving and its last runs |
 | [`tenant-settings archiving`](#tenant-settings-archiving) | Switch on archiving of message processing logs (requires --confirm; the API cannot switch it off) |
 | [`tenant-settings external-logging`](#tenant-settings-external-logging) | Switch external logging of message processing logs (requires --confirm) |
+| [`test`](#test) | Test tooling on the tenant: test harness and receiver stub |
+| [`test stub`](#test-stub) | Configure the answers of the receiver stub per rule |
+| [`test stub clear`](#test-stub-clear) | Remove the stub's answer for a rule (it then answers 200 with {}) |
+| [`test stub set`](#test-stub-set) | Set the stub's answer for a rule |
+| [`test tools`](#test-tools) | Install the test harness and the receiver stub, or show their state |
+| [`test tools install`](#test-tools-install) | Upload (and deploy) the test harness and the receiver stub |
+| [`test tools status`](#test-tools-status) | Show whether the test harness and the receiver stub are installed and deployed |
 | [`transport`](#transport) | Prepare a transport between tiers: dependencies, pre-checks against the target, copy artifact folders |
 | [`transport check`](#transport-check) | Check a transport against the target tenant (read only) |
 | [`transport copy`](#transport-copy) | Copy artifact folders into another content tree (local files) |
@@ -3365,6 +3372,122 @@ Switch external logging of message processing logs (requires --confirm)
       --confirm   Confirm the change
       --off       Switch off
       --on        Switch on
+```
+
+## test
+
+Test tooling on the tenant: test harness and receiver stub
+
+## test stub
+
+Configure the answers of the receiver stub per rule
+
+```
+The receiver stub (CPICTL_Test_Stub, see 'test tools install') answers a request
+to <runtime>/http/cpictl/stub/<rule>/... with the response configured for <rule>,
+a Partner Directory string parameter (PID CPICTL_Stub, ID = rule, JSON value
+{"status":200,"contentType":"application/json","body":"...","headers":{}}).
+Without one it answers 200 with {}. Every request is recorded in the stub's
+message log (attachment cpictl-stub-request, custom headers CpictlStubRule and
+CpictlStubPath).
+```
+
+## test stub clear
+
+Remove the stub's answer for a rule (it then answers 200 with {})
+
+**Usage:** `cpictl test stub clear <rule>`
+
+**Examples:**
+
+```
+  cpictl test stub clear erp
+```
+
+## test stub set
+
+Set the stub's answer for a rule
+
+**Usage:** `cpictl test stub set <rule> [flags]`
+
+**Flags:**
+
+```
+      --body string           Body of the answer
+      --body-file string      Read the body from this file ('-' for stdin)
+      --content-type string   Content-Type of the answer (default "application/json")
+      --header strings        Additional response header name=value (repeatable)
+      --status int            HTTP status of the answer (100-599) (default 200)
+```
+
+**Examples:**
+
+```
+  cpictl test stub set erp --status 500 --body '{"error":"down"}'
+  cpictl test stub set orders --body-file order-response.json --content-type application/json --header X-Request-Id=42
+```
+
+## test tools
+
+Install the test harness and the receiver stub, or show their state
+
+## test tools install
+
+Upload (and deploy) the test harness and the receiver stub
+
+```
+Upload the test tooling that ships with cpictl into a package of its own
+(created when missing) and, with --deploy, deploy it:
+
+  CPICTL_Test_Harness  HTTPS /cpictl/test -> Request Reply -> ProcessDirect ${header.CpictlTargetAddress}
+                       (send --process-direct, test runs of ProcessDirect flows)
+  CPICTL_Test_Stub     HTTPS /cpictl/stub/* : records each request (message log attachment
+                       cpictl-stub-request) and answers per rule from the Partner Directory
+                       (PID CPICTL_Stub, see 'test stub set')
+
+Existing artifacts are updated to the version of this cpictl (versioning
+manifest); a running one keeps running until it is deployed again. Install it on
+development tenants only and never transport the package. On a tenant whose
+tier is prod it is refused unless --allow-production.
+```
+
+**Usage:** `cpictl test tools install [flags]`
+
+**Flags:**
+
+```
+      --delay-length int      Seconds between deployment status checks (default 10)
+      --deploy                Deploy the artifacts and wait for them
+      --max-check-limit int   Deployment status checks per artifact (default 30)
+      --only string           Install only one tool: harness or stub (default both)
+      --package string        Package of the test tooling (letters and digits only; created when missing) (default "CPICTLTesting")
+```
+
+**Examples:**
+
+```
+  cpictl test tools install --deploy
+  cpictl test tools install --only stub --deploy
+  cpictl test tools install --package MyTestTooling
+```
+
+## test tools status
+
+Show whether the test harness and the receiver stub are installed and deployed
+
+```
+Show per tool whether it is installed and deployed, the running version
+compared with the one this cpictl ships (upToDate), its endpoints and, for the
+receiver stub, the base URL to give receivers of flows under test
+(<stubUrl>/<rule>/...).
+```
+
+**Usage:** `cpictl test tools status`
+
+**Examples:**
+
+```
+  cpictl test tools status
 ```
 
 ## transport

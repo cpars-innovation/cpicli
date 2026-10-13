@@ -37,7 +37,11 @@ harness flow); timer, SFTP and other polling flows: see the triggers in discover
 list_message_logs with since and wait_seconds after triggering them. send_test_message
 triggers real processing, including receiver calls. IDoc senders: send_test_message idoc (IDoc
 XML with an EDI_DC40 control record; idoc_template writes a skeleton to fill with the segments).
-OData senders: send_test_message odata_method, entity_set, key, query.`},
+OData senders: send_test_message odata_method, entity_set, key, query. Test tooling on a
+development tenant: install_test_tools (deploy=true) installs the harness and the receiver stub
+(HTTPS /cpictl/stub/*: point a receiver of the flow under test at it, each request is recorded in the
+stub's message log, attachment cpictl-stub-request); set_stub_response sets its answer per rule
+(status, body: simulate receiver errors).`},
 	{[]string{"build", "promote", "partner-directory"}, `Configuration: get_parameters / set_parameters, then deploy to activate; config_diff compares a
 configure file with the tenant.`},
 	{[]string{"build"}, `Review: check_guidelines (tenant design guidelines) before a release.`},

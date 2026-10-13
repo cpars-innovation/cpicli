@@ -26,12 +26,25 @@ Look up the flow's trigger: `iflows[].triggers` in `.cpi/discovery.json` (refres
 ### Test harness (ProcessDirect)
 
 If `send_test_message` reports that the harness `CPICTL_Test_Harness` is not deployed, offer to
-build it on the development tenant (ask first): HTTPS sender `/cpictl/test` -> Request Reply ->
-ProcessDirect receiver with address `${header.CpictlTargetAddress}`; Allowed Header(s)
-`CpictlTargetAddress` plus the test headers. Use the cpi-build loop and copy the HTTPS sender and
-the ProcessDirect receiver from existing flows of the tenant (discovery: `triggers` with HTTPS,
-`processDirectCalls`). Put it in a test tooling package that is never transported. Details in
-the cpictl docs (docs/testing.md).
+install it on the development tenant (ask first): `install_test_tools` with `deploy: true`
+(CLI: `cpictl test tools install --deploy`). It installs the harness that ships with cpictl
+(HTTPS sender `/cpictl/test` -> Request Reply -> ProcessDirect receiver
+`${header.CpictlTargetAddress}`) and the receiver stub into the test tooling package
+`CPICTLTesting`, which is never transported. Do not build the harness by hand. It is refused on
+a production tier.
+
+### Receiver stub (simulated receivers)
+
+To test what a flow sends to a receiver, or how it handles a receiver's answer or error, without
+calling the real system: install the tooling (above), point the receiver's address (an
+externalised parameter: `set_parameters`, then `deploy`) at the stub URL from `cpictl test tools
+status`, `<runtime>/http/cpictl/stub/<rule>/...`, and set the answer per rule with
+`set_stub_response` (status, content_type, body, headers; `clear` for the default 200 `{}`).
+Each request is recorded in the stub's message log (`CPICTL_Test_Stub`): attachment
+`cpictl-stub-request` (method, path, query, headers without sensitive ones, body) and custom
+headers `CpictlStubRule` / `CpictlStubPath`; read it with `list_message_logs` (artifact
+`CPICTL_Test_Stub`, since) and `get_message_attachment`. Set the receiver address back after the
+test unless the conventions keep it on the development tenant.
 
 ### Test entry (polling and scheduled flows)
 

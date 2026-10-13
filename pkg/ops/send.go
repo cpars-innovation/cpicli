@@ -16,6 +16,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/idoc"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
 
 // EndpointExecuterFunc returns an executer and request path for a runtime
@@ -107,10 +108,11 @@ func (o *ODataRequest) resourcePath() (string, error) {
 
 // DefaultHarnessID is the test harness flow: an HTTPS sender that forwards
 // the message to the ProcessDirect address in header HarnessAddressHeader.
-const DefaultHarnessID = "CPICTL_Test_Harness"
+// (`cpictl test tools install` installs it.)
+const DefaultHarnessID = testtools.HarnessID
 
 // HarnessAddressHeader carries the ProcessDirect target address to the harness.
-const HarnessAddressHeader = "CpictlTargetAddress"
+const HarnessAddressHeader = testtools.HarnessAddressHeader
 
 // SentMessage is the outcome of SendTestMessage.
 type SentMessage struct {
@@ -297,7 +299,7 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	}
 	url, err := resolveEndpoint(exe, endpointArtifact, m.URL, kind)
 	if err != nil && m.ProcessDirectAddress != "" && output.ExitCode(err) == exitcode.Usage {
-		return nil, output.Usagef("test harness %s is not deployed or has no endpoint (see the cpi-test skill to set it up): %v", m.Harness, err)
+		return nil, output.Usagef("test harness %s is not deployed or has no endpoint (install it with 'cpictl test tools install --deploy', MCP install_test_tools): %v", m.Harness, err)
 	}
 	if err != nil {
 		return nil, err
