@@ -128,8 +128,13 @@ type Inbound struct {
 	// the body as is), "IDoc" (IDoc sender: IDoc XML, with or without SOAP
 	// envelope) or "OData" (OData V2 sender: the path is a service root,
 	// requests go to its entity sets).
-	Kind  string `json:",omitempty"`
-	token string
+	Kind string `json:",omitempty"`
+	// Harness makes the endpoint the cpictl test harness (Live mode): it
+	// runs the deployed flow whose ProcessDirect sender listens on the
+	// address in header CpictlTargetAddress, logs its own message with the
+	// same correlation ID and answers with the flow's outcome.
+	Harness bool `json:",omitempty"`
+	token   string
 }
 
 // ReceivedMessage is a request received by a runtime endpoint. For an IDoc
@@ -721,6 +726,10 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.Received = append(m.Received, ReceivedMessage{Method: r.Method, Path: r.URL.Path, Header: r.Header.Clone(), Body: string(body)})
+	if in.Harness && m.Live {
+		m.handleHarness(w, r, in, body)
+		return
+	}
 	ran, failed := m.inboundRun(w, r, in, message{key: m.messageKey(r, string(body)), payload: string(body), headers: firstValues(r.Header)})
 	switch {
 	case ran && failed != "":

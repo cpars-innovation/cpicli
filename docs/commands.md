@@ -147,7 +147,9 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`tenant-settings`](#tenant-settings) | Show tenant-wide runtime settings: external logging, archiving and its last runs |
 | [`tenant-settings archiving`](#tenant-settings-archiving) | Switch on archiving of message processing logs (requires --confirm; the API cannot switch it off) |
 | [`tenant-settings external-logging`](#tenant-settings-external-logging) | Switch external logging of message processing logs (requires --confirm) |
-| [`test`](#test) | Test tooling on the tenant: test harness and receiver stub |
+| [`test`](#test) | Run the test cases of deployed integration flows (.cpi/tests); test harness and receiver stub |
+| [`test list`](#test-list) | List the test cases (offline) |
+| [`test run`](#test-run) | Run test cases against the deployed flows and check the expectations |
 | [`test stub`](#test-stub) | Configure the answers of the receiver stub per rule |
 | [`test stub clear`](#test-stub-clear) | Remove the stub's answer for a rule (it then answers 200 with {}) |
 | [`test stub set`](#test-stub-set) | Set the stub's answer for a rule |
@@ -3376,7 +3378,99 @@ Switch external logging of message processing logs (requires --confirm)
 
 ## test
 
-Test tooling on the tenant: test harness and receiver stub
+Run the test cases of deployed integration flows (.cpi/tests); test harness and receiver stub
+
+```
+Test cases are YAML files in .cpi/tests/<FlowId>/<case>.yaml: the message to send
+and the expected outcome (HTTP status, message status, response, error, custom
+headers, steps, duration, receiver stub calls). See docs/testing.md (Test runs)
+and docs/test-case.schema.json.
+```
+
+## test list
+
+List the test cases (offline)
+
+```
+List the test cases under --dir per flow, with their trigger (http, idoc, odata,
+process_direct), tags and skip reasons, and the parameter keys of each flow's
+config.yaml. The files are checked strictly: an unknown key or invalid YAML is a
+usage error naming file:line. Nothing is sent.
+```
+
+**Usage:** `cpictl test list [flags]`
+
+**Flags:**
+
+```
+      --dir string     Directory of the test cases (<dir>/<FlowId>/<case>.yaml) (default ".cpi/tests")
+      --flow strings   Only the cases of these flows (names or patterns such as Orders_*; repeatable)
+      --tag strings    Only cases with one of these tags (repeatable)
+```
+
+**Examples:**
+
+```
+  cpictl test list
+  cpictl test list --flow Orders_In --tag smoke --output json
+```
+
+## test run
+
+Run test cases against the deployed flows and check the expectations
+
+```
+Run the test cases under --dir: each case sends its message to the deployed flow
+(as 'cpictl send'), waits for the message processing log and checks every
+expectation. A failed case gets diagnostics: the message GUID, its error, the
+failing step and the message path across flows.
+
+The run triggers real processing, including receiver calls: use a development
+tenant. On a tenant whose tier is prod it is refused unless --allow-production.
+
+--apply-config sets each flow's config.yaml values (e.g. receiver URLs pointing
+at the receiver stub) before its cases, redeploys the flow, and afterwards sets
+the previous values back and redeploys again, also when the cases fail or the
+run is cancelled. The result lists the keys applied and restored, never values.
+Without it, a config.yaml whose values differ from the tenant is a warning.
+
+Cases run one at a time unless --parallel; cases with stub_calls always run
+alone. --junit writes a JUnit XML report, --events one item event per case.
+
+Exit codes: 0 every case passed (or was skipped); 5 a case failed (or a
+configuration could not be restored); 7 some cases passed and others could not
+be run; otherwise the cause of the cases that could not be run (2 usage, 3 auth,
+4 tenant HTTP error, ...).
+```
+
+**Usage:** `cpictl test run [flags]`
+
+**Flags:**
+
+```
+      --apply-config                        Set each flow's config.yaml values, redeploy, run its cases, then restore the previous values and redeploy
+      --case strings                        Only these cases (file name without .yaml, or Flow/case; patterns allowed; repeatable)
+      --dir string                          Directory of the test cases (<dir>/<FlowId>/<case>.yaml) (default ".cpi/tests")
+      --flow strings                        Only the cases of these flows (names or patterns such as Orders_*; repeatable)
+      --harness string                      Test harness flow ID (cases with process_direct_address) (default "CPICTL_Test_Harness")
+      --junit string                        Write a JUnit XML report to this file
+      --parallel int                        Cases run at the same time (cases with stub_calls always run alone) (default 1)
+      --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
+      --runtime-oauth-clientsecret string   OAuth client secret for runtime endpoints
+      --runtime-oauth-host string           OAuth token server host for runtime endpoints (default: --oauth-host)
+      --runtime-password string             Password for Basic Auth on runtime endpoints
+      --runtime-userid string               User ID for Basic Auth on runtime endpoints
+      --tag strings                         Only cases with one of these tags (repeatable)
+```
+
+**Examples:**
+
+```
+  cpictl test run
+  cpictl test run --flow Orders_In --case valid-order --junit report.xml
+  cpictl test run --tag smoke --parallel 4 --events -
+  cpictl test run --flow Orders_Route --apply-config
+```
 
 ## test stub
 

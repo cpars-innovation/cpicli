@@ -65,7 +65,7 @@ var workflows = []Workflow{
 	{Task: "Change an existing flow and get it deployed", Skill: "cpi-build",
 		Tools: []string{"loop_start", "drift", "download_artifact", "layout_iflow", "upload_artifact", "validate_artifact", "deploy", "get_runtime_status", "loop_end"}, Docs: "mcp.md"},
 	{Task: "Test a flow (HTTP, ProcessDirect via harness, polling, timers) and trace failures", Skill: "cpi-test",
-		Tools: []string{"send_test_message", "list_message_logs", "get_message_steps", "get_trace_tree", "set_log_level", "get_message_trace", "get_trace_message"}, Docs: "testing.md"},
+		Tools: []string{"list_tests", "run_tests", "send_test_message", "list_message_logs", "get_message_steps", "get_trace_tree", "set_log_level", "get_message_trace", "get_trace_message"}, Docs: "testing.md"},
 	{Task: "Review a flow against conventions and tenant checks", Skill: "cpi-review",
 		Tools: []string{"validate_artifact", "check_guidelines", "graph_neighbors", "get_runtime_status"}, Docs: "plugin.md"},
 	{Task: "Find and apply improvements across flows: script collections, Partner Directory candidates, dead weight, best practices", Skill: "cpi-improve",

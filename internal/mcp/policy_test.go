@@ -291,6 +291,24 @@ func TestRedactorMasksNameValueLists(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// run_tests failures quote the response and stub bodies: masked with
+// --redact-payloads, the expectation and the expected value stay.
+func TestRedactorRedactsTestRunFailures(t *testing.T) {
+	r, err := NewRedactor("", nil, true)
+	require.NoError(t, err)
+	res := map[string]any{"cases": []any{map[string]any{"case": "c", "failures": []any{
+		map[string]any{"expectation": "response_contains", "expected": "<ok/>", "actual": "<customer>ACME</customer>", "message": "response lacks <ok/>: <customer>ACME</customer>"},
+		map[string]any{"expectation": "message_status", "expected": "COMPLETED", "actual": "FAILED", "message": "status FAILED"},
+	}}}}
+	m := applyJSON(t, r, "run_tests", res)
+	fs := m["cases"].([]any)[0].(map[string]any)["failures"].([]any)
+	resp := fs[0].(map[string]any)
+	assert.Equal(t, RedactedPayload, resp["actual"])
+	assert.Equal(t, RedactedPayload, resp["message"])
+	assert.Equal(t, "<ok/>", resp["expected"])
+	assert.Equal(t, "FAILED", fs[1].(map[string]any)["actual"], "statuses are no payload")
+}
+
 func TestRedactorRedactsPayloads(t *testing.T) {
 	r, err := NewRedactor("", nil, true)
 	require.NoError(t, err)

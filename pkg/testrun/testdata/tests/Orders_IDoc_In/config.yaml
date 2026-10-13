@@ -1,0 +1,2 @@
+# the order API of the test landscape while the cases run (--apply-config)
+ORDER_API_URL: https://orders-api-test.example.com/v1/orders

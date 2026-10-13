@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -16,6 +17,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/testrun"
 )
 
 // An autonomous build loop needs limits the model cannot talk its way past.
@@ -322,9 +324,12 @@ func (l *Ledger) after(tool string, args json.RawMessage, value any, err error) 
 			}
 		}
 	}
-	if fp, failed := lp.failureFingerprint(value, err); failed && stopped == nil {
+	if fps, failed := lp.failureFingerprints(value, err); failed && stopped == nil {
 		lp.failedSinceDeploy = true
-		if fp != "" {
+		for _, fp := range fps {
+			if fp == "" {
+				continue
+			}
 			lp.Errors[fp]++
 			if lp.Errors[fp] >= lp.Limits.SameErrorLimit && lp.Stopped == "" {
 				lp.Stopped = fmt.Sprintf("the same error occurred %d times (same_error_limit)", lp.Errors[fp])
@@ -346,6 +351,55 @@ func (l *Ledger) appendJSONL(lp *loop, call LoopCall) {
 
 func fingerprint(artifactID, modelStepID, errorText string) string {
 	return ops.ErrorFingerprint(artifactID, modelStepID, errorText)
+}
+
+// failureFingerprints is failureFingerprint for results with several
+// messages: a run_tests result counts like send_test_message, once per
+// distinct failure of its cases that sent a message (each flow is then
+// touched by the loop).
+func (lp *loop) failureFingerprints(value any, err error) ([]string, bool) {
+	res, ok := value.(*testrun.Result)
+	if !ok {
+		fp, failed := lp.failureFingerprint(value, err)
+		return []string{fp}, failed
+	}
+	if res == nil {
+		return nil, false
+	}
+	for _, c := range res.Cases {
+		if c.MessageGuid != "" {
+			lp.touched[c.Flow] = true // sent in the loop
+		}
+	}
+	if err == nil {
+		return nil, false
+	}
+	var fps []string
+	failed := false
+	for _, c := range res.Cases {
+		if c.Status != testrun.StatusFailed && (c.Status != testrun.StatusError || c.MessageGuid == "") {
+			continue
+		}
+		failed = true
+		step, text := "", c.Error
+		if d := c.Diagnostics; d != nil {
+			if d.FailedStep != nil {
+				step = d.FailedStep.ModelStepID
+			}
+			text = cmp.Or(d.LastError, text)
+		}
+		if text == "" {
+			msgs := make([]string, 0, len(c.Failures))
+			for _, f := range c.Failures {
+				msgs = append(msgs, f.Message)
+			}
+			text = strings.Join(msgs, "; ")
+		}
+		if fp := fingerprint(c.Flow, step, text); !slices.Contains(fps, fp) {
+			fps = append(fps, fp)
+		}
+	}
+	return fps, failed
 }
 
 // failureFingerprint reports whether a test or diagnosis result shows a

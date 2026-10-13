@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/cpars-innovation/cpicli/pkg/idoc"
 )
@@ -140,4 +141,47 @@ func endpointProtocol(url string) string {
 		return "SOAP"
 	}
 	return "REST"
+}
+
+// harnessAddressHeader carries the ProcessDirect address to the harness
+// (ops.HarnessAddressHeader).
+const harnessAddressHeader = "CpictlTargetAddress"
+
+// handleHarness forwards a message like the cpictl test harness flow: the
+// flow behind the ProcessDirect address runs with the harness message's
+// correlation ID and the harness answers with its outcome.
+func (m *Tenant) handleHarness(w http.ResponseWriter, r *http.Request, in *Inbound, body []byte) {
+	address := r.Header.Get(harnessAddressHeader)
+	x := m.newExecutor("LIVE")
+	m.liveSerial++
+	msg := message{correlation: fmt.Sprintf("C-live-%d", m.liveSerial), key: m.messageKey(r, string(body)), payload: string(body), keyHeaders: m.keyHeaders()}
+	start := time.Now()
+	h := MessageLog{Guid: x.guid(), Artifact: in.Artifact, Status: "COMPLETED", CorrelationID: msg.correlation, Start: start}
+	if a := m.Artifacts[in.Artifact]; a != nil {
+		h.Package = a.Package
+	}
+	end, errText := start.Add(20*time.Millisecond), ""
+	if id, _ := x.flowBySender("ProcessDirect", address); id == "" {
+		errText = fmt.Sprintf("com.sap.it.rt.adapter.processdirect.ProcessDirectException: no consumer for address %s", address)
+	} else {
+		res := x.run(id, msg, start.Add(3*time.Millisecond), h.Guid, 1)
+		end, errText = res.end.Add(2*time.Millisecond), res.errorText
+	}
+	h.End = end
+	if errText != "" {
+		h.Status, h.ErrorText = "FAILED", errText
+	}
+	m.addLogs(append(x.logs, h))
+	w.Header().Set("SAP_MessageProcessingLogID", h.Guid)
+	w.Header().Set("SAP_MplCorrelationId", msg.correlation)
+	if errText != "" {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(errText))
+		return
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
+	_, _ = w.Write(body)
 }

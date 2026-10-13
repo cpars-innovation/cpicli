@@ -43,7 +43,7 @@ var toolEffects = map[string]Effect{
 	"retry_jms_messages": EffectTenant, "move_jms_messages": EffectTenant, "delete_jms_messages": EffectTenant, "set_jms_queue_state": EffectTenant,
 	"list_log_files": EffectRead, "get_log_file": EffectRead, "list_idempotent_entries": EffectRead, "list_id_mappings": EffectRead,
 	"drift": EffectRead, "doctor": EffectRead, "lint": EffectRead, "compare": EffectRead, "message_summary": EffectRead, "transport_check": EffectRead,
-	"graph_search": EffectRead, "help": EffectRead, "list_toolsets": EffectRead, "enable_toolset": EffectRead, "graph_neighbors": EffectRead, "graph_path": EffectRead,
+	"graph_search": EffectRead, "list_tests": EffectRead, "help": EffectRead, "list_toolsets": EffectRead, "enable_toolset": EffectRead, "graph_neighbors": EffectRead, "graph_path": EffectRead,
 	"loop_status": EffectRead, "loop_start": EffectLocal, "loop_end": EffectLocal,
 	"list_keystore_history": EffectRead, "get_certificate_chain": EffectRead, "get_csr": EffectRead, "get_ssh_public_key": EffectRead,
 	"list_pgp_keys": EffectRead, "list_access_policies": EffectRead, "list_audit_logs": EffectRead, "list_pd_partners": EffectRead,
@@ -54,7 +54,7 @@ var toolEffects = map[string]Effect{
 
 	"create_package": EffectTenant, "upload_artifact": EffectTenant, "upload_artifacts": EffectTenant, "set_parameters": EffectTenant,
 	"deploy": EffectTenant, "undeploy": EffectTenant, "pd_deploy": EffectTenant,
-	"send_test_message": EffectTenant, "set_log_level": EffectTenant,
+	"send_test_message": EffectTenant, "run_tests": EffectTenant, "set_log_level": EffectTenant,
 	"install_test_tools": EffectTenant, "set_stub_response": EffectTenant,
 	"generate_key_pair": EffectTenant, "upload_certificate_chain": EffectTenant, "delete_keystore_entry": EffectTenant,
 	"create_access_policy": EffectTenant, "add_artifact_reference": EffectTenant, "delete_access_policy": EffectTenant,
@@ -94,7 +94,7 @@ var tenantClasses = map[string]Class{
 
 	"deploy": ClassDeploy, "undeploy": ClassDeploy, "pd_deploy": ClassDeploy, "install_test_tools": ClassDeploy,
 
-	"send_test_message": ClassProcess, "retry_jms_messages": ClassProcess, "move_jms_messages": ClassProcess, "set_jms_queue_state": ClassProcess,
+	"send_test_message": ClassProcess, "run_tests": ClassProcess, "retry_jms_messages": ClassProcess, "move_jms_messages": ClassProcess, "set_jms_queue_state": ClassProcess,
 
 	"set_log_level": ClassLog,
 
@@ -332,7 +332,7 @@ var Toolsets = map[string][]string{
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifact", "upload_artifacts", "validate_artifact", "check_guidelines",
 		"deploy", "get_runtime_status", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors", "list_credentials",
 		"list_locks", "list_components", "list_value_mappings", "get_value_mapping", "set_value_mapping", "loop_start", "loop_status", "loop_end"},
-	"test": {"send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
+	"test": {"list_tests", "run_tests", "send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
 		"get_message_attachment", "get_message_store_entry", "get_trace_tree", "set_log_level", "get_message_trace",
 		"get_trace_message", "get_runtime_status", "install_test_tools", "set_stub_response", "loop_start", "loop_status", "loop_end"},
 	"monitor": {"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps", "get_message_attachment",
@@ -356,7 +356,7 @@ var Toolsets = map[string][]string{
 var ToolsetDescriptions = map[string]string{
 	"inspect":           "understand content: packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare",
 	"build":             "change flows on a development tenant: download, copy, layout, upload, validate, guidelines, parameters, deploy, lint, loop tools",
-	"test":              "send test messages and diagnose them: message logs, steps, attachments, traces, log level, test tooling (harness, receiver stub), loop tools",
+	"test":              "test cases (list_tests, run_tests), test messages and their diagnosis: message logs, steps, attachments, traces, log level, test tooling (harness, receiver stub), loop tools",
 	"monitor":           "operations: message summary, message logs and traces, header search, runtime status, log files, data stores, variables, JMS queues and messages (retry, move), number ranges, keystore",
 	"promote":           "move content between tiers: compare, transport_check, drift, config_diff, credentials, keystore, Partner Directory dependencies",
 	"improve":           "quality: lint, lint_fix, layout_iflow, graph, drift, compare, bump_versions",

@@ -1,0 +1,17 @@
+description: The response is the order, checked with XPath and without the error marker
+order: 2
+tags: [smoke, xml]
+request:
+  content_type: application/xml
+  body: "<Order><OrderNo>4500017002</OrderNo><Customer id=\"C-7\">ACME</Customer></Order>"
+  wait: 30s
+expect:
+  message_status: COMPLETED
+  response_contains: "<Order>"
+  response_not_contains: ["<Error>"]
+  response_xpath:
+    /Order/OrderNo: "4500017002"
+    //Customer: ACME
+    /Order/Customer/@id: C-7
+  steps_include: [setKeys, CallActivity_0]
+  max_duration: 1m

@@ -1,0 +1,7 @@
+description: Not ready yet
+skip: the partner sends JSON from November
+request:
+  content_type: application/json
+  body: '{"OrderNo": 1}'
+expect:
+  response_json: { OrderNo: 1 }

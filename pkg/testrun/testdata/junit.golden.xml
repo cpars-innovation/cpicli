@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="cpictl test run" tests="4" failures="1" errors="1" skipped="1" time="4.321">
+  <testsuite name="Orders_In" tests="3" failures="1" errors="0" skipped="1" time="3.300" timestamp="2026-10-13T09:30:00">
+    <testcase name="valid-order" classname="Orders_In" file=".cpi/tests/Orders_In/valid-order.yaml" time="1.200">
+      <system-out>message AGo1, HTTP 200, status COMPLETED</system-out>
+    </testcase>
+    <testcase name="missing-customer" classname="Orders_In" file=".cpi/tests/Orders_In/missing-customer.yaml" time="2.100">
+      <failure message="HTTP status 500, expected 400; the response does not contain &#34;&lt;Error&gt;&#34;" type="expectation"><![CDATA[http_status: HTTP status 500, expected 400
+  expected: 400
+  actual:   500
+response_contains: the response does not contain "<Error>"
+  expected: <Error>
+  actual:   x < y & z
+message: AGo2 (FAILED)
+last error step: CallActivity_2
+failed step: CallActivity_2 Map Order
+error: com.sap.Mapping: field Customer missing
+]]></failure>
+      <system-out>message AGo2, HTTP 500, status FAILED</system-out>
+    </testcase>
+    <testcase name="later" classname="Orders_In" time="0.000">
+      <skipped message="partner not ready"></skipped>
+    </testcase>
+  </testsuite>
+  <testsuite name="Billing" tests="1" failures="0" errors="1" skipped="0" time="0.020" timestamp="2026-10-13T09:30:00">
+    <testcase name="invoice" classname="Billing" time="0.020">
+      <error message="auth: 401 Unauthorized" type="auth"></error>
+    </testcase>
+  </testsuite>
+</testsuites>

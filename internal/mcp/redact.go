@@ -43,7 +43,27 @@ const RedactedPayload = "[redacted]"
 
 // payloadTools return message bodies (redacted with RedactPayloads).
 var payloadTools = []string{"send_test_message", "get_message_attachment", "get_message_store_entry", "get_trace_message",
-	"get_data_store_entry", "get_variable"}
+	"get_data_store_entry", "get_variable", "run_tests"}
+
+// redactFailure blanks what a run_tests failure quotes from the message
+// (response excerpts, stub call bodies); the expectation and the expected
+// value stay.
+func redactFailure(n map[string]any) bool {
+	exp, ok := n["expectation"].(string)
+	if !ok {
+		return false
+	}
+	if !strings.HasPrefix(exp, "response") && !strings.HasPrefix(exp, "stub_calls") && exp != "http_status" && exp != "error_contains" {
+		return false
+	}
+	changed := false
+	for _, k := range []string{"actual", "message"} {
+		if s, ok := n[k].(string); ok && s != "" && s != RedactedPayload {
+			n[k], changed = RedactedPayload, true
+		}
+	}
+	return changed
+}
 
 // nameValueMaps are object fields whose value is a name → value map.
 var nameValueMaps = []string{"keys", "headers", "properties"}
@@ -118,7 +138,7 @@ func (r *Redactor) walk(node any, payloads bool) (any, bool) {
 				n["value"], changed = Masked, true
 			}
 		}
-		if payloads && redactContent(n) {
+		if payloads && (redactContent(n) || redactFailure(n)) {
 			changed = true
 		}
 		for k, child := range n {

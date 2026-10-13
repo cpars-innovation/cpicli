@@ -13,17 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewTestCommand groups the test commands: the tenant-side test tooling
-// (tools, stub).
-func NewTestCommand() *cobra.Command {
-	c := &cobra.Command{
-		Use:   "test",
-		Short: "Test tooling on the tenant: test harness and receiver stub",
-	}
-	addTestToolingCommands(c)
-	return c
-}
-
 // addTestToolingCommands adds 'tools' and 'stub' to the test command.
 func addTestToolingCommands(test *cobra.Command) {
 	test.AddCommand(NewTestToolsCommand(), NewTestStubCommand())
