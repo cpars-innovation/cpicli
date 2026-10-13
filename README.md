@@ -115,6 +115,10 @@ deploy:                                                      # optional command 
 Every command that talks to a tenant first logs `Profile dev (<host>)`, so you always see where
 it goes. `profile use` stores the name in `~/.cpictl/current`.
 
+Give production profiles `tier: prod`. Then `send`, MCP `send_test_message` and test runs refuse
+to trigger processing there unless `--allow-production` is given (for the MCP server: when it is
+started with it). The repository's `cpictl.yaml` cannot set `tier` or `allow-production`.
+
 ### How cpictl finds its settings
 
 For each setting the first source that has it wins:

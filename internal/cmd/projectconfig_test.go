@@ -71,6 +71,20 @@ func TestProjectConfig(t *testing.T) {
 		assert.Len(t, mock.Requests(), before)
 	})
 
+	t.Run("the production guard: tier from the home file, not from the project", func(t *testing.T) {
+		home, repo := t.TempDir(), t.TempDir()
+		writeModeFile(t, filepath.Join(home, "cpictl.yaml"), "tmn-host: "+tenant+"\ntmn-userid: user\ntmn-password: secret\ntier: prod\n", 0o600)
+		code, stderr := projectRun(t, home, repo, "send", "--artifact-id", "A")
+		assert.Equal(t, 2, code)
+		assert.Contains(t, stderr, "production tenant")
+		for _, k := range []string{"allow-production: true", "tier: dev"} {
+			writeModeFile(t, filepath.Join(repo, "cpictl.yaml"), k+"\n", 0o644)
+			code, stderr = projectRun(t, home, repo, "send", "--artifact-id", "A")
+			assert.Equal(t, 2, code, k)
+			assert.Contains(t, stderr, "must not change the production guard", k)
+		}
+	})
+
 	t.Run("home credentials are not sent to a host from the project file", func(t *testing.T) {
 		home, repo := t.TempDir(), t.TempDir()
 		writeModeFile(t, filepath.Join(home, "cpictl.yaml"), "tmn-host: "+tenant+"\ntmn-userid: user\ntmn-password: secret\n", 0o600)

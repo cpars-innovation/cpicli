@@ -70,6 +70,8 @@ Exit codes: 0 ok, 2 usage, 3 auth, 4 tenant HTTP error, 5 failed, 6 timeout,
 	rootCmd.PersistentFlags().String("oauth-clientsecret", "", "Client Secret for using OAuth")
 	rootCmd.PersistentFlags().String("oauth-path", "/oauth/token", "Path for OAuth token server")
 
+	rootCmd.PersistentFlags().String("tier", "", "Tier of the tenant (dev, test, prod, ...), usually set in the profile; on prod, sending test messages and test runs are refused unless --allow-production")
+	rootCmd.PersistentFlags().Bool("allow-production", false, "Allow test messages and test runs on a tenant whose tier is prod")
 	rootCmd.PersistentFlags().Int("read-retries", cpi.ReadRetries, "Retries of a tenant read (GET) answered with 429, 502, 503 or 504, with backoff 2s, 4s, 8s ... (0: none). Writes are never retried")
 	rootCmd.PersistentFlags().String("summary", "", "Append a markdown job summary of orchestrator, configure, deploy, undeploy and snapshot to this file (default: $GITHUB_STEP_SUMMARY when set; \"off\": none)")
 	rootCmd.PersistentFlags().Bool("debug", false, "Show debug logs")
@@ -489,6 +491,13 @@ func checkProjectConfig(files []configFile) error {
 	for _, k := range secretConfigKeys {
 		if project.v.InConfig(k) {
 			return fmt.Errorf("%s contains %s: a project config file is shared with the repository, keep secrets in $HOME/cpictl.yaml, CPICTL_CONFIG or the environment", project.path, k)
+		}
+	}
+	// the tier belongs to the tenant (profile), and a repository file must
+	// not lift the production guard
+	for _, k := range []string{"tier", "allow-production"} {
+		if project.v.InConfig(k) {
+			return fmt.Errorf("%s contains %s: set it in the profile or $HOME/cpictl.yaml (a repository file must not change the production guard)", project.path, k)
 		}
 	}
 	if home == nil {

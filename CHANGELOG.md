@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Production guard: a `tier` setting (profile key, `--tier`, `CPICTL_TIER`). On `prod`
+  (`production`, `prd`), `send` and MCP `send_test_message` are refused unless `--allow-production`
+  (for MCP: when the server is started with it; no tool argument lifts it). A project
+  `cpictl.yaml` from the repository may set neither `tier` nor `allow-production`.
+
 ## 0.12.0
 
 - `send` / `send_test_message`: `--path` (MCP `path`) appends a sub-path and query to the flow's

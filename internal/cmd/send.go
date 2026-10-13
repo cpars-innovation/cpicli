@@ -97,6 +97,9 @@ says otherwise).`,
   cpictl send --artifact-id Orders_OData_Service --odata-method POST --entity-set SalesOrders --body '{"OrderNo":"4711"}'`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := ops.GuardProduction(config.GetString(cmd, "tier"), config.GetBool(cmd, "allow-production"), "sending a test message"); err != nil {
+				return err
+			}
 			body, err := readBody(cmd)
 			if err != nil {
 				return err

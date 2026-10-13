@@ -55,6 +55,11 @@ type Config struct {
 	// CacheTTL keeps list_packages and list_artifacts results this long
 	// (0: no cache); any tool that changes the tenant clears the cache.
 	CacheTTL time.Duration
+	// Tier is the tenant's tier; on production, tools that trigger test
+	// processing refuse unless AllowProduction (set by whoever starts the
+	// server, never by a tool argument).
+	Tier            string
+	AllowProduction bool
 }
 
 // Tools returns the CPI tool set.
@@ -1267,6 +1272,9 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					Query       string            `json:"query"`
 				}
 				if err := decode(raw, &a); err != nil {
+					return nil, err
+				}
+				if err := ops.GuardProduction(cfg.Tier, cfg.AllowProduction, "send_test_message"); err != nil {
 					return nil, err
 				}
 				if err := checkMaxBytes(a.MaxBytes); err != nil {

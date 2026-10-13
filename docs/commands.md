@@ -168,6 +168,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 ## Global flags
 
 ```
+      --allow-production            Allow test messages and test runs on a tenant whose tier is prod
       --config string               config file (default: the profile, else $CPICTL_CONFIG, else $HOME/cpictl.yaml plus ./cpictl.yaml of the repository)
       --debug                       Show debug logs
       --events string               Write progress events as JSON lines (start, one per artifact, end) to this file, or to stderr with "-" (see the README, Output)
@@ -179,6 +180,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
       --profile string              Profile to use: $HOME/.cpictl/<name>.yaml (default: $CPICTL_PROFILE, else the one chosen with 'cpictl profile use')
       --read-retries int            Retries of a tenant read (GET) answered with 429, 502, 503 or 504, with backoff 2s, 4s, 8s ... (0: none). Writes are never retried (default 3)
       --summary string              Append a markdown job summary of orchestrator, configure, deploy, undeploy and snapshot to this file (default: $GITHUB_STEP_SUMMARY when set; "off": none)
+      --tier string                 Tier of the tenant (dev, test, prod, ...), usually set in the profile; on prod, sending test messages and test runs are refused unless --allow-production
       --tmn-host string             Tenant host of Cloud Integration (or API portal host for API Management)
       --tmn-password string         Password for Basic Auth
       --tmn-userid string           User ID for Basic Auth

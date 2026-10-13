@@ -109,6 +109,8 @@ CPICTL_* environment variables.`,
 				DenyFullSync:        mode == "develop",
 				Versioning:          versionMode,
 				CacheTTL:            time.Duration(config.GetInt(cmd, "cache-ttl")) * time.Second,
+				Tier:                config.GetString(cmd, "tier"),
+				AllowProduction:     config.GetBool(cmd, "allow-production"),
 			}))
 			readOnly, _ := cmd.Flags().GetBool("read-only")
 			filter := mcp.ToolFilter{ReadOnly: readOnly, Allow: config.GetStringSlice(cmd, "tools"), Deny: config.GetStringSlice(cmd, "disable-tools")}
