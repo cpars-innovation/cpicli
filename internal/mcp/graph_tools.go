@@ -31,7 +31,8 @@ func graphTools(cfg Config) []Tool {
 		{
 			Name: "graph_search", Title: "Search the content graph",
 			Description: "Find flows, packages, endpoints (sender, ProcessDirect and JMS addresses), systems (receiver hosts), credentials, scripts, headers, " +
-				"properties, custom headers and Partner Directory parameters in the graph that discover_tenant wrote; matches key, name and attributes, best first. " +
+				"properties, custom headers, Partner Directory parameters, OData entities (host/entity set) and IDoc types (ORDERS05) in the graph that " +
+				"discover_tenant wrote; matches key, name and attributes, best first. " +
 				"Faster and smaller than reading discovery.json. Node types: " + strings.Join(ops.GraphNodeTypes, ", ") + ". Reads a local file only; " +
 				"the graph reflects the last discovery.",
 			InputSchema: object(props{
@@ -63,6 +64,7 @@ func graphTools(cfg Config) []Tool {
 			Description: "Return the edges and nodes around a node of the content graph. Examples: who calls a flow " +
 				`(node "Billing", direction "in", edge_types ["sends_to"]); what a flow uses (direction "out"); ` +
 				"which flows use a credential, script, header or Partner Directory parameter (that node, direction \"in\"); " +
+				`which flows read or write an OData entity or receive or send an IDoc type (node "idoc_type:ORDERS05", direction "in"); ` +
 				"the whole downstream chain (edge_types [\"sends_to\"], depth 3). Edges: " + strings.Join(ops.GraphEdgeTypes, ", ") +
 				". sends_to links flows through matching ProcessDirect/JMS addresses (via names the endpoint). Reads a local file only.",
 			InputSchema: object(props{

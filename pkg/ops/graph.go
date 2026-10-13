@@ -27,6 +27,8 @@ const (
 	NodeProperty     = "property"     // exchange property set by a Content Modifier
 	NodeCustomHeader = "customheader" // custom header property written by a script
 	NodePD           = "pd"           // Partner Directory parameter PID:ID
+	NodeODataEntity  = "odata_entity" // <host or service>/<entity set> an OData receiver reads or writes
+	NodeIDocType     = "idoc_type"    // IDoc type (ORDERS05, ZORDERS05)
 )
 
 // Edge types of the content graph.
@@ -42,14 +44,19 @@ const (
 	EdgeSetsProperty   = "sets_property"   // iflow -> property
 	EdgeLogsHeader     = "logs_header"     // script -> customheader
 	EdgeReadsPD        = "reads_pd"        // iflow -> pd
+	EdgeReadsOData     = "reads_odata"     // iflow -> odata_entity (Query, Read)
+	EdgeWritesOData    = "writes_odata"    // iflow -> odata_entity (Create, Update, Merge, Delete, Function Import, $batch)
+	EdgeReceivesIDoc   = "receives_idoc"   // iflow -> idoc_type, the flow has an IDoc sender channel
+	EdgeSendsIDoc      = "sends_idoc"      // iflow -> idoc_type, the flow has an IDoc receiver channel
 )
 
 // GraphNodeTypes and GraphEdgeTypes list the types for validation and docs.
 var (
 	GraphNodeTypes = []string{NodePackage, NodeIFlow, NodeEndpoint, NodeSystem, NodeCredential, NodeScript,
-		NodeHeader, NodeProperty, NodeCustomHeader, NodePD}
+		NodeHeader, NodeProperty, NodeCustomHeader, NodePD, NodeODataEntity, NodeIDocType}
 	GraphEdgeTypes = []string{EdgeContains, EdgeExposes, EdgeCalls, EdgeSendsTo, EdgeCallsSystem, EdgeUsesCredential,
-		EdgeUsesScript, EdgeSetsHeader, EdgeSetsProperty, EdgeLogsHeader, EdgeReadsPD}
+		EdgeUsesScript, EdgeSetsHeader, EdgeSetsProperty, EdgeLogsHeader, EdgeReadsPD, EdgeReadsOData, EdgeWritesOData,
+		EdgeReceivesIDoc, EdgeSendsIDoc}
 	// pathEdgeTypes are followed by GraphPath by default: how messages move.
 	pathEdgeTypes = []string{EdgeExposes, EdgeCalls, EdgeSendsTo}
 )
@@ -90,11 +97,14 @@ type GraphEdge struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	Type string `json:"type"`
-	// Adapter is the adapter of exposes, calls and calls_system edges.
+	// Adapter is the adapter of exposes, calls, calls_system and OData
+	// edges.
 	Adapter string `json:"adapter,omitempty"`
 	// Via explains derived edges: the endpoint of sends_to, the parameter
 	// whose value made the address; for uses_script of a collection script
-	// the function the step calls.
+	// the function the step calls; the operation of reads_odata and
+	// writes_odata; where the IDoc type of receives_idoc and sends_idoc was
+	// found.
 	Via string `json:"via,omitempty"`
 }
 
@@ -178,7 +188,7 @@ func BuildGraph(d *Discovery) *Graph {
 	for _, f := range d.IFlows {
 		flow := b.node(NodeIFlow, f.ID, firstNonEmpty(f.Name, f.ID), map[string]string{
 			"package": f.PackageID, "version": f.Version, "runtimeStatus": f.RuntimeStatus, "path": f.Path,
-			"logLevel": f.LogLevel, "triggers": triggerSummary(f.Triggers), "error": f.Error,
+			"logLevel": f.LogLevel, "triggers": triggerSummary(f.Triggers), "error": f.Error, "idocTypes": idocTypeSummary(f.IDocTypes),
 		})
 		if f.PackageID != "" {
 			b.edge(GraphEdge{From: b.node(NodePackage, f.PackageID, f.PackageID, nil), To: flow, Type: EdgeContains})
@@ -228,6 +238,7 @@ func BuildGraph(d *Discovery) *Graph {
 		for _, ref := range f.PDReferences {
 			b.edge(GraphEdge{From: flow, To: b.node(NodePD, ref, ref, nil), Type: EdgeReadsPD})
 		}
+		b.sapEdges(f, flow)
 	}
 	b.g.buildIndex()
 	// flow -> flow through the addresses they share
@@ -262,6 +273,57 @@ func BuildGraph(d *Discovery) *Graph {
 	})
 	g.buildIndex()
 	return g
+}
+
+// sapEdges links a flow to the OData entities its OData receivers read or
+// write and to the IDoc types it receives or sends.
+func (b *graphBuilder) sapEdges(f IFlowFacts, flow string) {
+	for _, r := range f.Receivers {
+		o := r.OData
+		if o == nil || o.EntitySet == "" {
+			continue
+		}
+		typ := map[string]string{ODataRead: EdgeReadsOData, ODataWrite: EdgeWritesOData}[ODataOperationKind(o.Operation, o.Batch)]
+		if typ == "" {
+			continue
+		}
+		service, attrs := o.Host, map[string]string{"version": o.Version, "entitySet": o.EntitySet, "host": o.Host}
+		switch {
+		case service != "":
+		case r.Adapter == "SuccessFactors":
+			service = "SuccessFactors"
+		default:
+			// no resolvable host: an entity of this flow only
+			service = firstNonEmpty(r.Address, r.Adapter)
+			attrs["unresolved"], attrs["iflow"] = "true", f.ID
+		}
+		key := service + "/" + o.EntitySet
+		if attrs["unresolved"] != "" {
+			key += "@" + f.ID
+		}
+		id := b.node(NodeODataEntity, key, service+"/"+o.EntitySet, attrs)
+		op := firstNonEmpty(o.Operation, "$batch")
+		n := &b.g.Nodes[b.g.index[id]]
+		if ops := strings.Split(n.Attrs["operations"], ", "); !slices.Contains(ops, op) {
+			n.Attrs["operations"] = strings.TrimPrefix(n.Attrs["operations"]+", "+op, ", ")
+		}
+		b.edge(GraphEdge{From: flow, To: id, Type: typ, Adapter: r.Adapter, Via: op})
+	}
+	for _, t := range f.IDocTypes {
+		for dir, typ := range map[string]string{"Sender": EdgeReceivesIDoc, "Receiver": EdgeSendsIDoc} {
+			if f.HasIDocChannel(dir) {
+				b.edge(GraphEdge{From: flow, To: b.node(NodeIDocType, t.Type, t.Type, nil), Type: typ, Via: strings.Join(t.Sources, ", ")})
+			}
+		}
+	}
+}
+
+func idocTypeSummary(types []IDocType) string {
+	names := make([]string, 0, len(types))
+	for _, t := range types {
+		names = append(names, t.Type)
+	}
+	return strings.Join(names, ", ")
 }
 
 // endpoint returns the node of a sender or linked receiver address.

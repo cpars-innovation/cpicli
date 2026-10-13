@@ -20,6 +20,8 @@
 
 - Sender adapters in use (and when to use which):
 - Receiver adapters in use:
+- OData (paging, `$batch`, how service URLs and clients are externalised):
+- IDoc (idempotency or JMS decoupling for inbound IDocs, IDoc types, how partners in EDI_DC40 are set):
 - Typical step sequence:
 - Local integration processes:
 

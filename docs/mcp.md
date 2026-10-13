@@ -325,8 +325,8 @@ read roles.
 | `transport_check` | | Before moving artifacts to this tenant: their dependencies (script collections, mappings, called flows, credentials, Partner Directory) and pre-checks (draft, outside changes with `target_dir`, dependencies present, credentials, PD parameters, parameter values in the target's `configure` file), pass / warn / fail / skip. See [transport.md](transport.md) |
 | `drift` | | Local artifacts vs tenant: in_sync / tenant_newer / local_newer / diverged / not_on_tenant, runtimeOutdated |
 | `discover_tenant` | local file | Inventory of packages and flows (adapters, steps, error handling, scripts, naming) to `.cpi/discovery.json`, and the content graph to `.cpi/graph.json`; `local_dir` for a local repository |
-| `graph_search` | | Find flows, endpoints, systems, credentials, scripts, headers, Partner Directory parameters in `.cpi/graph.json` (local file). See [graph.md](graph.md) |
-| `graph_neighbors` | | What a node is connected to: callers and callees of a flow (`sends_to`), users of a credential, script, header or PD parameter; `direction`, `edge_types`, `depth` |
+| `graph_search` | | Find flows, endpoints, systems, credentials, scripts, headers, Partner Directory parameters, OData entities and IDoc types in `.cpi/graph.json` (local file). See [graph.md](graph.md) |
+| `graph_neighbors` | | What a node is connected to: callers and callees of a flow (`sends_to`), users of a credential, script, header or PD parameter, readers and writers of an OData entity (`reads_odata`, `writes_odata`), flows receiving or sending an IDoc type (`receives_idoc`, `sends_idoc`); `direction`, `edge_types`, `depth` |
 | `graph_path` | | Shortest connection between two nodes (default: how messages move, through ProcessDirect/JMS addresses) |
 | `undeploy` | runtime, **destructive** | Remove from runtime and wait; requires `confirm: true` |
 | `list_pd_partners` | | Partner IDs with the number of string and binary parameters, binary content types, alternative partners, authorized users; values are not read (`sizes: true` reads the binaries for their total size) |

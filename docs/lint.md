@@ -43,20 +43,31 @@ cpictl lint --list-rules
 | | `swallowed-exception` | warning | an empty `catch` block | |
 | | `collection-script-tests` | warning | a public function of a script collection that no test in `scriptTests.dir/<package>/<collection>/` calls ([script tests](#script-collection-tests)) | |
 | | `collection-script-coverage` | warning | a script collection script below `scriptTests.minCoverage` line coverage in the JaCoCo report, not in the report, or changed after it; no report at all | |
+| | `idoc-no-idempotency` | info | a flow with an IDoc sender channel, but no Idempotent Process Call and no JMS receiver (decoupling): IDocs that SAP resends are processed twice | |
 | performance | `body-as-string` | info | `getBody(String)` (whole payload in memory) | |
 | | `payload-attachment` | warning | the payload written into the message processing log | |
 | | `logging-in-loop` | warning | log attachments inside a loop | |
 | | `println` | info | output to stdout | |
+| | `odata-query-without-paging` | warning | an OData receiver with operation Query, no `$top` in the query options and paging off (a single entity by key, `Products(1)`, is fine) | |
+| | `odata-single-calls-in-loop` | info | an OData receiver that creates, updates or deletes per record: its step comes after a splitter (up to the gather), or is in a local process called by a Looping Process Call or by a process call that itself runs per record; not with `$batch` | |
 | | `component-newer-than-tenant` | error | a step or adapter version newer than the tenant's editor offers (needs a [component catalogue](components.md) from the editor metadata): the tenant's Check and deploy fail. Typical after copying a flow from a newer tenant | |
-| configuration | `hardcoded-endpoint` | warning | a receiver address that is not a `{{parameter}}` or `${...}` | |
+| configuration | `hardcoded-endpoint` | warning | a receiver address that is not a `{{parameter}}` or `${...}` (HTTP, SOAP, OData, IDoc, SFTP, ...) | |
 | | `hardcoded-url-in-script` | warning | a URL in a script (namespaces excluded) | |
 | | `hardcoded-secret` | error | a password, token or key assigned in a script or parameter | |
+| | `odata-hardcoded-query` | info | literal OData query options or resource path with environment-specific values: `sap-client=<nnn>`, `CompanyCode`/`BUKRS`, `SalesOrganization`/`VKORG`, `Plant`/`WERKS`, `ControllingArea`/`KOKRS eq '<literal>'` | |
+| | `idoc-sap-client-literal` | warning | an IDoc receiver address that is partly externalised but keeps a literal host or `sap-client` (a fully literal address is `hardcoded-endpoint`, reported once) | |
+| | `idoc-control-record-literal` | info | the control record partners `EDI_DC40` `SNDPRN`, `RCVPRN`, `SNDPOR`, `RCVPOR` set to literals: in a content modifier body, an XSLT (literal result element) or a message mapping (target field from the `const` function) | |
 | hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
 | hygiene | `outdated-component` | info | a step or adapter older than the tenant offers (with a [component catalogue](components.md)), else older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
 | | `script-doc` | info | a flow's local script with no comment saying what it does (at the top or above its function) | |
 | | `default-step-name` | info | "Groovy Script 1", "Content Modifier 2", ... | |
 | | `layout` | info | the diagram has steps or lines that are not drawn, overlapping shapes, shapes outside their pool, lines through steps or shapes that nearly touch ([diagram layout](#diagram-layout)) | yes |
 | | `naming` | warning | a flow ID not matching `naming.iflowId` | |
+
+The OData and IDoc rules read the adapter properties the Web UI writes (`operation`,
+`resourcePath`, `queryOptions`, `customQueryOptions`, `pagination`, `enableBatchProcessing`,
+`address`) and the step types of splitters, gathers and process calls; see
+[graph.md](graph.md#odata-and-idoc) for what discovery reads from the same channels.
 
 All flows are read for the cross-flow rules (duplicates, versions); `--package`, `--artifact` and
 `--changed` select which flows are reported. `deployment-copies` needs the deploy config

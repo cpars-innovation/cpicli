@@ -1,6 +1,6 @@
 {
   "name": "cpi",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "SAP Cloud Integration for Claude Code: the cpictl MCP server, skills to discover a tenant's conventions, to plan, build, test and review integration flows, to improve them across packages (script collections, Partner Directory, dead weight, best practices) and to operate a tenant (failed messages, JMS queues, business keys), and a read-only reviewer agent.",
   "author": {
     "name": "cpars innovation"

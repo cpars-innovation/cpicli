@@ -81,15 +81,21 @@ var lintRules = []lintRule{
 	{id: "swallowed-exception", group: GroupRobustness, severity: SevWarning, title: "A script catches an exception and ignores it", artifact: ruleSwallowedExceptions},
 	{id: "collection-script-tests", group: GroupRobustness, severity: SevWarning, title: "A function of a script collection is not called by any test", artifact: ruleCollectionScriptTests},
 	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
+	{id: "idoc-no-idempotency", group: GroupRobustness, severity: SevInfo, title: "A flow receives IDocs without an Idempotent Process Call or JMS decoupling", artifact: ruleIDocNoIdempotency},
 	// performance and data protection
 	{id: "body-as-string", group: GroupPerformance, severity: SevInfo, title: "A script reads the whole body as a string", artifact: ruleBodyAsString},
 	{id: "payload-attachment", group: GroupPerformance, severity: SevWarning, title: "A script logs the payload as an attachment", artifact: rulePayloadAttachment},
 	{id: "logging-in-loop", group: GroupPerformance, severity: SevWarning, title: "A script writes log attachments in a loop", artifact: ruleLoggingInLoop},
 	{id: "println", group: GroupPerformance, severity: SevInfo, title: "A script prints to standard output", artifact: rulePrintln},
+	{id: "odata-query-without-paging", group: GroupPerformance, severity: SevWarning, title: "An OData receiver queries without $top and without paging", artifact: ruleODataQueryWithoutPaging},
+	{id: "odata-single-calls-in-loop", group: GroupPerformance, severity: SevInfo, title: "An OData receiver creates or updates one record per call in a loop: use $batch", artifact: ruleODataSingleCallsInLoop},
 	// configuration
 	{id: "hardcoded-endpoint", group: GroupConfiguration, severity: SevWarning, title: "A receiver address is not externalised", artifact: ruleHardcodedEndpoints},
 	{id: "hardcoded-url-in-script", group: GroupConfiguration, severity: SevWarning, title: "A script contains a URL", artifact: ruleURLsInScripts},
 	{id: "hardcoded-secret", group: GroupConfiguration, severity: SevError, title: "A script or parameter holds a password, token or key", artifact: ruleSecrets},
+	{id: "odata-hardcoded-query", group: GroupConfiguration, severity: SevInfo, title: "OData query options or resource path hold environment-specific values (sap-client, company code)", artifact: ruleODataHardcodedQuery},
+	{id: "idoc-sap-client-literal", group: GroupConfiguration, severity: SevWarning, title: "An IDoc receiver address has a literal sap-client or host", artifact: ruleIDocSAPClientLiteral},
+	{id: "idoc-control-record-literal", group: GroupConfiguration, severity: SevInfo, title: "A mapping or content modifier sets IDoc control record partners (EDI_DC40) to literals", artifact: ruleIDocControlRecordLiteral},
 	// hygiene
 	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},
 	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than the tenant offers or other flows use", cross: ruleOutdatedComponents},
@@ -959,7 +965,7 @@ func rulePrintln(lc *lintContext, a *lintArtifact) []Finding {
 
 // --- configuration -----------------------------------------------------------
 
-var networkAdapters = map[string]bool{"HTTP": true, "HTTPS": true, "SOAP": true, "OData": true, "ODataV4": true, "IDOC": true, "IDoc": true,
+var networkAdapters = map[string]bool{"HTTP": true, "HTTPS": true, "SOAP": true, "OData": true, "ODataV4": true, "HCIOData": true, "IDOC": true, "IDoc": true,
 	"SFTP": true, "FTP": true, "Mail": true, "AS2": true, "REST": true, "SuccessFactors": true, "Ariba": true, "AMQP": true, "Kafka": true, "RFC": true}
 
 func ruleHardcodedEndpoints(lc *lintContext, a *lintArtifact) []Finding {

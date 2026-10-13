@@ -50,6 +50,7 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `swallowed-exception` | always | rethrow, or handle it explicitly (set a status, log, route) | medium: errors now become visible (that is the point) |
 | `collection-script-tests` | always for collections | tests in `tests/scripts/<package>/<collection>/` calling every public function with today's inputs ([script-tests.md](../cpi-build/script-tests.md)) | none (test code, not uploaded) |
 | `collection-script-coverage` | below the minimum, or no report | more test cases for the uncovered branches (JaCoCo HTML report); run the tests before lint | none |
+| `idoc-no-idempotency` | the receiver is not idempotent itself (creates documents) | an Idempotent Process Call around the processing, keyed on the IDoc number (`SapIDocDbId` or `SapIDocTransferId` header), or decouple: IDoc to a JMS queue, a second flow processes it | medium: the key must be unique per IDoc; JMS needs queue capacity and a retry policy |
 
 ## Performance and data protection
 
@@ -59,6 +60,8 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `logging-in-loop` | always | collect, write one attachment after the loop | low |
 | `body-as-string` | large or growing payloads | stream (`getBody(java.io.Reader)`), or use standard steps | medium |
 | `println` | always | remove, or use the message processing log | none |
+| `odata-query-without-paging` | the entity set can grow (master data, documents) | switch on paging (Process in Pages) with a page size inside a Looping Process Call, or `$top` when only the first records are needed | low; with paging the flow handles each page, check aggregation after the loop |
+| `odata-single-calls-in-loop` | many records per message | collect the records, send one `$batch` request (one changeset per record, or per group that must succeed together) | medium: error handling changes (partial failures per changeset); test with a failing record |
 
 ## Configuration and security
 
@@ -67,6 +70,9 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `hardcoded-secret` | **always, first** | credential or secure parameter, read with the SecureStoreService; rotate the leaked value | the value is in Git history: rotate it |
 | `hardcoded-endpoint` | always | `{{parameter}}` per environment, or Partner Directory per partner | low |
 | `hardcoded-url-in-script` | always | parameter or Partner Directory value passed in a property | low |
+| `odata-hardcoded-query` | the value differs per landscape or partner | `{{parameter}}` in the query options, or `${property.x}` filled from the Partner Directory | low; set the parameter in every landscape |
+| `idoc-sap-client-literal` | always | externalise host and client (`https://{{S4_Host}}/sap/bc/srt/idoc?sap-client={{S4_Client}}`) or the whole address | low; set the values per landscape before the next deploy |
+| `idoc-control-record-literal` | the partners differ per landscape or partner | logical systems and ports from `{{parameters}}` or the Partner Directory, passed to the mapping as properties or parameters | medium: a wrong partner makes SAP reject or misroute the IDoc; test in every landscape |
 
 ## Hygiene (in passing)
 
