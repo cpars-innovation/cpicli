@@ -27,6 +27,8 @@ type message struct {
 	key         string
 	payload     string
 	keyHeaders  []string
+	// docnum is the IDoc number (DOCNUM) of a message an IDoc sender received.
+	docnum string
 }
 
 // runResult is the outcome of one flow run.
@@ -51,6 +53,7 @@ type flowInfo struct {
 	customHeaders map[string]bool // custom header properties the scripts write
 	setsAppID     bool            // scripts set SAP_ApplicationID
 	jmsConsumer   bool
+	idocSender    bool
 	// attachments are the attachment names the script of a step writes to
 	// the message processing log, by step ID.
 	attachments map[string][]string
@@ -82,8 +85,11 @@ func (a *Artifact) info() *flowInfo {
 		}
 	}
 	for _, s := range fm.Senders {
-		if s.Adapter == "JMS" {
+		switch s.Adapter {
+		case "JMS":
 			fi.jmsConsumer = true
+		case adapterIDoc:
+			fi.idocSender = true
 		}
 	}
 	fi.steps = mainPath(fm.model)
@@ -166,6 +172,9 @@ func (x *executor) run(id string, msg message, start time.Time, predecessor stri
 	if fi.setsAppID && msg.key != "" {
 		l.ApplicationID = msg.key
 	}
+	if l.ApplicationID == "" && fi.idocSender { // the IDoc number, unless the flow sets one
+		l.ApplicationID = cmp.Or(msg.docnum, docnumFor(msg.key))
+	}
 	if msg.key != "" {
 		for _, h := range msg.keyHeaders {
 			if fi.customHeaders[h] {
@@ -243,6 +252,15 @@ func (x *executor) run(id string, msg message, start time.Time, predecessor stri
 	l.End = t
 	x.logs = append(x.logs, l)
 	return runResult{guid: l.Guid, status: l.Status, errorText: l.ErrorText, end: t}
+}
+
+// docnumFor is the IDoc number of a generated message with key: a numeric
+// key padded to DOCNUM's 16 digits, other keys as they are.
+func docnumFor(key string) string {
+	if key == "" || len(key) >= 16 || strings.Trim(key, "0123456789") != "" {
+		return key
+	}
+	return strings.Repeat("0", 16-len(key)) + key
 }
 
 func stepName(el *iflow.Element) string {

@@ -4,6 +4,7 @@
 package cpitest
 
 import (
+	"cmp"
 	"crypto/ecdsa"
 	"crypto/tls"
 	"encoding/base64"
@@ -28,6 +29,7 @@ import (
 
 	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/idoc"
 )
 
 // Runtime is the runtime state of an artifact.
@@ -122,14 +124,23 @@ type Inbound struct {
 	// RequireCSRF makes the endpoint CSRF protected: modifying requests need a
 	// token fetched from the endpoint itself.
 	RequireCSRF bool
-	token       string
+	// Kind is how the endpoint takes messages: "" (HTTPS and SOAP senders:
+	// the body as is), "IDoc" (IDoc sender: IDoc XML, with or without SOAP
+	// envelope) or "OData" (OData V2 sender: the path is a service root,
+	// requests go to its entity sets).
+	Kind  string `json:",omitempty"`
+	token string
 }
 
-// ReceivedMessage is a request received by a runtime endpoint.
+// ReceivedMessage is a request received by a runtime endpoint. For an IDoc
+// sender, Body is the IDoc XML without SOAP envelope, Header has the headers
+// the IDoc sender sets for the flow (SapIDocType, SapIDocDbId,
+// SapIDocTransferId) and IDocs the control records.
 type ReceivedMessage struct {
 	Method, Path string
 	Header       http.Header
 	Body         string
+	IDocs        []idoc.Control `json:",omitempty"`
 }
 
 // PDBinary is a binary Partner Directory parameter.
@@ -254,8 +265,9 @@ type Tenant struct {
 	// command (request body as received).
 	LogLevels map[string]map[string]string
 
-	// Inbound configures runtime endpoints (paths starting with /http/ or
-	// /cxf/, as in ServiceEndpoints URLs) that receive test messages.
+	// Inbound configures runtime endpoints (paths starting with /http/,
+	// /cxf/ or /gw/odata/, as in ServiceEndpoints URLs) that receive test
+	// messages.
 	Inbound map[string]*Inbound
 	// Received are the messages received by runtime endpoints.
 	Received []ReceivedMessage
@@ -675,7 +687,7 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
-	in := m.Inbound[r.URL.Path]
+	in, rest := m.inboundFor(r.URL.Path)
 	if in == nil {
 		notFound(w)
 		return
@@ -696,35 +708,66 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	body, _ := io.ReadAll(r.Body)
-	m.Received = append(m.Received, ReceivedMessage{Method: r.Method, Path: r.URL.Path, Header: r.Header.Clone(), Body: string(body)})
-	if a := m.Artifacts[in.Artifact]; m.Live && a != nil && a.running() && a.info() != nil {
-		m.liveSend(w, r, in, string(body))
+	switch in.Kind {
+	case inboundIDoc:
+		m.handleIDoc(w, r, in, body)
+		return
+	case inboundOData:
+		m.handleOData(w, r, in, rest, body)
 		return
 	}
-	if m.Live && in.Artifact != "" {
-		m.liveSerial++
-		now := time.Now()
-		l := MessageLog{Guid: fmt.Sprintf("AGLIVE%022d", m.liveSerial), Artifact: in.Artifact, Status: "COMPLETED",
-			CorrelationID: fmt.Sprintf("C-live-%d", m.liveSerial), ApplicationID: r.Header.Get("SAP_ApplicationID"),
-			Start: now, End: now.Add(150 * time.Millisecond)}
-		if a := m.Artifacts[in.Artifact]; a != nil {
-			l.Package = a.Package
+	m.Received = append(m.Received, ReceivedMessage{Method: r.Method, Path: r.URL.Path, Header: r.Header.Clone(), Body: string(body)})
+	ran, failed := m.inboundRun(w, r, in, message{key: m.messageKey(r, string(body)), payload: string(body)})
+	switch {
+	case ran && failed != "":
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(failed))
+	case ran:
+		// the flow answers: its fixed response or the payload passed through
+		response, contentType := in.Response, in.ContentType
+		if response == "" {
+			response, contentType = string(body), r.Header.Get("Content-Type")
 		}
-		m.addLogs([]MessageLog{l})
-		w.Header().Set("SAP_MessageProcessingLogID", l.Guid)
-		w.Header().Set("SAP_MplCorrelationId", l.CorrelationID)
-	} else if in.MessageGuid != "" {
-		w.Header().Set("SAP_MessageProcessingLogID", in.MessageGuid)
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		}
+		w.WriteHeader(cmp.Or(in.Status, http.StatusOK))
+		_, _ = w.Write([]byte(response))
+	default:
+		writeFixedResponse(w, in)
 	}
+}
+
+// writeFixedResponse answers with the endpoint's configured response.
+func writeFixedResponse(w http.ResponseWriter, in *Inbound) {
 	if in.ContentType != "" {
 		w.Header().Set("Content-Type", in.ContentType)
 	}
-	status := in.Status
-	if status == 0 {
-		status = http.StatusOK
-	}
-	w.WriteHeader(status)
+	w.WriteHeader(cmp.Or(in.Status, http.StatusOK))
 	_, _ = w.Write([]byte(in.Response))
+}
+
+// inboundFor finds the runtime endpoint of a path: an exact match, or the
+// OData service whose root the path continues (rest: the part after the
+// service root, e.g. /SalesOrders('1')).
+func (m *Tenant) inboundFor(p string) (in *Inbound, rest string) {
+	if in := m.Inbound[p]; in != nil {
+		return in, ""
+	}
+	if !strings.HasPrefix(p, odataPrefix) {
+		return nil, ""
+	}
+	best := ""
+	for k, in := range m.Inbound {
+		if in.Kind == inboundOData && strings.HasPrefix(p, k+"/") && len(k) > len(best) {
+			best = k
+		}
+	}
+	if best == "" {
+		return nil, ""
+	}
+	return m.Inbound[best], p[len(best):]
 }
 
 var (
@@ -935,7 +978,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		m.handleToken(w, r)
 		return
 	}
-	if strings.HasPrefix(path, "/http/") || strings.HasPrefix(path, "/cxf/") {
+	if strings.HasPrefix(path, "/http/") || strings.HasPrefix(path, "/cxf/") || strings.HasPrefix(path, odataPrefix) {
 		if m.authorize(w, r, true) {
 			m.handleInbound(w, r)
 		}
@@ -1308,7 +1351,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			if a.EndpointURL == "" || (filter != "" && filter != "Name eq '"+id+"'") {
 				continue
 			}
-			rows = append(rows, map[string]any{"Name": id, "Id": id + "$endpointAddress=x", "Title": id, "Version": a.DesignVersion, "Protocol": "REST",
+			rows = append(rows, map[string]any{"Name": id, "Id": id + "$endpointAddress=x", "Title": id, "Version": a.DesignVersion, "Protocol": endpointProtocol(a.EndpointURL),
 				"EntryPoints": map[string]any{"results": []map[string]string{{"Name": id, "Url": a.EndpointURL, "Type": "PROD"}}}})
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})

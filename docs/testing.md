@@ -6,7 +6,9 @@ processing log. How the message gets into the flow depends on the flow's trigger
 
 | Trigger | How to test | Change to the flow |
 |---------|-------------|--------------------|
-| HTTPS, SOAP, OData, REST sender | Send directly to the flow's endpoint | none |
+| HTTPS, SOAP, REST sender | Send directly to the flow's endpoint | none |
+| IDoc sender | `send --idoc file.xml` to the flow's IDoc endpoint | none |
+| OData V2 sender | `send --odata-method … --entity-set …` to the flow's OData service | none |
 | ProcessDirect sender | Send through the **test harness** to the flow's address | none |
 | Timer, "run once" | Deploying is the trigger: deploy, then wait for the log | none |
 | Timer, scheduled | Trigger by redeploying with a run-once schedule on the development tenant, or a test entry | parameter or test entry |
@@ -23,6 +25,42 @@ cpictl send --artifact-id OrderIntake --body-file order.xml --content-type appli
 
 The runtime answers with the message GUID (`SAP_MessageProcessingLogID`), so the result has the
 HTTP status, the response and the final message log.
+
+## IDoc and OData senders
+
+**IDoc**: `--idoc FILE` (MCP `idoc`: the XML text) POSTs IDoc XML to the flow's IDoc sender
+endpoint (`/cxf/<address>`) with `Content-Type: application/x-sap.idoc`. cpictl checks that the
+XML has an `EDI_DC40` control record (a SOAP envelope around it is fine) and reports DOCNUM,
+IDOCTYP, MESTYP, SNDPRN and RCVPRN of each IDoc (`idocs` in the result). Start from a skeleton:
+
+```bash
+cpictl idoc template --type ORDERS05 --mestyp ORDERS --sndprn S4HCLNT100 --rcvprn CPI --out orders.xml
+# add the data segments of ORDERS05 (from WE60 or a real IDoc), then
+cpictl send --artifact-id Orders_IDoc_In --idoc orders.xml --wait 60s
+```
+
+The skeleton (MCP `idoc_template`) holds the control record with the standard fields and a
+commented placeholder; it invents no segments. Use a new `--docnum` per message when the flow
+or the receiver detects duplicates. On the tenant the ApplicationMessageId is what the flow sets;
+the mock uses the DOCNUM.
+
+**OData V2**: `--odata-method GET|POST|PUT|PATCH|DELETE` (default GET), `--entity-set`, `--key`
+(as written in the parentheses: `"'4711'"`, `4711`, `OrderNo='4711',Item=10`) and `--query`
+(`"$filter=Status eq 'OPEN'&$top=10"`) build the request against the flow's OData service root
+(`.../gw/odata/<namespace>/<service>;v=<version>`), with `Accept: application/json` and, for a
+body, `Content-Type: application/json`. `--entity-set '$metadata'` reads the EDMX; no entity set
+reads the service document. MCP: `odata_method`, `entity_set`, `key`, `query`.
+
+```bash
+cpictl send --artifact-id Orders_OData_Service --entity-set SalesOrders --query '$top=5'
+cpictl send --artifact-id Orders_OData_Service --odata-method POST --entity-set SalesOrders --body '{"OrderNo":"4711"}' --wait 60s
+```
+
+Both find the endpoint in `ServiceEndpoints` like any other send: `--idoc` takes the flow's
+`/cxf/` entry points, the OData flags the entries with protocol `ODATA` or a `/gw/odata/` URL;
+with several, choose one with `--url`. Neither goes through the test harness. How a real tenant
+lists IDoc and OData entry points was not verified; the mock tenant lists them as described in
+[mock-tenant.md](mock-tenant.md#idoc-and-odata-senders) and runs both demo flows.
 
 ## Test harness: ProcessDirect senders
 

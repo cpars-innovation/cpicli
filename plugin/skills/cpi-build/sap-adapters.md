@@ -97,10 +97,10 @@ Adapter `IDOC`, message protocol `IDoc SOAP`. Real properties:
   (MCP `idoc_template`) writes a skeleton with the control record; add the data segments from a real
   IDoc (WE19/WE02 in the backend, or a trace), then `send_test_message` with `idoc` (CLI
   `cpictl send --idoc file.xml`). Test a duplicate (same DOCNUM twice) and a wrong partner.
-- OData sender flows: `send_test_message` with the OData method, entity set, key and query (CLI
+- OData sender flows: `send_test_message` with `odata_method`, `entity_set`, `key` and `query` (CLI
   `--odata-method`, `--entity-set`, `--key`, `--query`).
-- OData and IDoc receivers in tests: on the mock tenant, receivers answer what the landscape's
-  traffic rules say; on a real development tenant, point the receiver parameters at a test system
+- OData and IDoc receivers in tests: on the mock tenant, receivers (IDoc included) answer as the landscape's
+  systems say (latency, failures); on a real development tenant, point the receiver parameters at a test system
   or a stub, never at production.
 - The mock tenant's demo landscape has `Orders_IDoc_In` (IDoc sender) and `Orders_OData_Service`
   (OData sender) to try this without a backend.

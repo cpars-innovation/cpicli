@@ -35,7 +35,9 @@ get_message_trace and get_trace_message -> fix the local files and repeat.`},
 	{[]string{"test"}, `Flows without an HTTP sender: ProcessDirect via send_test_message process_direct_address (test
 harness flow); timer, SFTP and other polling flows: see the triggers in discover_tenant and use
 list_message_logs with since and wait_seconds after triggering them. send_test_message
-triggers real processing, including receiver calls.`},
+triggers real processing, including receiver calls. IDoc senders: send_test_message idoc (IDoc
+XML with an EDI_DC40 control record; idoc_template writes a skeleton to fill with the segments).
+OData senders: send_test_message odata_method, entity_set, key, query.`},
 	{[]string{"build", "promote", "partner-directory"}, `Configuration: get_parameters / set_parameters, then deploy to activate; config_diff compares a
 configure file with the tenant.`},
 	{[]string{"build"}, `Review: check_guidelines (tenant design guidelines) before a release.`},

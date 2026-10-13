@@ -20,6 +20,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/idoc"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 	"github.com/cpars-innovation/cpicli/pkg/lint"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
@@ -1235,6 +1236,13 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"process_direct_address": str("For flows with a ProcessDirect sender: send through the test harness flow to this address (e.g. /billing/in); " +
 					"artifact_id is then the flow behind the address and the returned log is that flow's message"),
 				"harness": str(`Test harness flow ID, default "` + ops.DefaultHarnessID + `"`),
+				"idoc": str("IDoc XML (text) for a flow with an IDoc sender, instead of body: POSTed to its IDoc endpoint as application/x-sap.idoc. " +
+					"It must hold an EDI_DC40 control record; the result lists DOCNUM, IDOCTYP, MESTYP, SNDPRN and RCVPRN per IDoc. idoc_template writes a skeleton"),
+				"odata_method": enum("OData request to the flow's OData V2 sender service, default GET (set entity_set, key, query as needed; body for POST, PUT, PATCH as JSON)",
+					"GET", "POST", "PUT", "PATCH", "DELETE"),
+				"entity_set": str("OData entity set, e.g. SalesOrders, or $metadata; without it (and with odata_method) the service document"),
+				"key":        str(`OData entity key as written in the parentheses, e.g. '4711' (string), 4711 (number) or OrderNo='4711',Item=10`),
+				"query":      str(`OData query string, e.g. $filter=Status eq 'OPEN'&$top=10`),
 			}, "artifact_id"),
 			Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -1250,6 +1258,11 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					Address     string            `json:"process_direct_address"`
 					Trace       *bool             `json:"trace"`
 					Harness     string            `json:"harness"`
+					IDoc        string            `json:"idoc"`
+					ODataMethod string            `json:"odata_method"`
+					EntitySet   string            `json:"entity_set"`
+					Key         string            `json:"key"`
+					Query       string            `json:"query"`
 				}
 				if err := decode(raw, &a); err != nil {
 					return nil, err
@@ -1263,12 +1276,83 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if endpoints == nil {
 					return nil, output.Usagef("sending test messages is not configured for this server")
 				}
-				return ops.SendTestMessage(ctx, cfg.Exe, endpoints, ops.TestMessage{
+				msg := ops.TestMessage{
 					ArtifactID: a.ArtifactID, URL: a.URL, Method: a.Method, Body: []byte(a.Body), ContentType: a.ContentType,
 					Headers: a.Headers, MaxBytes: a.MaxBytes, Wait: time.Duration(a.WaitSeconds) * time.Second, PollInterval: cfg.LogPollInterval,
 					ProcessDirectAddress: a.Address, Harness: a.Harness, NoTrace: a.Trace != nil && !*a.Trace,
 					Progress: progressFrom(ctx),
-				})
+				}
+				if a.IDoc != "" {
+					msg.IDoc = []byte(a.IDoc)
+				}
+				if a.ODataMethod != "" || a.EntitySet != "" || a.Key != "" || a.Query != "" {
+					if a.Method != "" {
+						return nil, output.Usagef("use odata_method for OData requests, not method")
+					}
+					msg.OData = &ops.ODataRequest{Method: a.ODataMethod, EntitySet: a.EntitySet, Key: a.Key, Query: a.Query}
+				}
+				return ops.SendTestMessage(ctx, cfg.Exe, endpoints, msg)
+			},
+		},
+		{
+			Name: "idoc_template", Title: "Write an IDoc XML skeleton",
+			Description: "A minimal IDoc XML message for send_test_message idoc: the control record EDI_DC40 with the standard fields and a commented placeholder for the data segments. " +
+				"It is a skeleton: add the segments of the IDoc type (from its documentation, WE60) before sending. Local only, nothing is sent. " +
+				"With path the XML is also written to that file under the server root.",
+			InputSchema: object(props{
+				"idoc_type":    str("IDoc type (IDOCTYP), e.g. ORDERS05"),
+				"message_type": str("Message type (MESTYP), e.g. ORDERS"),
+				"extension":    str("IDoc extension (CIMTYP), if any"),
+				"sndprn":       str("Sender partner number (SNDPRN)"),
+				"sndprt":       str(`Sender partner type (SNDPRT), default "LS"`),
+				"sndpor":       str("Sender port (SNDPOR)"),
+				"rcvprn":       str("Receiver partner number (RCVPRN)"),
+				"rcvprt":       str(`Receiver partner type (RCVPRT), default "LS"`),
+				"rcvpor":       str("Receiver port (RCVPOR)"),
+				"docnum":       str(`IDoc number (DOCNUM), default "0000000000000001"`),
+				"direct":       enum(`Direction (DIRECT), default "1" (outbound from the SAP system)`, "1", "2"),
+				"path":         str("Also write the XML to this file (relative to the server root)"),
+			}, "idoc_type", "message_type"),
+			Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
+			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				var a struct {
+					IDocType    string `json:"idoc_type"`
+					MessageType string `json:"message_type"`
+					Extension   string `json:"extension"`
+					SndPRN      string `json:"sndprn"`
+					SndPRT      string `json:"sndprt"`
+					SndPOR      string `json:"sndpor"`
+					RcvPRN      string `json:"rcvprn"`
+					RcvPRT      string `json:"rcvprt"`
+					RcvPOR      string `json:"rcvpor"`
+					DocNum      string `json:"docnum"`
+					Direct      string `json:"direct"`
+					Path        string `json:"path"`
+				}
+				if err := decode(raw, &a); err != nil {
+					return nil, err
+				}
+				data, err := idoc.Template(idoc.TemplateOptions{IDocType: a.IDocType, MessageType: a.MessageType, Extension: a.Extension,
+					SenderPartner: a.SndPRN, SenderPartnerType: a.SndPRT, SenderPort: a.SndPOR,
+					ReceiverPartner: a.RcvPRN, ReceiverPartnerType: a.RcvPRT, ReceiverPort: a.RcvPOR, DocNum: a.DocNum, Direct: a.Direct})
+				if err != nil {
+					return nil, output.Usage(err)
+				}
+				res := map[string]any{"idoc": string(data)}
+				if a.Path != "" {
+					target, err := resolvePath(cfg.Root, a.Path)
+					if err != nil {
+						return nil, err
+					}
+					if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+						return nil, err
+					}
+					if err := os.WriteFile(target, data, 0o644); err != nil {
+						return nil, err
+					}
+					res["path"] = target
+				}
+				return res, nil
 			},
 		},
 		{

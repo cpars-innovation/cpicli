@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 )
 
@@ -192,7 +193,7 @@ func parseFlowModel(data []byte) (*flowModel, error) {
 	}
 	fm := &flowModel{model: m}
 	for _, a := range m.Adapters {
-		ch := channel{Adapter: a.Props["ComponentType"], Props: a.Props, Source: a.Source}
+		ch := channel{Adapter: adapterOf(a.Props), Props: a.Props, Source: a.Source}
 		switch a.Props["direction"] {
 		case "Sender":
 			ch.Address = firstProp(a.Props, senderAddressKeys)
@@ -212,8 +213,100 @@ func parseFlowModel(data []byte) (*flowModel, error) {
 	return fm, nil
 }
 
+// Adapters the mock names by their variant URI (cmdVariantUri cname) rather
+// than ComponentType: the IDoc adapter (ComponentType IDOC in SAP's content)
+// and the OData V2 sender (cname sap:ODataSender; its ComponentType is not
+// known from real content).
+const (
+	adapterIDoc        = "IDOC"
+	adapterODataSender = "ODataSender"
+)
+
+// adapterOf is the adapter of a channel: the IDoc and OData sender adapters
+// by their variant, the others by ComponentType.
+func adapterOf(p map[string]string) string {
+	switch catalog.ParseURI(p["cmdVariantUri"])["cname"] {
+	case "sap:IDOC":
+		return adapterIDoc
+	case "sap:ODataSender":
+		return adapterODataSender
+	}
+	return p["ComponentType"]
+}
+
+// Inbound kinds: how a runtime endpoint takes a message.
+const (
+	inboundIDoc  = "IDoc"
+	inboundOData = "OData"
+)
+
+// inboundKind is the Inbound.Kind of a sender adapter ("" for HTTPS and SOAP).
+func inboundKind(adapter string) string {
+	switch adapter {
+	case adapterIDoc:
+		return inboundIDoc
+	case adapterODataSender:
+		return inboundOData
+	}
+	return ""
+}
+
+// odataPrefix is the path of the OData V2 sender's services.
+const odataPrefix = "/gw/odata/"
+
+// senderPath is the runtime path of a sender of artifact id: endpointPath,
+// and for the OData sender its service root.
+func senderPath(id string, a *Artifact, s channel) string {
+	if s.Adapter == adapterODataSender {
+		return odataServicePath(id, a, s)
+	}
+	return s.endpointPath(a.Parameters)
+}
+
+var (
+	reEdmxNamespace = regexp.MustCompile(`<(?:\w+:)?Schema\b[^>]*\bNamespace="([^"]+)"`)
+	reEdmxContainer = regexp.MustCompile(`<(?:\w+:)?EntityContainer\b[^>]*\bName="([^"]+)"`)
+	reEdmxEntitySet = regexp.MustCompile(`<(?:\w+:)?EntitySet\b[^>]*\bName="([^"]+)"`)
+)
+
+// odataServicePath is the service root of an OData V2 sender:
+// /gw/odata/<namespace>/<service>;v=<version>. The sender's property keys
+// for namespace, service name and version are not known from real content,
+// so the mock derives them: from the channel's address (any of
+// senderAddressKeys, e.g. address = "Demo/Orders;v=1"), else from the flow's
+// EDMX resource (Schema Namespace and EntityContainer Name, version 1), else
+// SAP/<artifact ID>;v=1.
+func odataServicePath(id string, a *Artifact, s channel) string {
+	if addr := strings.Trim(resolve(s.Address, a.Parameters), "/"); addr != "" && !strings.Contains(addr, "{{") {
+		if !strings.Contains(addr, ";v=") {
+			addr += ";v=1"
+		}
+		return odataPrefix + addr
+	}
+	ns, svc := "SAP", id
+	if edmx := a.edmx(); edmx != nil {
+		if mm := reEdmxNamespace.FindSubmatch(edmx); mm != nil {
+			ns = string(mm[1])
+		}
+		if mm := reEdmxContainer.FindSubmatch(edmx); mm != nil {
+			svc = string(mm[1])
+		}
+	}
+	return odataPrefix + ns + "/" + svc + ";v=1"
+}
+
+// edmx is the first EDMX resource of the artifact (by name), nil without one.
+func (a *Artifact) edmx() []byte {
+	for _, name := range sortedKeys(a.Resources) {
+		if a.Resources[name].Type == "edmx" {
+			return a.Resources[name].Content
+		}
+	}
+	return nil
+}
+
 // endpointPath is the runtime path of an HTTP-like sender (HTTPS: /http/…,
-// SOAP: /cxf/…), "" for other senders.
+// SOAP and IDoc: /cxf/…), "" for other senders.
 func (c channel) endpointPath(params map[string]string) string {
 	addr := resolve(c.Address, params)
 	if addr == "" || strings.Contains(addr, "{{") {
@@ -225,7 +318,7 @@ func (c channel) endpointPath(params map[string]string) string {
 	switch c.Adapter {
 	case "HTTPS":
 		return "/http" + addr
-	case "SOAP":
+	case "SOAP", adapterIDoc:
 		return "/cxf" + addr
 	}
 	return ""
@@ -268,7 +361,7 @@ func (a *Artifact) flow() *flowModel {
 	return fm
 }
 
-// registerEndpoints makes the HTTPS and SOAP senders of a deployed flow
+// registerEndpoints makes the HTTPS, SOAP, IDoc and OData senders of a deployed flow
 // reachable (Inbound) and listed in ServiceEndpoints. Endpoints configured
 // before (for example by a seed) keep their behaviour. Like a real tenant it
 // registers nothing and returns an error message when an address is already
@@ -282,21 +375,21 @@ func (m *Tenant) registerEndpoints(id string, a *Artifact) (conflict string) {
 		m.Inbound = map[string]*Inbound{}
 	}
 	for _, s := range fm.Senders {
-		p := s.endpointPath(a.Parameters)
+		p := senderPath(id, a, s)
 		if in := m.Inbound[p]; p != "" && in != nil && in.Artifact != id && in.Artifact != "" {
 			if other := m.Artifacts[in.Artifact]; other != nil && other.running() {
-				addr := strings.TrimPrefix(strings.TrimPrefix(p, "/http"), "/cxf")
+				addr := strings.TrimPrefix(strings.TrimPrefix(strings.TrimPrefix(p, "/http"), "/cxf"), strings.TrimSuffix(odataPrefix, "/"))
 				return fmt.Sprintf("the address %s is already used by %s", addr, in.Artifact)
 			}
 		}
 	}
 	for _, s := range fm.Senders {
-		p := s.endpointPath(a.Parameters)
+		p := senderPath(id, a, s)
 		if p == "" {
 			continue
 		}
 		if in := m.Inbound[p]; in == nil || in.Artifact != id {
-			m.Inbound[p] = &Inbound{Artifact: id}
+			m.Inbound[p] = &Inbound{Artifact: id, Kind: inboundKind(s.Adapter)}
 		}
 		if a.EndpointURL == "" {
 			a.EndpointURL = strings.TrimSuffix(cmp.Or(m.EndpointBase, m.URL()), "/") + p

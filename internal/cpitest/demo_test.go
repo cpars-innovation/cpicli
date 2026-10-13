@@ -30,7 +30,7 @@ func TestDemoGraph(t *testing.T) {
 	m := demo(t, "dev")
 	d, err := ops.DiscoverTenant(context.Background(), m.Executer(), "mock", ops.DiscoverOptions{})
 	require.NoError(t, err)
-	assert.Len(t, d.IFlows, 6)
+	assert.Len(t, d.IFlows, 8)
 	g := ops.BuildGraph(d)
 	sends := map[string]bool{}
 	for _, e := range g.Edges {

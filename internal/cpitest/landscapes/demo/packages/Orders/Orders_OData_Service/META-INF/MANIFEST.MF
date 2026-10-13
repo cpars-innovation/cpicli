@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Orders OData service
+Bundle-SymbolicName: Orders_OData_Service; singleton:=true
+Bundle-Version: 1.0.0
+SAP-BundleType: IntegrationFlow
+SAP-NodeType: IFLMAP
+SAP-RuntimeProfile: iflmap
+Origin-Bundle-Name: Orders OData service
+Origin-Bundle-SymbolicName: Orders_OData_Service
+

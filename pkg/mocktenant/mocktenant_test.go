@@ -43,3 +43,17 @@ func TestAuth(t *testing.T) {
 	_, err = ops.ListPackages(m.Executer())
 	assert.Error(t, err, "a wrong password")
 }
+
+// The demo has flows with IDoc and OData senders; their endpoints are listed
+// like the others.
+func TestDemoSAPEndpoints(t *testing.T) {
+	m := mocktenant.Start()
+	defer m.Close()
+	require.NoError(t, mocktenant.SeedDemo(m, "dev", time.Now()))
+	idoc, err := ops.ResolveEndpoint(m.Executer(), "Orders_IDoc_In", "")
+	require.NoError(t, err)
+	assert.Equal(t, m.URL()+"/cxf/orders/idoc", idoc)
+	odata, err := ops.ResolveEndpoint(m.Executer(), "Orders_OData_Service", "")
+	require.NoError(t, err)
+	assert.Equal(t, m.URL()+"/gw/odata/Demo/Orders;v=1", odata)
+}

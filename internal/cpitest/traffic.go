@@ -231,45 +231,53 @@ func (m *Tenant) StartTraffic(ctx context.Context, speed float64) {
 	}
 }
 
-// liveSend runs the flow behind a runtime endpoint for a received message
-// and answers like the flow: the response (the payload passed through, or
-// the endpoint's fixed response), or HTTP 500 with the error when the run
-// failed.
-func (m *Tenant) liveSend(w http.ResponseWriter, r *http.Request, in *Inbound, body string) {
-	m.liveSerial++
-	correlation := fmt.Sprintf("C-live-%d", m.liveSerial)
-	x := m.newExecutor("LIVE")
-	key := m.messageKey(r, body)
-	res := x.run(in.Artifact, message{correlation: correlation, key: key, payload: body, keyHeaders: m.keyHeaders()}, time.Now(), "", 0)
-	if appID := r.Header.Get("SAP_ApplicationID"); appID != "" {
-		for i := range x.logs {
-			if x.logs[i].Guid == res.guid {
-				x.logs[i].ApplicationID = appID
+// inboundRun handles a message received by a runtime endpoint in Live mode:
+// it runs the flow behind the endpoint (when it is deployed and the mock can
+// read it) and adds its logs, or logs a COMPLETED message for an endpoint
+// without a runnable flow. It sets the message headers on w. ran reports
+// that the flow ran, failed its error text when the run failed. Without Live
+// only the endpoint's MessageGuid is set. The ApplicationMessageId is the
+// SAP_ApplicationID header when sent, else what the flow sets.
+func (m *Tenant) inboundRun(w http.ResponseWriter, r *http.Request, in *Inbound, msg message) (ran bool, failed string) {
+	appID := r.Header.Get("SAP_ApplicationID")
+	a := m.Artifacts[in.Artifact]
+	switch {
+	case m.Live && a != nil && a.running() && a.info() != nil:
+		m.liveSerial++
+		msg.correlation = fmt.Sprintf("C-live-%d", m.liveSerial)
+		msg.keyHeaders = m.keyHeaders()
+		x := m.newExecutor("LIVE")
+		res := x.run(in.Artifact, msg, time.Now(), "", 0)
+		if appID != "" {
+			for i := range x.logs {
+				if x.logs[i].Guid == res.guid {
+					x.logs[i].ApplicationID = appID
+				}
 			}
 		}
+		m.addLogs(x.logs)
+		w.Header().Set("SAP_MessageProcessingLogID", res.guid)
+		w.Header().Set("SAP_MplCorrelationId", msg.correlation)
+		if res.status != "COMPLETED" {
+			return true, res.errorText
+		}
+		return true, ""
+	case m.Live && in.Artifact != "":
+		m.liveSerial++
+		now := time.Now()
+		l := MessageLog{Guid: fmt.Sprintf("AGLIVE%022d", m.liveSerial), Artifact: in.Artifact, Status: "COMPLETED",
+			CorrelationID: fmt.Sprintf("C-live-%d", m.liveSerial), ApplicationID: cmp.Or(appID, msg.docnum),
+			Start: now, End: now.Add(150 * time.Millisecond)}
+		if a != nil {
+			l.Package = a.Package
+		}
+		m.addLogs([]MessageLog{l})
+		w.Header().Set("SAP_MessageProcessingLogID", l.Guid)
+		w.Header().Set("SAP_MplCorrelationId", l.CorrelationID)
+	case in.MessageGuid != "":
+		w.Header().Set("SAP_MessageProcessingLogID", in.MessageGuid)
 	}
-	m.addLogs(x.logs)
-	w.Header().Set("SAP_MessageProcessingLogID", res.guid)
-	w.Header().Set("SAP_MplCorrelationId", correlation)
-	if res.status != "COMPLETED" {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(res.errorText))
-		return
-	}
-	response, contentType := in.Response, in.ContentType
-	if response == "" {
-		response, contentType = body, r.Header.Get("Content-Type")
-	}
-	if contentType != "" {
-		w.Header().Set("Content-Type", contentType)
-	}
-	status := in.Status
-	if status == 0 {
-		status = http.StatusOK
-	}
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(response))
+	return false, ""
 }
 
 // MessageLogs returns a copy of the live message logs (newest first).

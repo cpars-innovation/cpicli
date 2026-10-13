@@ -2,9 +2,11 @@ package ops
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"slices"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/idoc"
 )
 
 // EndpointExecuterFunc returns an executer and request path for a runtime
@@ -45,6 +48,56 @@ type TestMessage struct {
 	NoTrace bool
 	// Progress, when set, receives every poll while waiting (Wait).
 	Progress ProgressFunc
+	// IDoc is IDoc XML for the flow's IDoc sender (instead of Body): it is
+	// POSTed to the IDoc endpoint (/cxf/...) with Content-Type
+	// application/x-sap.idoc (unless ContentType is set) and must hold an
+	// EDI_DC40 control record.
+	IDoc []byte
+	// OData sends an OData V2 request to the flow's OData sender endpoint
+	// (/gw/odata/...); Method is then OData.Method.
+	OData *ODataRequest
+}
+
+// ODataRequest is a request to an entity set of an OData V2 service.
+type ODataRequest struct {
+	// Method is GET (default), POST, PUT, PATCH or DELETE.
+	Method string `json:"method,omitempty"`
+	// EntitySet is the entity set (or $metadata); empty: the service document.
+	EntitySet string `json:"entitySet,omitempty"`
+	// Key is the entity key as OData writes it in the parentheses, e.g.
+	// '4711' (string) or 4711 (number) or OrderNo='4711',Item=10.
+	Key string `json:"key,omitempty"`
+	// Query is the query string, e.g. $filter=Status eq 'OPEN'&$top=10.
+	Query string `json:"query,omitempty"`
+}
+
+// odataMethods are the methods of ODataRequest.
+var odataMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
+
+// resourcePath is the part of the request URL after the service root.
+func (o *ODataRequest) resourcePath() (string, error) {
+	set := strings.Trim(o.EntitySet, "/")
+	if strings.ContainsAny(set, "?#() ") {
+		return "", output.Usagef("invalid entity set %q (put the key in key and the query in query)", o.EntitySet)
+	}
+	p := ""
+	if set != "" {
+		p = "/" + set
+	}
+	if o.Key != "" {
+		if set == "" {
+			return "", output.Usagef("a key needs an entity set")
+		}
+		p += "(" + strings.TrimSuffix(strings.TrimPrefix(o.Key, "("), ")") + ")"
+	}
+	if q := strings.TrimPrefix(o.Query, "?"); q != "" {
+		values, err := neturl.ParseQuery(q)
+		if err != nil {
+			return "", output.Usagef("invalid OData query %q: %v", o.Query, err)
+		}
+		p += "?" + strings.NewReplacer("%24", "$", "+", "%20").Replace(values.Encode())
+	}
+	return p, nil
 }
 
 // DefaultHarnessID is the test harness flow: an HTTPS sender that forwards
@@ -73,6 +126,8 @@ type SentMessage struct {
 	Response            Content   `json:"response"`
 	// Log is the processing log of the message (only with Wait).
 	Log *MessageLogDetail `json:"log,omitempty"`
+	// IDocs are the control records of the IDocs sent (TestMessage.IDoc).
+	IDocs []idoc.Control `json:"idocs,omitempty"`
 }
 
 // headers that a test message may not set: authentication and session
@@ -83,22 +138,51 @@ var reservedHeaders = []string{"authorization", "cookie", "x-csrf-token", "host"
 // is one of the artifact's entry points, or the artifact's only entry point.
 // Only URLs the tenant lists for the artifact are accepted.
 func ResolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url string) (string, error) {
+	return resolveEndpoint(exe, artifactID, url, "")
+}
+
+// Endpoint kinds for resolveEndpoint.
+const (
+	endpointIDoc  = "IDoc"  // /cxf/ (IDoc and SOAP senders)
+	endpointOData = "OData" // OData services (/gw/odata/ or Protocol ODATA)
+)
+
+// endpointIs reports whether an entry point is of kind ("": any). IDoc
+// senders are reached under /cxf/ like SOAP senders; OData services under
+// /gw/odata/ or with Protocol ODATA.
+func endpointIs(kind, protocol, url string) bool {
+	switch kind {
+	case endpointIDoc:
+		return strings.Contains(url, "/cxf/")
+	case endpointOData:
+		return strings.EqualFold(protocol, "ODATA") || strings.Contains(url, "/gw/odata/")
+	}
+	return true
+}
+
+func resolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url, kind string) (string, error) {
 	eps, err := cpi.NewContent(exe).ServiceEndpoints(artifactID)
 	if err != nil {
 		return "", err
 	}
-	var urls []string
+	var urls, others []string
 	for _, ep := range eps {
 		if ep.ArtifactID != artifactID {
 			continue
 		}
 		for _, e := range ep.EntryPoints {
-			urls = append(urls, e.URL)
+			if endpointIs(kind, ep.Protocol, e.URL) {
+				urls = append(urls, e.URL)
+			} else {
+				others = append(others, e.URL)
+			}
 		}
 	}
 	switch {
+	case len(urls) == 0 && len(others) > 0:
+		return "", output.Usagef("integration flow %s has no %s endpoint (endpoints: %s)", artifactID, kind, strings.Join(others, ", "))
 	case len(urls) == 0:
-		return "", output.Usagef("integration flow %s has no endpoint: is it deployed and does it have an HTTP-based sender (HTTPS, SOAP, ...)?", artifactID)
+		return "", output.Usagef("integration flow %s has no endpoint: is it deployed and does it have an HTTP-based sender (HTTPS, SOAP, IDoc, OData, ...)?", artifactID)
 	case url != "":
 		if slices.Contains(urls, url) {
 			return url, nil
@@ -119,6 +203,10 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	if m.ArtifactID == "" {
 		return nil, output.Usagef("artifact ID is required")
 	}
+	kind, resource, idocs, err := prepareSAPMessage(&m)
+	if err != nil {
+		return nil, err
+	}
 	method := strings.ToUpper(m.Method)
 	if method == "" {
 		method = http.MethodPost
@@ -135,6 +223,12 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	}
 	if m.ContentType != "" {
 		headers["Content-Type"] = m.ContentType
+	}
+	if m.OData != nil && !hasHeader(headers, "Accept") {
+		headers["Accept"] = "application/json"
+		if strings.Trim(m.OData.EntitySet, "/") == "$metadata" {
+			headers["Accept"] = "application/xml"
+		}
 	}
 	traceID := ""
 	for k, v := range headers {
@@ -161,19 +255,22 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 		endpointArtifact = m.Harness
 		headers[HarnessAddressHeader] = m.ProcessDirectAddress
 	}
-	url, err := ResolveEndpoint(exe, endpointArtifact, m.URL)
+	url, err := resolveEndpoint(exe, endpointArtifact, m.URL, kind)
 	if err != nil && m.ProcessDirectAddress != "" && output.ExitCode(err) == exitcode.Usage {
 		return nil, output.Usagef("test harness %s is not deployed or has no endpoint (see the cpi-test skill to set it up): %v", m.Harness, err)
 	}
 	if err != nil {
 		return nil, err
 	}
+	if kind == endpointOData { // the entry point is the service root
+		url = strings.TrimSuffix(strings.TrimSuffix(url, "/$metadata"), "/") + resource
+	}
 	rtExe, path, err := newExe(url)
 	if err != nil {
 		return nil, output.Usage(err)
 	}
 
-	sent := &SentMessage{ArtifactID: m.ArtifactID, URL: url, SentAt: time.Now().UTC().Truncate(time.Millisecond), TraceID: traceID}
+	sent := &SentMessage{ArtifactID: m.ArtifactID, URL: url, SentAt: time.Now().UTC().Truncate(time.Millisecond), TraceID: traceID, IDocs: idocs}
 	if m.ProcessDirectAddress != "" {
 		sent.Harness, sent.ProcessDirectAddress = m.Harness, m.ProcessDirectAddress
 	}
@@ -215,6 +312,59 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 		return sent, output.Failed(fmt.Errorf("message %s ended with status %s", sent.Log.MessageGuid, sent.Log.Status))
 	}
 	return sent, nil
+}
+
+// prepareSAPMessage checks and completes an IDoc or OData test message:
+// body, method and content type, the endpoint kind to resolve, the OData
+// resource path and the IDocs' control records.
+func prepareSAPMessage(m *TestMessage) (kind, resource string, idocs []idoc.Control, err error) {
+	switch {
+	case m.IDoc != nil && m.OData != nil:
+		return "", "", nil, output.Usagef("send either an IDoc or an OData request")
+	case (m.IDoc != nil || m.OData != nil) && m.ProcessDirectAddress != "":
+		return "", "", nil, output.Usagef("IDoc and OData requests go to the flow's own endpoint, not through the test harness")
+	case m.IDoc != nil:
+		if len(m.Body) > 0 {
+			return "", "", nil, output.Usagef("send either a body or an IDoc")
+		}
+		if m.Method != "" && !strings.EqualFold(m.Method, http.MethodPost) {
+			return "", "", nil, output.Usagef("an IDoc is sent with POST, not %s", m.Method)
+		}
+		doc, err := idoc.Parse(m.IDoc)
+		if err != nil {
+			return "", "", nil, output.Usagef("invalid IDoc: %v", err)
+		}
+		m.Body, m.Method = m.IDoc, http.MethodPost
+		m.ContentType = cmp.Or(m.ContentType, idoc.ContentType)
+		return endpointIDoc, "", doc.IDocs, nil
+	case m.OData != nil:
+		method := strings.ToUpper(cmp.Or(m.OData.Method, http.MethodGet))
+		if !slices.Contains(odataMethods, method) {
+			return "", "", nil, output.Usagef("invalid OData method %q (%s)", m.OData.Method, strings.Join(odataMethods, ", "))
+		}
+		if len(m.Body) > 0 && (method == http.MethodGet || method == http.MethodDelete) {
+			return "", "", nil, output.Usagef("an OData %s has no body", method)
+		}
+		resource, err := m.OData.resourcePath()
+		if err != nil {
+			return "", "", nil, err
+		}
+		m.Method = method
+		if len(m.Body) > 0 {
+			m.ContentType = cmp.Or(m.ContentType, "application/json")
+		}
+		return endpointOData, resource, nil, nil
+	}
+	return "", "", nil, nil
+}
+
+func hasHeader(headers map[string]string, name string) bool {
+	for k := range headers {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func messageHint(s *SentMessage) string {

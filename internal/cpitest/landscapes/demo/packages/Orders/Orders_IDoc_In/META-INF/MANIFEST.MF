@@ -1,0 +1,11 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Orders IDoc inbound
+Bundle-SymbolicName: Orders_IDoc_In; singleton:=true
+Bundle-Version: 1.0.0
+SAP-BundleType: IntegrationFlow
+SAP-NodeType: IFLMAP
+SAP-RuntimeProfile: iflmap
+Origin-Bundle-Name: Orders IDoc inbound
+Origin-Bundle-SymbolicName: Orders_IDoc_In
+

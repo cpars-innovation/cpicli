@@ -52,6 +52,8 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`guidelines`](#guidelines) | Check an integration flow against the design guidelines activated on the tenant |
 | [`id-mappings`](#id-mappings) | Show ID mapper entries of a source or target ID |
 | [`idempotent`](#idempotent) | List idempotent repository entries (messages or files skipped as duplicates) |
+| [`idoc`](#idoc) | IDoc test messages: write an IDoc XML skeleton |
+| [`idoc template`](#idoc-template) | Write an IDoc XML skeleton (control record EDI_DC40) to fill in |
 | [`iflow`](#iflow) | Work with integration flow files (copy a template under a new ID, lay out the diagram) |
 | [`iflow copy`](#iflow-copy) | Copy an integration flow under a new ID, name and sender address |
 | [`iflow diagram`](#iflow-diagram) | Read the diagram geometry of an integration flow: shape bounds, line waypoints, pools, steps and adapters (local file) |
@@ -1203,6 +1205,52 @@ List idempotent repository entries (messages or files skipped as duplicates)
   cpictl idempotent --id in/orders_20261005.csv --component SFTP
 ```
 
+## idoc
+
+IDoc test messages: write an IDoc XML skeleton
+
+## idoc template
+
+Write an IDoc XML skeleton (control record EDI_DC40) to fill in
+
+```
+Write a minimal IDoc XML message: the control record EDI_DC40 with the standard
+fields and a commented placeholder where the data segments go. It is a skeleton
+to fill: add the segments of the IDoc type yourself (their names and fields are
+in the IDoc type's documentation, transaction WE60 on the SAP system), then send
+it with 'cpictl send --idoc FILE'.
+
+DOCNUM defaults to 0000000000000001; use a new number per test message when the
+flow or the receiver checks for duplicates. DIRECT 1 is an IDoc sent by the SAP
+system (outbound), 2 one sent to it.
+```
+
+**Usage:** `cpictl idoc template [flags]`
+
+**Flags:**
+
+```
+      --cimtyp string   IDoc extension (CIMTYP), if any
+      --direct string   Direction (DIRECT): 1 outbound from the SAP system, 2 inbound (default "1")
+      --docnum string   IDoc number (DOCNUM, default 0000000000000001)
+      --mestyp string   Message type (MESTYP), e.g. ORDERS
+      --out string      Write the skeleton to this file instead of stdout
+      --rcvpor string   Receiver port (RCVPOR)
+      --rcvprn string   Receiver partner number (RCVPRN)
+      --rcvprt string   Receiver partner type (RCVPRT) (default "LS")
+      --sndpor string   Sender port (SNDPOR)
+      --sndprn string   Sender partner number (SNDPRN)
+      --sndprt string   Sender partner type (SNDPRT) (default "LS")
+      --type string     IDoc type (IDOCTYP), e.g. ORDERS05
+```
+
+**Examples:**
+
+```
+  cpictl idoc template --type ORDERS05 --mestyp ORDERS --sndprn S4HCLNT100 --rcvprn CPI --out orders.xml
+  cpictl send --artifact-id Orders_IDoc_In --idoc orders.xml --wait 60s
+```
+
 ## iflow
 
 Work with integration flow files (copy a template under a new ID, lay out the diagram)
@@ -2298,14 +2346,17 @@ client credentials (token at /oauth/token) are accepted.
 strict checks them like a Cloud Foundry tenant with two service keys: the API
 user and client (--api-*) manage content through /api/v1, the runtime client
 (--runtime-client-*, plan integration-flow) calls the flows' endpoints
-(/http/..., /cxf/...). The other key is refused with 403, wrong credentials with
+(/http/..., /cxf/..., /gw/odata/...). The other key is refused with 403, wrong credentials with
 401. The credentials are printed at start; cpictl send takes the runtime client
 as CPICTL_RUNTIME_OAUTH_*.
 
 --seed demo loads a demo landscape for --tier dev|test|prod:
   Orders_In -> (ProcessDirect) Orders_Route -> (JMS) Billing_In -> (ProcessDirect)
-  Billing_Post, Partner_Notify (timer, SFTP), and on dev Returns_In; a day of
-  messages with the OrderNo custom header and some failures. The tiers differ
+  Billing_Post, Partner_Notify (timer, SFTP), and on dev Returns_In;
+  Orders_IDoc_In (IDoc sender /cxf/orders/idoc, ORDERS05 to JSON, HTTP receiver)
+  and Orders_OData_Service (OData V2 sender /gw/odata/Demo/Orders;v=1, entity
+  set SalesOrders, IDoc receiver to ERP); a day of messages with the OrderNo
+  custom header, IDocs and some failures. The tiers differ
   like real ones: dev is ahead (newer Orders_Route, a new flow, Billing_Post in
   draft), prod has a parameter changed on the tenant, a certificate expiring in
   20 days and no Returns_API credential.
@@ -2316,7 +2367,8 @@ and traffic; --tier names one of its tiers.
 
 The tenant behaves live: a deploy starts the designtime version and registers
 the flow's endpoints, uploads are recorded, and a message sent to an endpoint
-(POST /http/orders/in) runs the flows: one message processing log per flow,
+(POST /http/orders/in; IDoc XML to /cxf/<address>; OData requests to
+/gw/odata/<namespace>/<service>;v=<n>/<EntitySet>) runs the flows: one message processing log per flow,
 ProcessDirect and JMS to the next flows, receivers answered by the landscape's
 systems (latency, failures). --live-traffic keeps generating messages.
 The /_mock admin API needs "Authorization: Bearer <token>": --admin-token, or a random
@@ -2973,6 +3025,14 @@ Flows started by ProcessDirect have no endpoint of their own: --process-direct
 sends the message to the test harness flow (--harness), which forwards it to the
 given address; --artifact-id is then the flow behind the address and --wait
 reports that flow's message (found by correlation ID). See docs/testing.md.
+
+SAP senders: --idoc sends IDoc XML to the flow's IDoc sender (POST, Content-Type
+application/x-sap.idoc); it must hold an EDI_DC40 control record, and the result
+lists DOCNUM and IDOCTYP of each IDoc ('cpictl idoc template' writes a
+skeleton). --odata-method, --entity-set, --key and --query build an OData V2
+request against the flow's OData sender service (Accept: application/json; the
+body of POST, PUT and PATCH is sent as application/json unless --content-type
+says otherwise).
 ```
 
 **Usage:** `cpictl send [flags]`
@@ -2984,11 +3044,16 @@ reports that flow's message (found by correlation ID). See docs/testing.md.
       --body string                         Message body
       --body-file string                    Read the message body from this file ('-' for stdin)
       --content-type string                 Content-Type of the body
+      --entity-set string                   OData entity set (or $metadata); without it the service document
       --harness string                      Test harness flow ID (with --process-direct) (default "CPICTL_Test_Harness")
       --header strings                      Additional header name=value (repeatable)
-      --method string                       HTTP method (default "POST")
+      --idoc string                         Send this IDoc XML file ('-' for stdin) to the flow's IDoc sender
+      --key string                          OData entity key as written in the parentheses, e.g. "'4711'" or OrderNo='4711',Item=10
+      --method string                       HTTP method (default POST)
       --no-trace                            Do not send a W3C traceparent header (by default one is generated unless --header traceparent=... is given; its traceId is in the result)
+      --odata-method string                 OData request to the flow's OData sender: GET (default with --entity-set), POST, PUT, PATCH or DELETE
       --process-direct string               Send through the test harness flow to this ProcessDirect address (flows without an HTTP sender)
+      --query string                        OData query, e.g. "$filter=Status eq 'OPEN'&$top=10"
       --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
       --runtime-oauth-clientsecret string   OAuth client secret for runtime endpoints
       --runtime-oauth-host string           OAuth token server host for runtime endpoints (default: --oauth-host)
@@ -3009,6 +3074,13 @@ reports that flow's message (found by correlation ID). See docs/testing.md.
 
   # A flow with a ProcessDirect sender, through the test harness
   cpictl send --artifact-id Billing --process-direct /billing/in --body-file invoice.xml --wait 60s
+
+  # An IDoc to a flow with an IDoc sender
+  cpictl send --artifact-id Orders_IDoc_In --idoc orders.xml --wait 60s
+
+  # OData: read an entity, create one
+  cpictl send --artifact-id Orders_OData_Service --entity-set SalesOrders --key "'4711'"
+  cpictl send --artifact-id Orders_OData_Service --odata-method POST --entity-set SalesOrders --body '{"OrderNo":"4711"}'
 ```
 
 ## skills

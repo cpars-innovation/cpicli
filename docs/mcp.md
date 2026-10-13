@@ -155,7 +155,7 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 |---------|-----|-------|
 | `inspect` | understanding content | list and read packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare |
 | `build` | changing flows on DEV | read tools, `download_artifact`, `copy_iflow`, `layout_iflow`, `create_package`, `upload_artifact(s)`, `validate_artifact`, `check_guidelines`, `set_parameters`, `deploy`, `bump_versions`, `lint`, loop tools |
-| `test` | testing and diagnosing | `send_test_message`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
+| `test` | testing and diagnosing | `send_test_message`, `idoc_template`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
 | `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore, `list_audit_logs` |
 | `promote` | moving between tiers | `compare`, `transport_check`, `drift`, `config_diff`, parameters, credentials, keystore, Partner Directory dependencies and diff, runtime status |
 | `improve` | quality | `lint`, `lint_fix`, `layout_iflow`, graph, `drift`, `compare`, `bump_versions` |
@@ -216,7 +216,7 @@ leaves a tool enabled by accident.
 | Tool class | Tools | `--read-only` |
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
-| local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `discover_tenant`, `loop_start`, `loop_end` | kept |
+| local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `idoc_template`, `discover_tenant`, `loop_start`, `loop_end` | kept |
 | tenant changes / processing (classes below) | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
 
 For approvals, `help` also reports a finer **class** per tool (the effect `read` / `local` /
@@ -266,7 +266,8 @@ read roles.
 | `get_parameters` | | Externalised parameters of an integration flow; `artifact_ids` for several flows in one call (8 at a time) |
 | `set_parameters` | designtime | Change parameters; only changed values are written, unknown keys fail first; `dry_run` |
 | `deploy` | runtime | Deploy and wait (`artifact_type`: Integration, MessageMapping, ScriptCollection, ValueMapping); per artifact `DEPLOYED`, `SKIPPED`, `FAILED` (tenant error), `TIMEOUT`, with `designtimeVersion` / `runtimeVersion`. Refuses a designtime version older than the running one unless the designtime artifact was changed after that deployment or `allow_downgrade`; `rule` says which rule decided. `dry_run`: per artifact `deploy` true/false and the reason, nothing triggered |
-| `send_test_message` | **triggers processing** | Send a message to the flow's endpoint (or via the test harness to a ProcessDirect address); HTTP status, response, message GUID; `wait_seconds` returns the final message log. See [testing.md](testing.md) |
+| `send_test_message` | **triggers processing** | Send a message to the flow's endpoint (or via the test harness to a ProcessDirect address); HTTP status, response, message GUID; `wait_seconds` returns the final message log. `idoc`: IDoc XML to the flow's IDoc sender (must hold an EDI_DC40 control record; `idocs` in the result lists DOCNUM, IDOCTYP, MESTYP, SNDPRN, RCVPRN). `odata_method`, `entity_set`, `key`, `query`: an OData V2 request to the flow's OData sender service. See [testing.md](testing.md) |
+| `idoc_template` | local files | IDoc XML skeleton for `send_test_message idoc`: EDI_DC40 with the standard fields (`idoc_type`, `message_type`, partners, ports, `docnum`) and a placeholder for the data segments, which you fill in; `path` also writes it inside `--root` |
 | `get_runtime_status` | | Runtime status, version, deployment time and error of given artifacts |
 | `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`) |
 | `list_service_endpoints` | | Callable URLs of deployed integration flows (where to send test messages) |

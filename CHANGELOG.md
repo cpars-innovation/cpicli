@@ -20,6 +20,19 @@ All notable changes to cpictl. Coming from FlashPipe? See
   `ops.ODataOperationKind`.
 - Plugin (0.3.1): the discover skill and the conventions template cover OData and IDoc; the
   improvement catalogue has the new rules.
+- IDoc and OData test messages. `cpictl send --idoc FILE` (MCP `send_test_message` `idoc`) sends
+  IDoc XML to the flow's IDoc sender (checks the EDI_DC40 control record, reports DOCNUM and
+  IDOCTYP); `--odata-method`, `--entity-set`, `--key`, `--query` (MCP `odata_method`,
+  `entity_set`, `key`, `query`) build an OData V2 request against the flow's OData sender.
+  `cpictl idoc template` (MCP `idoc_template`, local) writes an IDoc XML skeleton to fill. Go:
+  `pkg/idoc`, `ops.TestMessage.IDoc` / `.OData`.
+- Mock tenant: IDoc senders at `/cxf/<address>` (plain or SOAP-wrapped IDoc XML, IDoc headers,
+  ApplicationMessageId from DOCNUM), OData V2 senders at `/gw/odata/<namespace>/<service>;v=<n>`
+  (`$metadata` from the flow's EDMX, entity sets run the flow), IDoc receivers answered by the
+  landscape's systems; `--credentials strict` covers them. Paths, headers and answers SAP
+  documents but that were not verified on a tenant are marked as assumptions in
+  [docs/mock-tenant.md](docs/mock-tenant.md#idoc-and-odata-senders). The demo landscape has two
+  new flows, `Orders_IDoc_In` (ORDERS05 IDocs, with traffic) and `Orders_OData_Service`.
 
 ## 0.11.0
 

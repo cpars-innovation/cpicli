@@ -36,14 +36,17 @@ client credentials (token at /oauth/token) are accepted.
 strict checks them like a Cloud Foundry tenant with two service keys: the API
 user and client (--api-*) manage content through /api/v1, the runtime client
 (--runtime-client-*, plan integration-flow) calls the flows' endpoints
-(/http/..., /cxf/...). The other key is refused with 403, wrong credentials with
+(/http/..., /cxf/..., /gw/odata/...). The other key is refused with 403, wrong credentials with
 401. The credentials are printed at start; cpictl send takes the runtime client
 as CPICTL_RUNTIME_OAUTH_*.
 
 --seed demo loads a demo landscape for --tier dev|test|prod:
   Orders_In -> (ProcessDirect) Orders_Route -> (JMS) Billing_In -> (ProcessDirect)
-  Billing_Post, Partner_Notify (timer, SFTP), and on dev Returns_In; a day of
-  messages with the OrderNo custom header and some failures. The tiers differ
+  Billing_Post, Partner_Notify (timer, SFTP), and on dev Returns_In;
+  Orders_IDoc_In (IDoc sender /cxf/orders/idoc, ORDERS05 to JSON, HTTP receiver)
+  and Orders_OData_Service (OData V2 sender /gw/odata/Demo/Orders;v=1, entity
+  set SalesOrders, IDoc receiver to ERP); a day of messages with the OrderNo
+  custom header, IDocs and some failures. The tiers differ
   like real ones: dev is ahead (newer Orders_Route, a new flow, Billing_Post in
   draft), prod has a parameter changed on the tenant, a certificate expiring in
   20 days and no Returns_API credential.
@@ -54,7 +57,8 @@ and traffic; --tier names one of its tiers.
 
 The tenant behaves live: a deploy starts the designtime version and registers
 the flow's endpoints, uploads are recorded, and a message sent to an endpoint
-(POST /http/orders/in) runs the flows: one message processing log per flow,
+(POST /http/orders/in; IDoc XML to /cxf/<address>; OData requests to
+/gw/odata/<namespace>/<service>;v=<n>/<EntitySet>) runs the flows: one message processing log per flow,
 ProcessDirect and JMS to the next flows, receivers answered by the landscape's
 systems (latency, failures). --live-traffic keeps generating messages.
 The /_mock admin API needs "Authorization: Bearer <token>": --admin-token, or a random
@@ -175,7 +179,7 @@ SSL_CERT_FILE.`,
 			fmt.Fprintf(out, "# or OAuth: CPICTL_OAUTH_HOST=%s CPICTL_OAUTH_CLIENTID=%s CPICTL_OAUTH_CLIENTSECRET=%s\n", host, auth.APIClient.ID, auth.APIClient.Secret)
 			fmt.Fprintf(out, "CPICTL_RUNTIME_OAUTH_HOST=%s\nCPICTL_RUNTIME_OAUTH_CLIENTID=%s\nCPICTL_RUNTIME_OAUTH_CLIENTSECRET=%s\n", host, auth.Runtime.ID, auth.Runtime.Secret)
 			if mode == "strict" {
-				fmt.Fprintln(out, "# credentials strict: the API user or client on /api/v1, the runtime client on /http and /cxf")
+				fmt.Fprintln(out, "# credentials strict: the API user or client on /api/v1, the runtime client on /http, /cxf and /gw/odata")
 			} else {
 				fmt.Fprintln(out, "# credentials any: every credential is accepted (--credentials strict checks them like a tenant)")
 			}
