@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Test tooling: the user role of the harness's and the stub's HTTPS senders is externalised
+  (`CPICTL_Harness_Role`, `CPICTL_Stub_Role`, default `ESBMessaging.send`). `cpictl test tools
+  install --role <role>` (MCP `install_test_tools` `role`, Go `TestToolsOptions.Role`) sets it
+  before the deploy, so on a shared tenant only clients with that role can reach ProcessDirect
+  flows through the harness; without `--role` the configured role stays. `test tools status`
+  (`TestToolStatus.Role`) shows it. The tooling's version is now 1.1.0: run `cpictl test tools
+  install --deploy` to update ([#6](https://github.com/cpars-innovation/cpicli/issues/6)).
+
 ## 0.13.0
 
 - Test runs: `config.yaml` can set the parameters of other flows (`flows:`), for receivers in the

@@ -58,7 +58,8 @@ func TestInstallTestTools(t *testing.T) {
 		byID[a.ID] = a
 		require.NotNil(t, a.Deploy, a.ID)
 		assert.Equal(t, StatusDeployed, a.Deploy.Status, a.ID)
-		assert.Equal(t, "1.0.0", a.Version)
+		assert.Equal(t, "1.1.0", a.Version)
+		assert.Equal(t, testtools.DefaultRole, a.Role, a.ID)
 	}
 	assert.Equal(t, "CREATED", byID[testtools.HarnessID].Upload.Action)
 	assert.Equal(t, "UNCHANGED", byID[testtools.StubID].Upload.Action)
@@ -72,13 +73,63 @@ func TestInstallTestTools(t *testing.T) {
 	require.NoError(t, err)
 	for _, s := range status {
 		assert.True(t, s.Installed && s.Deployed && s.UpToDate, "%+v", s)
-		assert.Equal(t, "1.0.0", s.RuntimeVersion)
+		assert.Equal(t, "1.1.0", s.RuntimeVersion)
+		assert.Equal(t, testtools.DefaultRole, s.Role, s.ID)
 	}
 	assert.Equal(t, []string{m.URL() + "/http/cpictl/test"}, status[0].Endpoints)
 	assert.Equal(t, m.URL()+"/http/cpictl/stub", status[1].StubURL)
 
 	_, err = InstallTestTools(context.Background(), exe, TestToolsOptions{Only: "mapping"})
 	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
+}
+
+// A custom role is set on both senders before the deploy, stays across later
+// installs without a role, and is reported by the status.
+func TestInstallTestToolsRole(t *testing.T) {
+	m := liveMock(t)
+	exe := m.Executer()
+
+	for _, role := range []string{"ACME Test", "x/y", "a'b"} {
+		_, err := InstallTestTools(context.Background(), exe, TestToolsOptions{Role: role})
+		assert.Equal(t, exitcode.Usage, output.ExitCode(err), role)
+	}
+	assert.Empty(t, m.Packages, "an invalid role is refused before anything is written")
+
+	res, err := InstallTestTools(context.Background(), exe, TestToolsOptions{Role: "ACME.Test", Deploy: true, DeployOptions: fastDeploy})
+	require.NoError(t, err)
+	for _, a := range res.Artifacts {
+		assert.Equal(t, "ACME.Test", a.Role, a.ID)
+		assert.Equal(t, StatusDeployed, a.Deploy.Status, a.ID)
+		v, err := ValidateArtifact(exe, a.ID, "active")
+		require.NoError(t, err, a.ID)
+		assert.Equal(t, "PASSED", v.Status, v.Details)
+	}
+	assert.Equal(t, "ACME.Test", m.Artifacts[testtools.HarnessID].Parameters[testtools.HarnessRoleParameter])
+	assert.Equal(t, "ACME.Test", m.Artifacts[testtools.StubID].Parameters[testtools.StubRoleParameter])
+
+	res, err = InstallTestTools(context.Background(), exe, TestToolsOptions{Only: testtools.ToolHarness})
+	require.NoError(t, err)
+	assert.Equal(t, "ACME.Test", res.Artifacts[0].Role, "the configured role stays")
+
+	status, err := TestToolsStatus(context.Background(), exe)
+	require.NoError(t, err)
+	for _, s := range status {
+		assert.Equal(t, "ACME.Test", s.Role, s.ID)
+	}
+	assert.Equal(t, testtools.HarnessRoleParameter, status[0].RoleParameter)
+	assert.Equal(t, testtools.StubRoleParameter, status[1].RoleParameter)
+
+	m.Artifacts[testtools.StubID].ConfigUpdateStatus = http.StatusInternalServerError
+	res, err = InstallTestTools(context.Background(), exe, TestToolsOptions{Role: "ACME.Other", Deploy: true, DeployOptions: fastDeploy})
+	assert.Equal(t, exitcode.Partial, output.ExitCode(err))
+	for _, a := range res.Artifacts {
+		if a.ID == testtools.StubID {
+			assert.Contains(t, a.Error, "setting "+testtools.StubRoleParameter)
+			assert.Nil(t, a.Deploy, "not deployed with the old role")
+		} else {
+			assert.Equal(t, "ACME.Other", a.Role)
+		}
+	}
 }
 
 func TestStubResponseValidation(t *testing.T) {

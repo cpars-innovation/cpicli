@@ -17,17 +17,20 @@ func TestTestToolsCommands(t *testing.T) {
 	mock := cpitest.NewTenant(t, nil)
 	mock.Live, mock.FilterMessageLogs = true, true
 
-	_, _, err := runCLI(t, mock, "test", "tools", "install", "--deploy", "--delay-length", "0", "--max-check-limit", "5")
+	_, _, err := runCLI(t, mock, "test", "tools", "install", "--deploy", "--role", "ACME.Test", "--delay-length", "0", "--max-check-limit", "5")
 	require.NoError(t, err)
 	require.Len(t, mock.Packages, 1)
 	assert.Equal(t, testtools.PackageID, mock.Packages[0].ID)
-	for _, id := range []string{testtools.HarnessID, testtools.StubID} {
-		a := mock.Artifacts[id]
-		require.NotNil(t, a, id)
-		require.NotNil(t, a.Runtime, id)
-		assert.Equal(t, "STARTED", a.Runtime.Status, id)
-		assert.Equal(t, "1.0.0", a.Runtime.Version, id)
+	for _, ta := range testtools.Artifacts() {
+		a := mock.Artifacts[ta.ID]
+		require.NotNil(t, a, ta.ID)
+		require.NotNil(t, a.Runtime, ta.ID)
+		assert.Equal(t, "STARTED", a.Runtime.Status, ta.ID)
+		assert.Equal(t, ta.Version, a.Runtime.Version, ta.ID)
+		assert.Equal(t, "ACME.Test", a.Parameters[ta.RoleParameter], ta.ID)
 	}
+	_, _, err = runCLI(t, mock, "test", "tools", "install", "--role", "not a role")
+	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
 
 	_, _, err = runCLI(t, mock, "test", "tools", "status")
 	require.NoError(t, err)

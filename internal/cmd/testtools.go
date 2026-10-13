@@ -38,13 +38,20 @@ func NewTestToolsCommand() *cobra.Command {
                        ` + testtools.StubAttachment + `) and answers per rule from the Partner Directory
                        (PID ` + testtools.StubPID + `, see 'test stub set')
 
+Both HTTPS senders require a user role (default ` + testtools.DefaultRole + `). The harness
+reaches any ProcessDirect address, so on a shared tenant give it a role of its
+own with --role (a custom role defined in the tenant's role collections); it is
+set as the parameters ` + testtools.HarnessRoleParameter + ` and ` + testtools.StubRoleParameter + ` before the
+deploy. Without --role the configured role stays.
+
 Existing artifacts are updated to the version of this cpictl (versioning
 manifest); a running one keeps running until it is deployed again. Install it on
 development tenants only and never transport the package. On a tenant whose
 tier is prod it is refused unless --allow-production.`,
 		Example: `  cpictl test tools install --deploy
   cpictl test tools install --only stub --deploy
-  cpictl test tools install --package MyTestTooling`,
+  cpictl test tools install --package MyTestTooling
+  cpictl test tools install --role ACME.CpictlTest --deploy`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := ops.GuardProduction(config.GetString(cmd, "tier"), config.GetBool(cmd, "allow-production"), "installing test tooling"); err != nil {
@@ -55,6 +62,7 @@ tier is prod it is refused unless --allow-production.`,
 			checks, _ := cmd.Flags().GetInt("max-check-limit")
 			res, err := ops.InstallTestTools(cmd.Context(), tenantExecuter(cmd), ops.TestToolsOptions{
 				PackageID: config.GetString(cmd, "package"), Only: config.GetString(cmd, "only"), Deploy: deploy,
+				Role:          config.GetString(cmd, "role"),
 				DeployOptions: ops.Options{Interval: time.Duration(delay) * time.Second, MaxChecks: checks},
 			})
 			if res != nil {
@@ -77,6 +85,7 @@ tier is prod it is refused unless --allow-production.`,
 	install.Flags().String("package", testtools.PackageID, "Package of the test tooling (letters and digits only; created when missing)")
 	install.Flags().String("only", "", "Install only one tool: harness or stub (default both)")
 	install.Flags().Bool("deploy", false, "Deploy the artifacts and wait for them")
+	install.Flags().String("role", "", "User role a runtime client needs to call the tools (default: keep the configured one, "+testtools.DefaultRole+" on a first install)")
 	install.Flags().Int("delay-length", defaultDeployDelaySeconds, "Seconds between deployment status checks")
 	install.Flags().Int("max-check-limit", defaultDeployChecks, "Deployment status checks per artifact")
 
@@ -107,6 +116,9 @@ receiver stub, the base URL to give receivers of flows under test
 					state = "installed " + s.DesigntimeVersion + ", not deployed"
 				}
 				log.Info().Msgf("%-20s %s", s.ID, state)
+				if s.Role != "" {
+					log.Info().Msgf("%-20s role %s", "", s.Role)
+				}
 				if s.StubURL != "" {
 					log.Info().Msgf("%-20s stub URL %s/<rule>/...", "", s.StubURL)
 				}

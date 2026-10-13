@@ -38,14 +38,16 @@ func TestTestToolingTools(t *testing.T) {
 	mock.Live, mock.FilterMessageLogs = true, true
 	cfg := Config{Exe: mock.Executer(), PollInterval: time.Millisecond, MaxChecks: 5}
 
-	res, err := callTool(t, toolByName(t, cfg, "install_test_tools"), map[string]any{"deploy": true})
+	res, err := callTool(t, toolByName(t, cfg, "install_test_tools"), map[string]any{"deploy": true, "role": "ACME.Test"})
 	require.NoError(t, err)
 	install := res.(*ops.TestToolsInstallResult)
 	require.Len(t, install.Artifacts, 2)
 	for _, a := range install.Artifacts {
 		require.NotNil(t, a.Deploy, a.ID)
 		assert.Equal(t, ops.StatusDeployed, a.Deploy.Status, a.ID)
+		assert.Equal(t, "ACME.Test", a.Role, a.ID)
 	}
+	assert.Equal(t, "ACME.Test", mock.Artifacts[testtools.HarnessID].Parameters[testtools.HarnessRoleParameter])
 
 	set := toolByName(t, cfg, "set_stub_response")
 	_, err = callTool(t, set, map[string]any{"rule": "erp", "status": 503, "body": "busy", "content_type": "text/plain"})

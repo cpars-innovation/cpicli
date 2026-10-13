@@ -31,7 +31,8 @@ install it on the development tenant (ask first): `install_test_tools` with `dep
 (HTTPS sender `/cpictl/test` -> Request Reply -> ProcessDirect receiver
 `${header.CpictlTargetAddress}`) and the receiver stub into the test tooling package
 `CPICTLTesting`, which is never transported. Do not build the harness by hand. It is refused on
-a production tier.
+a production tier. On a shared tenant, ask which user role should protect the tooling and pass it
+as `role` (the runtime credentials must have it); without `role` the configured one stays.
 
 ### Receiver stub (simulated receivers)
 

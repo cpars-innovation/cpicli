@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
@@ -23,6 +24,12 @@ type TestToolsOptions struct {
 	Only string
 	// Deploy deploys the artifacts after the upload and waits for them.
 	Deploy bool
+	// Role is the user role a runtime client needs to call the tools (their
+	// HTTPS senders' externalised userRole, testtools.HarnessRoleParameter
+	// and StubRoleParameter), set after the upload and before the deploy.
+	// Empty: the configured role stays (testtools.DefaultRole on a first
+	// install).
+	Role string
 	// DeployOptions poll the deployment (interval, checks, progress).
 	DeployOptions Options
 }
@@ -34,8 +41,10 @@ type TestToolResult struct {
 	// Version is the version this cpictl ships.
 	Version string        `json:"version"`
 	Upload  *UploadResult `json:"upload,omitempty"`
-	Deploy  *Result       `json:"deploy,omitempty"`
-	Error   string        `json:"error,omitempty"`
+	// Role is the role the tool is configured with after the install.
+	Role   string  `json:"role,omitempty"`
+	Deploy *Result `json:"deploy,omitempty"`
+	Error  string  `json:"error,omitempty"`
 }
 
 // TestToolsInstallResult is the outcome of InstallTestTools.
@@ -55,6 +64,9 @@ func InstallTestTools(ctx context.Context, exe *httpclnt.HTTPExecuter, opts Test
 	if err != nil {
 		return nil, output.Usage(err)
 	}
+	if opts.Role != "" && !reRole.MatchString(opts.Role) {
+		return nil, output.Usagef("invalid role %q (letters, digits, '.', '_', '-')", opts.Role)
+	}
 	pkgID := cmp.Or(opts.PackageID, testtools.PackageID)
 	pkg, err := CreatePackage(exe, PackageRequest{ID: pkgID, Name: testtools.PackageName, ShortText: testtools.PackageShortText,
 		Description: "Test harness (" + testtools.HarnessID + ") and receiver stub (" + testtools.StubID + ") installed by cpictl test tools install. Development tenants only; do not transport."})
@@ -68,6 +80,19 @@ func InstallTestTools(ctx context.Context, exe *httpclnt.HTTPExecuter, opts Test
 		r := TestToolResult{ID: a.ID, Tool: a.Tool, Version: a.Version}
 		up, err := uploadTestTool(exe, a.ID, pkgID)
 		r.Upload = up
+		// a tenant keeps configured values across uploads: without
+		// opts.Role the role configured before stays
+		switch {
+		case err != nil:
+		case opts.Role != "":
+			if err = cpi.NewConfiguration(exe).Update(a.ID, "active", a.RoleParameter, opts.Role); err != nil {
+				err = fmt.Errorf("setting %s: %w", a.RoleParameter, err)
+			} else {
+				r.Role = opts.Role
+			}
+		default:
+			r.Role, _ = configuredRole(exe, a) // informational
+		}
 		if err != nil {
 			r.Error = err.Error()
 			failed++
@@ -92,6 +117,27 @@ func InstallTestTools(ctx context.Context, exe *httpclnt.HTTPExecuter, opts Test
 		}
 	}
 	return res, batchError(failed, len(arts))
+}
+
+var reRole = regexp.MustCompile(`^[A-Za-z0-9_.\-]+$`)
+
+// configuredRole is the role parameter of an installed tool, "" when it is
+// not installed or has no such parameter.
+func configuredRole(exe *httpclnt.HTTPExecuter, a testtools.Artifact) (string, error) {
+	_, exists, err := NewTenant(exe).DesigntimeVersion("Integration", a.ID)
+	if err != nil || !exists {
+		return "", err
+	}
+	params, err := GetConfiguration(exe, a.ID, "")
+	if err != nil {
+		return "", err
+	}
+	for _, p := range params {
+		if p.Key == a.RoleParameter {
+			return p.Value, nil
+		}
+	}
+	return "", nil
 }
 
 // batchError is the error of a batch: partial when some items failed,
@@ -132,6 +178,12 @@ type TestToolStatus struct {
 	RuntimeStatus     string `json:"runtimeStatus,omitempty"`
 	// UpToDate: the running version is the one this cpictl ships.
 	UpToDate bool `json:"upToDate"`
+	// Role is the configured user role of the HTTPS sender (parameter
+	// RoleParameter); empty when the installed version has no such
+	// parameter (cpictl before 0.14: ESBMessaging.send, fixed). A deployed
+	// tool uses the role it was deployed with.
+	Role          string `json:"role,omitempty"`
+	RoleParameter string `json:"roleParameter"`
 	// Endpoints are the entry point URLs from ServiceEndpoints.
 	Endpoints []string `json:"endpoints,omitempty"`
 	// StubURL is the stub's base URL for receivers: append /<rule>/...
@@ -145,12 +197,17 @@ func TestToolsStatus(ctx context.Context, exe *httpclnt.HTTPExecuter) ([]TestToo
 	tenant := NewTenant(exe)
 	out := []TestToolStatus{}
 	for _, a := range testtools.Artifacts() {
-		s := TestToolStatus{ID: a.ID, Tool: a.Tool, Version: a.Version}
+		s := TestToolStatus{ID: a.ID, Tool: a.Tool, Version: a.Version, RoleParameter: a.RoleParameter}
 		v, exists, err := tenant.DesigntimeVersion("Integration", a.ID)
 		if err != nil {
 			return nil, err
 		}
 		s.Installed, s.DesigntimeVersion = exists, v
+		if exists {
+			if s.Role, err = configuredRole(exe, a); err != nil {
+				return nil, err
+			}
+		}
 		rt, err := tenant.RuntimeArtifact(a.ID)
 		if err != nil {
 			return nil, err

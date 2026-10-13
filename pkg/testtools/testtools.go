@@ -60,6 +60,13 @@ const (
 	StubPathHeader = "CpictlStubPath"
 	// StubMaxBody is the most of a request body the stub records (characters).
 	StubMaxBody = 64 * 1024
+
+	// HarnessRoleParameter and StubRoleParameter are the externalised user
+	// role of each tool's HTTPS sender: a runtime client needs this role
+	// to call the tool. DefaultRole is their value in parameters.prop.
+	HarnessRoleParameter = "CPICTL_Harness_Role"
+	StubRoleParameter    = "CPICTL_Stub_Role"
+	DefaultRole          = "ESBMessaging.send"
 )
 
 // Tool names for Only.
@@ -74,13 +81,16 @@ type Artifact struct {
 	Tool    string `json:"tool"` // harness or stub
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// RoleParameter is the externalised user role of the HTTPS sender.
+	RoleParameter string `json:"roleParameter"`
 }
 
 var reManifest = regexp.MustCompile(`(?m)^(Bundle-Name|Bundle-Version): *(.+?)\r?$`)
 
 // Artifacts returns the embedded flows: the harness, then the stub.
 func Artifacts() []Artifact {
-	out := []Artifact{{ID: HarnessID, Tool: ToolHarness}, {ID: StubID, Tool: ToolStub}}
+	out := []Artifact{{ID: HarnessID, Tool: ToolHarness, RoleParameter: HarnessRoleParameter},
+		{ID: StubID, Tool: ToolStub, RoleParameter: StubRoleParameter}}
 	for i := range out {
 		mf, err := content.ReadFile("artifacts/" + out[i].ID + "/META-INF/MANIFEST.MF")
 		if err != nil {

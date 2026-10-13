@@ -25,6 +25,7 @@ func testToolingTools(cfg Config) []Tool {
 				"package_id":            str("Package of the test tooling, default " + testtools.PackageID + " (letters and digits only)"),
 				"only":                  enum("Install only one tool (default both)", testtools.ToolHarness, testtools.ToolStub),
 				"deploy":                boolean("Deploy the artifacts and wait for them (default false)"),
+				"role":                  str("User role a runtime client needs to call the tools (their HTTPS senders' externalised role, set before the deploy). Default: keep the configured one (" + testtools.DefaultRole + " on a first install). A tenant-specific role keeps arbitrary ESBMessaging.send clients off the harness"),
 				"poll_interval_seconds": integer("Seconds between deployment status checks"),
 				"max_checks":            integer("Maximum number of status checks per artifact"),
 			}),
@@ -34,6 +35,7 @@ func testToolingTools(cfg Config) []Tool {
 					PackageID    string `json:"package_id"`
 					Only         string `json:"only"`
 					Deploy       bool   `json:"deploy"`
+					Role         string `json:"role"`
 					PollInterval *int   `json:"poll_interval_seconds"`
 					MaxChecks    *int   `json:"max_checks"`
 				}
@@ -45,7 +47,7 @@ func testToolingTools(cfg Config) []Tool {
 				}
 				opts := pollOptions(cfg, a.PollInterval, a.MaxChecks)
 				opts.Progress = progressFrom(ctx)
-				res, err := ops.InstallTestTools(ctx, cfg.Exe, ops.TestToolsOptions{PackageID: a.PackageID, Only: a.Only, Deploy: a.Deploy, DeployOptions: opts})
+				res, err := ops.InstallTestTools(ctx, cfg.Exe, ops.TestToolsOptions{PackageID: a.PackageID, Only: a.Only, Deploy: a.Deploy, Role: a.Role, DeployOptions: opts})
 				if res == nil {
 					return nil, err
 				}

@@ -20,8 +20,8 @@ import (
 func TestArtifacts(t *testing.T) {
 	arts := testtools.Artifacts()
 	require.Len(t, arts, 2)
-	assert.Equal(t, testtools.Artifact{ID: testtools.HarnessID, Tool: testtools.ToolHarness, Name: "cpictl test harness", Version: "1.0.0"}, arts[0])
-	assert.Equal(t, testtools.Artifact{ID: testtools.StubID, Tool: testtools.ToolStub, Name: "cpictl receiver stub", Version: "1.0.0"}, arts[1])
+	assert.Equal(t, testtools.Artifact{ID: testtools.HarnessID, Tool: testtools.ToolHarness, Name: "cpictl test harness", Version: "1.1.0", RoleParameter: testtools.HarnessRoleParameter}, arts[0])
+	assert.Equal(t, testtools.Artifact{ID: testtools.StubID, Tool: testtools.ToolStub, Name: "cpictl receiver stub", Version: "1.1.0", RoleParameter: testtools.StubRoleParameter}, arts[1])
 
 	only, err := testtools.Select("stub")
 	require.NoError(t, err)
@@ -57,6 +57,12 @@ func TestEmbeddedArtifactsAreValid(t *testing.T) {
 		parsed, err := iflow.Parse([]byte(model))
 		require.NoError(t, err, a.ID)
 		assert.NotEmpty(t, parsed.Adapters, a.ID)
+		// the sender's role is externalised, with the default value and a
+		// propdef entry (the Web UI's Configure dialog)
+		assert.Contains(t, model, "<key>userRole</key><value>{{"+a.RoleParameter+"}}</value>", a.ID)
+		assert.Contains(t, files["src/main/resources/parameters.prop"], a.RoleParameter+"="+testtools.DefaultRole, a.ID)
+		assert.Contains(t, files["src/main/resources/parameters.propdef"], "<name>"+a.RoleParameter+"</name>", a.ID)
+		assert.Contains(t, files["src/main/resources/parameters.propdef"], `param_key="`+a.RoleParameter+`"`, a.ID)
 
 		dir := t.TempDir()
 		require.NoError(t, testtools.WriteDir(a.ID, dir))

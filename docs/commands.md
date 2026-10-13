@@ -3539,6 +3539,12 @@ Upload the test tooling that ships with cpictl into a package of its own
                        cpictl-stub-request) and answers per rule from the Partner Directory
                        (PID CPICTL_Stub, see 'test stub set')
 
+Both HTTPS senders require a user role (default ESBMessaging.send). The harness
+reaches any ProcessDirect address, so on a shared tenant give it a role of its
+own with --role (a custom role defined in the tenant's role collections); it is
+set as the parameters CPICTL_Harness_Role and CPICTL_Stub_Role before the
+deploy. Without --role the configured role stays.
+
 Existing artifacts are updated to the version of this cpictl (versioning
 manifest); a running one keeps running until it is deployed again. Install it on
 development tenants only and never transport the package. On a tenant whose
@@ -3555,6 +3561,7 @@ tier is prod it is refused unless --allow-production.
       --max-check-limit int   Deployment status checks per artifact (default 30)
       --only string           Install only one tool: harness or stub (default both)
       --package string        Package of the test tooling (letters and digits only; created when missing) (default "CPICTLTesting")
+      --role string           User role a runtime client needs to call the tools (default: keep the configured one, ESBMessaging.send on a first install)
 ```
 
 **Examples:**
@@ -3563,6 +3570,7 @@ tier is prod it is refused unless --allow-production.
   cpictl test tools install --deploy
   cpictl test tools install --only stub --deploy
   cpictl test tools install --package MyTestTooling
+  cpictl test tools install --role ACME.CpictlTest --deploy
 ```
 
 ## test tools status

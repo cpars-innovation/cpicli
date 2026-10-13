@@ -278,9 +278,23 @@ cpictl test tools status                  # installed, deployed, version, endpoi
   and digits only) and creates or updates both flows (`--only harness|stub` for one). The
   versions are the ones this cpictl ships (versioning manifest); a running flow keeps running
   until it is deployed again: `--deploy` deploys and waits. Never transport the package.
-- Both HTTPS senders use the user role `ESBMessaging.send` and CSRF protection off. *Allowed
+- Both HTTPS senders have CSRF protection off and require a user role, externalised as the
+  parameters `CPICTL_Harness_Role` and `CPICTL_Stub_Role` (default `ESBMessaging.send`). *Allowed
   Header(s)*: the harness passes `CpictlTargetAddress`, `traceparent` and `X-Test-*`; the stub
   takes every header (`*`) so that it can record what the flow under test sent.
+- **Role.** The harness calls any ProcessDirect address it is given, so with the default role
+  every client that may send messages to the tenant can reach every ProcessDirect flow through it.
+  On a shared development tenant, give the tooling a role of its own:
+
+  ```bash
+  cpictl test tools install --role ACME.CpictlTest --deploy
+  ```
+
+  `--role` (MCP `role`) sets both parameters after the upload and before the deploy; without it
+  the configured role stays, and `test tools status` shows it. The role must exist on the tenant
+  (Monitor > Manage Security > User Roles), and the runtime credentials cpictl sends with (the
+  `runtime` service key, plan **integration-flow**) must come from a service instance that has it
+  (instance parameter `"roles": ["ACME.CpictlTest"]`). Clients without the role get HTTP 403.
 - On a tenant whose tier is prod, `test tools install` and `test stub set` (MCP
   `install_test_tools`, `set_stub_response`) are refused unless `--allow-production`.
 
