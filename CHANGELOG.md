@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.11.0
+
 - Script collections as documented, tested libraries. New lint rules: `collection-script-doc` (a
   public function of a script collection without a doc comment), `collection-script-tests` (a
   function no test calls; tests in `tests/scripts/<package>/<collection>/`, outside the artifact
