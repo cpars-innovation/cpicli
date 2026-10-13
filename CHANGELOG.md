@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.13.0
+
 - Test runs: `config.yaml` can set the parameters of other flows (`flows:`), for receivers in the
   flows a case's flow calls (ProcessDirect, JMS); a case that expects a failed message
   (`message_status: FAILED`, ...) no longer needs `http_status`. End-to-end test of runner, stub
