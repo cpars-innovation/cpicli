@@ -5,6 +5,22 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- OData and IDoc in discovery, the graph and lint. Discovery records per OData channel (OData V2/V4,
+  SuccessFactors OData, OData senders) the version, operation, resource path and entity set, query
+  options, paging, `$batch`, the EDMX under `edmx/` and the host (`triggers[].odata`,
+  `receivers[].odata`), per IDoc channel the direction, address path, literal `sap-client` and
+  content type (`.idoc`), and per flow the IDoc types it handles (`idocTypes`, from XPaths, `IDOCTYP`
+  conditions and payloads, and mappings and schemas with the control record), each with where it
+  was found. The graph has the node types `odata_entity` (`<host>/<entity set>`) and `idoc_type`
+  and the edges `reads_odata`, `writes_odata`, `receives_idoc` and `sends_idoc`
+  ([graph.md](docs/graph.md#odata-and-idoc)). New lint rules: `odata-query-without-paging`,
+  `odata-single-calls-in-loop`, `odata-hardcoded-query`, `idoc-sap-client-literal`,
+  `idoc-no-idempotency` and `idoc-control-record-literal`. `hardcoded-endpoint` now also checks
+  OData receivers (`HCIOData`). Go: `ops.ODataChannelOf`, `ops.IDocChannelOf`,
+  `ops.ODataOperationKind`.
+- Plugin (0.3.1): the discover skill and the conventions template cover OData and IDoc; the
+  improvement catalogue has the new rules.
+
 ## 0.11.0
 
 - Script collections as documented, tested libraries. New lint rules: `collection-script-doc` (a

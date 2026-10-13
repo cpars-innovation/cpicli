@@ -39,8 +39,8 @@ type IFlowFacts struct {
 	// ProcessDirect address; may be a {{parameter}} or empty).
 	Receivers []Trigger `json:"receivers"`
 	// AddressParameters are the values in parameters.prop of the parameters
-	// used in sender and receiver addresses (the design-time values; a
-	// configured value on the tenant can differ).
+	// used in sender and receiver addresses and OData resource paths (the
+	// design-time values; a configured value on the tenant can differ).
 	AddressParameters map[string]string `json:"addressParameters,omitempty"`
 	// PDReferences are the literal Partner Directory parameters the flow
 	// reads ("PID:ID"; ":ID" when only the ID is literal).
@@ -65,8 +65,14 @@ type IFlowFacts struct {
 	// CollectionScripts are the scripts of script collections the flow's
 	// steps call.
 	CollectionScripts []CollectionScriptRef `json:"collectionScripts,omitempty"`
-	Resources         map[string]int        `json:"resources"`
-	Error             string                `json:"error,omitempty"`
+	// IDocTypes are the IDoc types the flow handles, from its mappings,
+	// schemas, conditions and payloads (not from the IDoc adapter, which
+	// does not name them).
+	IDocTypes []IDocType     `json:"idocTypes,omitempty"`
+	Resources map[string]int `json:"resources"`
+	Error     string         `json:"error,omitempty"`
+
+	idocTypes map[string]map[string]bool // type -> sources, while reading
 }
 
 // Trigger is one way a flow is started.
@@ -75,6 +81,9 @@ type Trigger struct {
 	// Address is the adapter's endpoint, path or directory as configured
 	// (may be a {{parameter}}); empty when unknown.
 	Address string `json:"address,omitempty"`
+	// OData and IDoc describe OData and IDoc channels.
+	OData *ODataChannel `json:"odata,omitempty"`
+	IDoc  *IDocChannel  `json:"idoc,omitempty"`
 }
 
 // addressKeys are adapter properties that hold the address of an endpoint,
@@ -155,7 +164,11 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 		values := PropertyValues(props)
 		f.Parameters = sortedMapKeys(values)
 		for _, t := range slices.Concat(f.Triggers, f.Receivers) {
-			for _, m := range reParameterRef.FindAllStringSubmatch(t.Address, -1) {
+			refs := t.Address
+			if t.OData != nil {
+				refs += " " + t.OData.ResourcePath
+			}
+			for _, m := range reParameterRef.FindAllStringSubmatch(refs, -1) {
 				if v, ok := values[m[1]]; ok {
 					if f.AddressParameters == nil {
 						f.AddressParameters = map[string]string{}
@@ -165,6 +178,7 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 			}
 		}
 	}
+	var edmx []string
 	_ = fs.WalkDir(fsys, ResourcesDir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
@@ -175,6 +189,14 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 			return nil
 		}
 		f.Resources[dir]++
+		if dir == "edmx" {
+			edmx = append(edmx, rel)
+		}
+		if idocTypeFiles[strings.ToLower(path.Ext(p))] {
+			if data, err := fs.ReadFile(fsys, p); err == nil {
+				f.addIDocTypes(rel, idocTypesInFile(rel, data))
+			}
+		}
 		if dir == "script" {
 			if data, err := fs.ReadFile(fsys, p); err == nil {
 				f.Scripts = append(f.Scripts, analyzeScript(path.Base(p), data))
@@ -185,6 +207,8 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 		}
 		return nil
 	})
+	f.resolveSAPChannels(edmx)
+	f.collectIDocTypes()
 	for _, l := range []*[]string{&f.ProcessDirectCalls, &f.PDReferences, &f.SenderAdapters, &f.ReceiverAdapters, &f.CredentialRefs, &f.HeadersSet, &f.PropertiesSet, &f.Components} {
 		*l = sortedUnique(*l)
 	}
@@ -220,6 +244,7 @@ func analyzeScript(name string, data []byte) ScriptFacts {
 // modelElement is a BPMN element with its ifl:property key/values.
 type modelElement struct {
 	name  string
+	label string // the element's name attribute, else its id
 	props map[string]string
 	text  strings.Builder
 }
@@ -241,9 +266,15 @@ func (f *IFlowFacts) addModel(data []byte) error {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			stack = append(stack, &modelElement{name: t.Name.Local})
+			el := &modelElement{name: t.Name.Local}
+			for _, a := range t.Attr {
+				if a.Name.Local == "name" && a.Value != "" || a.Name.Local == "id" && el.label == "" {
+					el.label = a.Value
+				}
+			}
+			stack = append(stack, el)
 		case xml.CharData:
-			if n := len(stack); n > 0 && (stack[n-1].name == "key" || stack[n-1].name == "value") {
+			if n := len(stack); n > 0 && (stack[n-1].name == "key" || stack[n-1].name == "value" || stack[n-1].name == "conditionExpression") {
 				stack[n-1].text.Write(t)
 			}
 		case xml.EndElement:
@@ -254,6 +285,8 @@ func (f *IFlowFacts) addModel(data []byte) error {
 			el := stack[n-1]
 			stack = stack[:n-1]
 			switch {
+			case el.name == "conditionExpression" && n >= 2:
+				f.addIDocTypes("condition "+stack[n-2].label, idocTypesIn(el.text.String()))
 			case (el.name == "key" || el.name == "value") && n >= 2:
 				prop := stack[n-2]
 				if prop.props == nil {
@@ -300,12 +333,13 @@ func (f *IFlowFacts) addElement(el *modelElement) {
 				break
 			}
 		}
+		t := Trigger{Adapter: adapter, Address: address, OData: ODataChannelOf(p), IDoc: IDocChannelOf(p)}
 		if p["direction"] == "Sender" {
 			f.SenderAdapters = append(f.SenderAdapters, adapter)
-			f.Triggers = append(f.Triggers, Trigger{Adapter: adapter, Address: address})
+			f.Triggers = append(f.Triggers, t)
 		} else {
 			f.ReceiverAdapters = append(f.ReceiverAdapters, adapter)
-			f.Receivers = append(f.Receivers, Trigger{Adapter: adapter, Address: address})
+			f.Receivers = append(f.Receivers, t)
 			if adapter == "ProcessDirect" && address != "" {
 				f.ProcessDirectCalls = append(f.ProcessDirectCalls, address)
 			}
@@ -319,6 +353,11 @@ func (f *IFlowFacts) addElement(el *modelElement) {
 		}
 		if strings.Contains(cname, "ErrorEventSubProcess") || strings.Contains(cname, "ExceptionSubProcess") {
 			f.ExceptionSubprocess = true
+		}
+	}
+	if el.name != "messageFlow" {
+		for _, k := range sortedMapKeys(p) {
+			f.addIDocTypes("step "+el.label, idocTypesIn(p[k]))
 		}
 	}
 	for k, v := range p {

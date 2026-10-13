@@ -49,6 +49,14 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   ProcessDirect and JMS addresses (naming of internal interfaces), `graph_neighbors` on a
   common script or header shows which flows share it, `sends_to` edges show whether flows are
   split into inbound / processing / outbound parts.
+- SAP landscapes are OData- and IDoc-centric. `discovery.json` describes OData channels
+  (`receivers[].odata`: version, operation, entity set, query options, paging, EDMX, host) and IDoc
+  channels (`idoc`: direction, path, sap-client) and lists the IDoc types each flow handles
+  (`idocTypes`, with where they were found). In the graph, `graph_search` with `types:
+  ["odata_entity"]` or `["idoc_type"]` lists them; `graph_neighbors` on an entity or IDoc type
+  shows which flows read, write, receive or send it. Describe how the tenant does it: paging,
+  `$batch`, externalised clients and hosts, idempotency for inbound IDocs (lint
+  `odata-query-without-paging`, `idoc-no-idempotency`, `idoc-sap-client-literal`).
 - `list_integration_connections`: the tenant's own view of which systems the deployed flows
   connect (sender host -> flows -> receiver host); compare it with the graph's `calls` edges and
   use the host names when you describe the landscape.
