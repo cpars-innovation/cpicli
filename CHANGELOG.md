@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.15.0
+
 - `cpictl test scripts` (Go `pkg/scripttest`): runs the Gradle build of the script collection
   tests and reports every test and every collection function with its line coverage (JaCoCo, per
   method), the test files and methods that call it and its status (passed, failed, skipped,
