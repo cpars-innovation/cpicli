@@ -24,6 +24,12 @@ agreed to, one change at a time, and say what you did. On a productive tenant ev
 - The user names an order, invoice or document number: `find_messages_by_header` with the key
   header the flows write (see `.cpi/conventions.md`, Logging, e.g. `OrderNo=4711`). One call,
   tenant-wide, newest first.
+- An IDoc number (from the backend's WE02/BD87): flows that follow
+  [sap-adapters.md](../cpi-build/sap-adapters.md) set `SAP_ApplicationID` to DOCNUM, so
+  `list_message_logs` with the application ID finds it; otherwise `find_messages_by_header` with
+  the IDoc header the conventions name. `graph_search` for the IDoc type (e.g. ORDERS05) shows which
+  flows handle it. An OData error from S/4HANA: the message log's error text carries the HTTP
+  status and the service's message; the receiver system is in the flow's receiver channel.
 - A message GUID: `get_message_log` (status, error text, `errorInformation` with the last failed
   model step, adapter attributes), `get_message_steps` (`properties: true` for step properties),
   `get_trace_tree` (the path across flows: ProcessDirect, JMS, key headers).

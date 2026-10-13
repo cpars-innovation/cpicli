@@ -34,6 +34,12 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   logging and error handling framework.
 - `get_parameters` of a few flows: how are parameters named and grouped?
 - `list_credentials`: how are credentials named (compare with `summary.credentialRefs`)?
+- OData and IDoc: `discovery.json` records per channel the OData version, operation, entity set,
+  query options and paging, and the IDoc types per flow; the graph has `odata_entity` and
+  `idoc_type` nodes. Write down in the conventions how the tenant does it: address parameters
+  (`{{S4_OData_Address}}`), paging, `$batch`, which header carries the IDoc number
+  (`SAP_ApplicationID`), idempotency and JMS decoupling for IDoc inbound, where EDMX and IDoc
+  XSDs live. Background: [sap-adapters.md](../cpi-build/sap-adapters.md).
 - Script collections are in `discovery.json` (`scriptCollections`): each script with its summary
   and functions (from their doc comments), and `iflows[].collectionScripts` says which flows call
   which function. `graph_search` with `types: ["script"]` finds them by purpose. Note collections

@@ -16,7 +16,9 @@ Look up the flow's trigger: `iflows[].triggers` in `.cpi/discovery.json` (refres
 
 | Trigger | Route |
 |---------|-------|
-| HTTPS / SOAP / OData / REST | `send_test_message` with `artifact_id` |
+| HTTPS / SOAP / REST | `send_test_message` with `artifact_id` |
+| OData sender | `send_test_message` with `artifact_id` and the OData method, entity set, key and query ([sap-adapters.md](../cpi-build/sap-adapters.md#testing)) |
+| IDoc sender | `idoc_template` for the control record, add the data segments, then `send_test_message` with `artifact_id` and `idoc`; also send the same DOCNUM twice (idempotency) |
 | ProcessDirect | `send_test_message` with `artifact_id` = the flow and `process_direct_address` = its address, through the test harness |
 | Timer, run once | `deploy`, then `list_message_logs` (artifact_id, since = deploy time, wait_seconds) |
 | Timer scheduled, SFTP, mail, JMS, ... | the test entry (below), or ask the user to provide the input and observe with `list_message_logs` |

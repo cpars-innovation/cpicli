@@ -44,6 +44,9 @@ Read [iflow-structure.md](iflow-structure.md) before editing a model for the fir
      errors, how to call it) and a test in `tests/scripts/<package>/<collection>/`; see
      [script-tests.md](script-tests.md). lint checks both (`collection-script-doc`,
      `collection-script-tests`, `collection-script-coverage`).
+   - OData or IDoc channels (S/4HANA, SuccessFactors, backend IDocs): read
+     [sap-adapters.md](sap-adapters.md) first: adapter properties, paging, CSRF, `$batch`, EDMX and
+     IDoc schemas, the control record, `SAP_ApplicationID` = IDoc number, idempotency.
 
 ## The loop
 
