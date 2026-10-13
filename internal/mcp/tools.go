@@ -1225,7 +1225,8 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"This triggers real processing, including calls to receivers: use test data on a development tenant. On failure: get_message_steps with the message GUID.",
 			InputSchema: object(props{
 				"artifact_id":  str("Integration flow ID (deployed)"),
-				"url":          str("Endpoint URL from list_service_endpoints; only needed when the flow has several endpoints"),
+				"url":          str("Endpoint URL from list_service_endpoints (or a URL below it: sub-path, query); only needed when the flow has several endpoints"),
+				"path":         str("Sub-path and query appended to the flow's endpoint, for senders that route on the path (e.g. \"test\" sends to .../cxf/out/test)"),
 				"method":       enum(`HTTP method, default "POST"`, "POST", "PUT", "PATCH", "GET", "DELETE"),
 				"body":         str("Message body (text)"),
 				"content_type": str("Content-Type of the body, e.g. application/xml"),
@@ -1249,6 +1250,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				var a struct {
 					ArtifactID  string            `json:"artifact_id"`
 					URL         string            `json:"url"`
+					Path        string            `json:"path"`
 					Method      string            `json:"method"`
 					Body        string            `json:"body"`
 					ContentType string            `json:"content_type"`
@@ -1277,7 +1279,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					return nil, output.Usagef("sending test messages is not configured for this server")
 				}
 				msg := ops.TestMessage{
-					ArtifactID: a.ArtifactID, URL: a.URL, Method: a.Method, Body: []byte(a.Body), ContentType: a.ContentType,
+					ArtifactID: a.ArtifactID, URL: a.URL, Path: a.Path, Method: a.Method, Body: []byte(a.Body), ContentType: a.ContentType,
 					Headers: a.Headers, MaxBytes: a.MaxBytes, Wait: time.Duration(a.WaitSeconds) * time.Second, PollInterval: cfg.LogPollInterval,
 					ProcessDirectAddress: a.Address, Harness: a.Harness, NoTrace: a.Trace != nil && !*a.Trace,
 					Progress: progressFrom(ctx),

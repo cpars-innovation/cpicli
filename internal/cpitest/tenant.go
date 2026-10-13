@@ -749,25 +749,33 @@ func writeFixedResponse(w http.ResponseWriter, in *Inbound) {
 }
 
 // inboundFor finds the runtime endpoint of a path: an exact match, or the
-// OData service whose root the path continues (rest: the part after the
-// service root, e.g. /SalesOrders('1')).
+// endpoint whose path the request continues (rest: the part after it):
+// an OData service root (e.g. /SalesOrders('1')), a SOAP or IDoc sender
+// under /cxf/ (the rest is the CamelHttpPath flows route on) or an HTTPS
+// sender whose address ends in /* (registered as /http/x/*).
 func (m *Tenant) inboundFor(p string) (in *Inbound, rest string) {
 	if in := m.Inbound[p]; in != nil {
 		return in, ""
 	}
-	if !strings.HasPrefix(p, odataPrefix) {
-		return nil, ""
-	}
-	best := ""
+	best, bestKey := "", ""
 	for k, in := range m.Inbound {
-		if in.Kind == inboundOData && strings.HasPrefix(p, k+"/") && len(k) > len(best) {
-			best = k
+		base, wildcard := strings.CutSuffix(k, "/*")
+		switch {
+		case in.Kind == inboundOData && strings.HasPrefix(p, odataPrefix):
+		case strings.HasPrefix(k, "/cxf/"):
+		case wildcard:
+		default:
+			continue
+		}
+		base = strings.TrimSuffix(base, "/")
+		if (strings.HasPrefix(p, base+"/") || (wildcard && p == base)) && len(base) > len(best) {
+			best, bestKey = base, k
 		}
 	}
-	if best == "" {
+	if bestKey == "" {
 		return nil, ""
 	}
-	return m.Inbound[best], p[len(best):]
+	return m.Inbound[bestKey], p[len(best):]
 }
 
 var (

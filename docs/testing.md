@@ -26,6 +26,17 @@ cpictl send --artifact-id OrderIntake --body-file order.xml --content-type appli
 The runtime answers with the message GUID (`SAP_MessageProcessingLogID`), so the result has the
 HTTP status, the response and the final message log.
 
+Flows that route on the path below their address (a SOAP sender at `/out/` reads the rest as
+`CamelHttpPath`; an HTTPS sender with an address ending in `/*`) are reached with `--path`
+(MCP `path`): it is appended to the flow's endpoint. `--url` may also be a URL below a listed
+endpoint. Anything else (another host, another flow's path, `..`) is refused: a test message
+only ever goes to the flow under test.
+
+```bash
+cpictl send --artifact-id UtilitiesBase_GenericSOAP_To_AEM --path test --body-file routing-test.xml \
+  --content-type text/xml --wait 60s      # POST .../cxf/out/test
+```
+
 ## IDoc and OData senders
 
 **IDoc**: `--idoc FILE` (MCP `idoc`: the XML text) POSTs IDoc XML to the flow's IDoc sender

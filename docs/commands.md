@@ -3052,6 +3052,7 @@ says otherwise).
       --method string                       HTTP method (default POST)
       --no-trace                            Do not send a W3C traceparent header (by default one is generated unless --header traceparent=... is given; its traceId is in the result)
       --odata-method string                 OData request to the flow's OData sender: GET (default with --entity-set), POST, PUT, PATCH or DELETE
+      --path string                         Sub-path and query appended to the flow's endpoint, for senders that route on the path (e.g. test: .../cxf/out/test)
       --process-direct string               Send through the test harness flow to this ProcessDirect address (flows without an HTTP sender)
       --query string                        OData query, e.g. "$filter=Status eq 'OPEN'&$top=10"
       --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
@@ -3059,7 +3060,7 @@ says otherwise).
       --runtime-oauth-host string           OAuth token server host for runtime endpoints (default: --oauth-host)
       --runtime-password string             Password for Basic Auth on runtime endpoints
       --runtime-userid string               User ID for Basic Auth on runtime endpoints
-      --url string                          Endpoint URL, only needed when the flow has several endpoints
+      --url string                          Endpoint URL (or a URL below it), only needed when the flow has several endpoints
       --wait duration                       Wait up to this long for the message processing log (e.g. 60s)
 ```
 

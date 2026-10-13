@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `send` / `send_test_message`: `--path` (MCP `path`) appends a sub-path and query to the flow's
+  endpoint, and `--url` may be a URL below a listed endpoint, for flows that route on the path
+  (a SOAP sender at `/out/` reached as `/cxf/out/test`, HTTPS addresses ending in `/*`). Other
+  hosts, other flows' paths and `..` are still refused. The mock tenant routes such sub-paths too.
+
 - OData and IDoc in discovery, the graph and lint. Discovery records per OData channel (OData V2/V4,
   SuccessFactors OData, OData senders) the version, operation, resource path and entity set, query
   options, paging, `$batch`, the EDMX under `edmx/` and the host (`triggers[].odata`,

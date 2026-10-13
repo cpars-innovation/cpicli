@@ -111,7 +111,7 @@ says otherwise).`,
 			}
 			wait, _ := cmd.Flags().GetDuration("wait")
 			msg := ops.TestMessage{
-				ArtifactID: config.GetString(cmd, "artifact-id"), URL: config.GetString(cmd, "url"),
+				ArtifactID: config.GetString(cmd, "artifact-id"), URL: config.GetString(cmd, "url"), Path: config.GetString(cmd, "path"),
 				Method: config.GetString(cmd, "method"), Body: body, ContentType: config.GetString(cmd, "content-type"),
 				Headers: headers, Wait: wait, PollInterval: 5 * time.Second,
 				ProcessDirectAddress: config.GetString(cmd, "process-direct"), Harness: config.GetString(cmd, "harness"),
@@ -135,7 +135,8 @@ says otherwise).`,
 		},
 	}
 	c.Flags().String("artifact-id", "", "Integration flow ID (deployed)")
-	c.Flags().String("url", "", "Endpoint URL, only needed when the flow has several endpoints")
+	c.Flags().String("url", "", "Endpoint URL (or a URL below it), only needed when the flow has several endpoints")
+	c.Flags().String("path", "", "Sub-path and query appended to the flow's endpoint, for senders that route on the path (e.g. test: .../cxf/out/test)")
 	c.Flags().String("method", "", "HTTP method (default POST)")
 	c.Flags().String("body", "", "Message body")
 	c.Flags().String("body-file", "", "Read the message body from this file ('-' for stdin)")

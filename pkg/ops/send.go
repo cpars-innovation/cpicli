@@ -25,8 +25,13 @@ type EndpointExecuterFunc func(endpointURL string) (*httpclnt.HTTPExecuter, stri
 // TestMessage is a message sent to a deployed integration flow.
 type TestMessage struct {
 	ArtifactID string
-	// URL is one of the artifact's entry point URLs; empty: its only one.
-	URL         string
+	// URL is one of the artifact's entry point URLs, or a URL below one
+	// (a sub-path or a query, e.g. .../cxf/out/test for a sender that routes
+	// on the path); empty: its only one.
+	URL string
+	// Path is appended to the entry point (e.g. "test" or "/orders?x=1"):
+	// the same as URL below the endpoint, without writing the host.
+	Path        string
 	Method      string // default POST
 	Body        []byte
 	ContentType string
@@ -160,6 +165,41 @@ func endpointIs(kind, protocol, url string) bool {
 	return true
 }
 
+// belowEndpoint reports whether url is ep with a sub-path and/or a query:
+// same scheme and host, path ep's path plus "/..." (whole segments only, no
+// "..") — the same sender, so the same flow.
+func belowEndpoint(url, ep string) bool {
+	u, err1 := neturl.Parse(url)
+	e, err2 := neturl.Parse(ep)
+	if err1 != nil || err2 != nil || u.Scheme != e.Scheme || u.Host != e.Host || u.User != nil || u.Fragment != "" {
+		return false
+	}
+	if strings.Contains(u.Path, "..") || strings.Contains(u.Path, "//") {
+		return false
+	}
+	base := strings.TrimSuffix(e.Path, "/")
+	return u.Path == e.Path || u.Path == base || strings.HasPrefix(u.Path, base+"/")
+}
+
+// withPath appends a sub-path (and query) to an entry point URL.
+func withPath(ep, sub string) (string, error) {
+	if sub == "" {
+		return ep, nil
+	}
+	if strings.Contains(sub, "://") || strings.Contains(sub, "..") || strings.HasPrefix(sub, "//") {
+		return "", output.Usagef("path %q: a path below the endpoint (e.g. test or /orders?x=1)", sub)
+	}
+	path, query, _ := strings.Cut(sub, "?")
+	u := strings.TrimSuffix(ep, "/")
+	if path = strings.Trim(path, "/"); path != "" {
+		u += "/" + path
+	}
+	if query != "" {
+		u += "?" + query
+	}
+	return u, nil
+}
+
 func resolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url, kind string) (string, error) {
 	eps, err := cpi.NewContent(exe).ServiceEndpoints(artifactID)
 	if err != nil {
@@ -184,10 +224,10 @@ func resolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url, kind string) (
 	case len(urls) == 0:
 		return "", output.Usagef("integration flow %s has no endpoint: is it deployed and does it have an HTTP-based sender (HTTPS, SOAP, IDoc, OData, ...)?", artifactID)
 	case url != "":
-		if slices.Contains(urls, url) {
+		if slices.Contains(urls, url) || slices.ContainsFunc(urls, func(ep string) bool { return belowEndpoint(url, ep) }) {
 			return url, nil
 		}
-		return "", output.Usagef("%s is not an endpoint of %s (endpoints: %s)", url, artifactID, strings.Join(urls, ", "))
+		return "", output.Usagef("%s is not an endpoint of %s and not below one (endpoints: %s)", url, artifactID, strings.Join(urls, ", "))
 	case len(urls) > 1:
 		return "", output.Usagef("%s has %d endpoints, choose one with url: %s", artifactID, len(urls), strings.Join(urls, ", "))
 	}
@@ -264,6 +304,14 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	}
 	if kind == endpointOData { // the entry point is the service root
 		url = strings.TrimSuffix(strings.TrimSuffix(url, "/$metadata"), "/") + resource
+	}
+	if m.Path != "" {
+		if kind != "" || m.ProcessDirectAddress != "" {
+			return nil, output.Usagef("path is for HTTP-like senders (not with idoc, OData or process_direct_address)")
+		}
+		if url, err = withPath(url, m.Path); err != nil {
+			return nil, err
+		}
 	}
 	rtExe, path, err := newExe(url)
 	if err != nil {

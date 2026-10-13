@@ -97,6 +97,28 @@ func TestSendTestMessageFailures(t *testing.T) {
 		assert.Equal(t, exitcode.Usage, output.ExitCode(err))
 		assert.Empty(t, mock.Received)
 	})
+	t.Run("below a listed endpoint", func(t *testing.T) {
+		mock, _, newExe := endpointMock(t, &cpitest.Inbound{})
+		host, port := mock.HostPort()
+		url := fmt.Sprintf("http://%s:%d/cxf/out", host, port)
+		mock.Artifacts["Orders"].EndpointURL = url
+		mock.Inbound = map[string]*cpitest.Inbound{"/cxf/out": {}}
+		sent, err := SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Orders", URL: url + "/test?x=1"})
+		require.NoError(t, err)
+		assert.Equal(t, url+"/test?x=1", sent.URL)
+		sent, err = SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Orders", Path: "test"})
+		require.NoError(t, err)
+		assert.Equal(t, url+"/test", sent.URL)
+		assert.Contains(t, filter(mock.Requests(), "/cxf/"), "POST /cxf/out/test")
+		for _, bad := range []string{url + "x", url + "/../admin", strings.Replace(url, "/cxf/out", "/cxf/other", 1)} {
+			_, err = SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Orders", URL: bad})
+			assert.Equal(t, exitcode.Usage, output.ExitCode(err), bad)
+		}
+		for _, bad := range []string{"https://evil.example.com/x", "../admin", "//evil"} {
+			_, err = SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Orders", Path: bad})
+			assert.Equal(t, exitcode.Usage, output.ExitCode(err), bad)
+		}
+	})
 	t.Run("not deployed", func(t *testing.T) {
 		mock, _, newExe := endpointMock(t, &cpitest.Inbound{})
 		_, err := SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Unknown"})
