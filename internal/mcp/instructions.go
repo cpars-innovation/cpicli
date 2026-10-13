@@ -32,6 +32,10 @@ package) -> upload_artifact (upload_artifacts for several, in parallel) -> valid
 get_message_steps (failing step) and get_message_log / get_message_attachment /
 get_message_store_entry for payloads; for step-by-step payloads set_log_level TRACE, send again,
 get_message_trace and get_trace_message -> fix the local files and repeat.`},
+	{[]string{"test"}, `Tests: write cases as .cpi/tests/<FlowId>/<case>.yaml (request + expect, see the cpi-test skill) and run
+them with run_tests (flow, case, tags; apply_config sets the flow's config.yaml for the run and restores it);
+list_tests shows them. A failed case has its failures (expected vs actual) and diagnostics (failing step,
+error, message path); send_test_message is for exploring a single message by hand.`},
 	{[]string{"test"}, `Flows without an HTTP sender: ProcessDirect via send_test_message process_direct_address (test
 harness flow); timer, SFTP and other polling flows: see the triggers in discover_tenant and use
 list_message_logs with since and wait_seconds after triggering them. send_test_message

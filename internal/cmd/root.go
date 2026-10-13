@@ -102,6 +102,7 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewArtifactsCommand())
 	rootCmd.AddCommand(NewParamsCommand())
 	rootCmd.AddCommand(NewSendCommand())
+	rootCmd.AddCommand(NewTestCommand())
 	rootCmd.AddCommand(NewIDocCommand())
 	rootCmd.AddCommand(NewLogLevelCommand())
 	rootCmd.AddCommand(NewDiscoverCommand())

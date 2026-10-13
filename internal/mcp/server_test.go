@@ -124,7 +124,7 @@ func TestProtocol(t *testing.T) {
 		"list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key", "generate_key_pair", "upload_certificate_chain", "delete_keystore_entry",
 		"list_pgp_keys", "list_access_policies", "create_access_policy", "add_artifact_reference", "delete_access_policy", "delete_artifact_reference",
 		"list_audit_logs", "list_pd_partners", "list_alternative_partners", "create_alternative_partner", "delete_alternative_partner",
-		"list_authorized_users", "create_authorized_user", "delete_authorized_user", "graph_search", "graph_neighbors", "graph_path"}, names)
+		"list_authorized_users", "create_authorized_user", "delete_authorized_user", "graph_search", "graph_neighbors", "graph_path", "list_tests", "run_tests"}, names)
 
 	assert.Nil(t, resp["3"].Error)
 	assert.Equal(t, codeMethodNotFound, resp["4"].Error.Code)

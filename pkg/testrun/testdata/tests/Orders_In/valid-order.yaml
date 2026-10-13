@@ -1,0 +1,16 @@
+# The cpi-test skill's original format: endpoint, response_contains as a list
+description: Valid order is accepted and passed on
+tags: [smoke]
+request:
+  method: POST
+  content_type: application/xml
+  headers: { X-Test-Case: valid-order }
+  body_file: valid-order.xml
+  endpoint: ""
+  process_direct_address: ""
+expect:
+  http_status: 200
+  message_status: COMPLETED
+  response_contains: ["<OrderNo>4500017001</OrderNo>"]
+  error_contains: []
+  custom_headers: { OrderNo: "4500017001" }

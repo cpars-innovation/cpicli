@@ -266,6 +266,13 @@ from the flow's EDMX resource (`Schema Namespace` / `EntityContainer Name`, vers
 in sent messages, traffic and `/_mock/run`; its `credentialName` must exist. A failure ends the
 run at the step `Send to IDOC`.
 
+**Test harness**: an endpoint with `Inbound.Harness` set (`Tenant.Inbound["/http/cpictl/test"] =
+&Inbound{Artifact: "CPICTL_Test_Harness", Harness: true}`, live mode) behaves like the cpictl test
+harness flow: it runs the deployed flow whose ProcessDirect sender listens on the address in the
+header `CpictlTargetAddress`, logs its own message with the same correlation ID (the flow's message
+has it as predecessor) and answers with the body passed through, or 500 with the error. The demo
+landscape does not deploy a harness; the testrun tests add one.
+
 Send test messages with `cpictl send --idoc` and the OData flags ([testing.md](testing.md#idoc-and-odata-senders)):
 
 ```bash

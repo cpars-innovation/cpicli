@@ -155,7 +155,7 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 |---------|-----|-------|
 | `inspect` | understanding content | list and read packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare |
 | `build` | changing flows on DEV | read tools, `download_artifact`, `copy_iflow`, `layout_iflow`, `create_package`, `upload_artifact(s)`, `validate_artifact`, `check_guidelines`, `set_parameters`, `deploy`, `bump_versions`, `lint`, loop tools |
-| `test` | testing and diagnosing | `send_test_message`, `idoc_template`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
+| `test` | testing and diagnosing | `list_tests`, `run_tests`, `send_test_message`, `idoc_template`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, loop tools |
 | `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore, `list_audit_logs` |
 | `promote` | moving between tiers | `compare`, `transport_check`, `drift`, `config_diff`, parameters, credentials, keystore, Partner Directory dependencies and diff, runtime status |
 | `improve` | quality | `lint`, `lint_fix`, `layout_iflow`, graph, `drift`, `compare`, `bump_versions` |
@@ -215,9 +215,9 @@ leaves a tool enabled by accident.
 
 | Tool class | Tools | `--read-only` |
 |------------|-------|---------------|
-| read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools | kept |
+| read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools (`list_tests` reads local case files only) | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `idoc_template`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing (classes below) | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
+| tenant changes / processing (classes below) | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `run_tests`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
 
 For approvals, `help` also reports a finer **class** per tool (the effect `read` / `local` /
 `tenant` stays the filter criterion):
@@ -228,7 +228,7 @@ For approvals, `help` also reports a finer **class** per tool (the effect `read`
 | `local` | every local-files tool |
 | `write` | designtime content and configuration: `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `set_value_mapping`, `generate_key_pair`, `upload_certificate_chain`, `create_access_policy`, `add_artifact_reference`, `create_alternative_partner`, `create_authorized_user` |
 | `deploy` | `deploy`, `undeploy`, `pd_deploy` |
-| `process` | triggers processing: `send_test_message`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state` |
+| `process` | triggers processing: `send_test_message`, `run_tests`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state` |
 | `log` | `set_log_level` |
 | `destructive` | every `delete_*` tool and `unlock_artifact` |
 
@@ -267,6 +267,8 @@ read roles.
 | `set_parameters` | designtime | Change parameters; only changed values are written, unknown keys fail first; `dry_run` |
 | `deploy` | runtime | Deploy and wait (`artifact_type`: Integration, MessageMapping, ScriptCollection, ValueMapping); per artifact `DEPLOYED`, `SKIPPED`, `FAILED` (tenant error), `TIMEOUT`, with `designtimeVersion` / `runtimeVersion`. Refuses a designtime version older than the running one unless the designtime artifact was changed after that deployment or `allow_downgrade`; `rule` says which rule decided. `dry_run`: per artifact `deploy` true/false and the reason, nothing triggered |
 | `send_test_message` | **triggers processing** | Send a message to the flow's endpoint (or via the test harness to a ProcessDirect address); HTTP status, response, message GUID; `wait_seconds` returns the final message log. `idoc`: IDoc XML to the flow's IDoc sender (must hold an EDI_DC40 control record; `idocs` in the result lists DOCNUM, IDOCTYP, MESTYP, SNDPRN, RCVPRN). `odata_method`, `entity_set`, `key`, `query`: an OData V2 request to the flow's OData sender service. See [testing.md](testing.md) |
+| `list_tests` | | Test cases in `.cpi/tests/<FlowId>/<case>.yaml` per flow: trigger, tags, skip reasons, the keys of each flow's `config.yaml`; strict (unknown keys and invalid YAML are `usage` with file:line). `dir` (default `.cpi/tests`, inside `--root`), `flow`, `tags`. Local |
+| `run_tests` | **triggers processing** | Run the test cases against the deployed flows and check every expectation: `passed`, `failed`, `errors`, `skipped`, per case the failures (expected, actual) and, for a failed case, diagnostics (message GUID, last error, failing step, `errorInformation`, the message path's root). `flow`, `case`, `tags`, `parallel` (1-8; cases with `stub_calls` run alone), `apply_config` (set the flow's `config.yaml`, redeploy, run, restore and redeploy; keys reported, never values). `errorCategory` `failed` when a case failed. Refused on a production tier unless the server was started with `--allow-production`. See [testing.md](testing.md#test-runs) |
 | `idoc_template` | local files | IDoc XML skeleton for `send_test_message idoc`: EDI_DC40 with the standard fields (`idoc_type`, `message_type`, partners, ports, `docnum`) and a placeholder for the data segments, which you fill in; `path` also writes it inside `--root` |
 | `get_runtime_status` | | Runtime status, version, deployment time and error of given artifacts |
 | `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`) |
@@ -405,6 +407,7 @@ result:
 | `discover_tenant` | each phase (packages, runtime artifacts, artifacts per package) and each analysed flow (`analysed integration flow X (4/20)`); `total` once the flows are known |
 | `check_guidelines` | every poll of the execution status; `total` is the highest number of polls within `timeout_seconds` |
 | `send_test_message` with `wait_seconds` | every poll for the message processing log |
+| `run_tests` | each case when it is final: `Orders_In/valid-order: passed`; `total` is the number of cases |
 
 Without a token nothing is sent. `notifications/cancelled` with the request's ID cancels the
 running call (tenant requests and waits end); the call then returns an error result.
@@ -485,8 +488,10 @@ ledger and the CLI see the original values.
 2. Edit the files; `layout_iflow` after changing an `.iflw` (the server lays out the diagram, the
    agent does not place shapes); `upload_artifact`; `validate_artifact` (and `check_guidelines`).
 3. `deploy`; on `failed`, read `error` (the tenant's runtime error), fix and go back to 2.
-4. `send_test_message` with `wait_seconds` (e.g. 60): HTTP status, response and the final
-   message log in one call. (For flows without an HTTP sender: trigger them otherwise and use
+4. `run_tests` (the cases in `.cpi/tests/<FlowId>/`, written by the agent from the plan's test
+   list): every expectation checked, failures with expected and actual values and diagnostics.
+   `send_test_message` with `wait_seconds` (e.g. 60) explores a single message: HTTP status,
+   response and the final message log in one call. (For flows without an HTTP sender: trigger them otherwise and use
    `list_message_logs` with `since` and `wait_seconds`.)
 5. For a `FAILED` message the log contains `errorText`.
 6. `get_message_steps` shows the failing step (`modelStepId`, as in the `.iflw` BPMN);
@@ -507,8 +512,10 @@ For autonomous build/test/fix loops the server enforces limits the model cannot 
 2. While it is open every tenant-changing call is counted. `max_deploys` counts `deploy` and
    `pd_deploy` calls that are not dry runs (`deploy` with `dry_run: true` and `pd_deploy` without
    `dry_run: false` are free). An **iteration** is such a deploy after a failed test result
-   (`send_test_message`, `get_trace_tree` with `firstFailure`, `list_message_logs` with a FAILED
-   or ESCALATED message). Failures are fingerprinted (artifact, step, error text without IDs,
+   (`send_test_message`, `run_tests` with a failed case, `get_trace_tree` with `firstFailure`,
+   `list_message_logs` with a FAILED or ESCALATED message). A `run_tests` call counts each
+   distinct failure of its cases once, like a `send_test_message` per failure; its flows count as
+   sent to in the loop. The redeployments of `apply_config` are not counted as deploys. Failures are fingerprinted (artifact, step, error text without IDs,
    timestamps and long numbers). Only failures that **belong to the loop** count: the message
    started or ended after `loop_start`, or its artifact was uploaded, deployed or sent to in the
    loop (dry runs touch nothing). Reading older failures of other flows while diagnosing does

@@ -1,0 +1,8 @@
+description: The route flow (ProcessDirect sender) calls ERP, through the test harness
+request:
+  process_direct_address: /orders/route
+  content_type: application/xml
+  body: "<Order><OrderNo>4500017003</OrderNo></Order>"
+expect:
+  message_status: COMPLETED
+  steps_include: [Call ERP, ServiceTask_0]

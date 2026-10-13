@@ -5,6 +5,31 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Test runs. Test cases in `.cpi/tests/<FlowId>/<case>.yaml` (the cpi-test skill's format, now
+  checked strictly with file:line errors; `endpoint` is accepted as the old name of `url`) run
+  with `cpictl test run` (MCP `run_tests`) and are listed with `cpictl test list` (MCP
+  `list_tests`, local). Each case sends its message like `send` (HTTP, `path`, ProcessDirect via
+  the harness, `idoc` / `idoc_file`, `odata`), waits for the log (`wait`, default 60s) and checks
+  `http_status`, `message_status`, `response_contains`, `response_not_contains`,
+  `response_xpath`, `response_json`, `error_contains`, `custom_headers`, `steps_include`,
+  `max_duration` and `stub_calls` (calls recorded by the receiver stub `CPICTL_Test_Stub`). New
+  keys `description`, `tags`, `skip`, `order`, `flow`. A failed case lists each expectation
+  (expected, actual) and diagnostics: message GUID, last error, `errorInformation`, failing step
+  and the root of the message path. `--parallel` (cases with `stub_calls` run alone), `--junit`,
+  `--events` (one item per case). `--apply-config` (MCP `apply_config`) sets the flow's
+  `config.yaml` parameter values, redeploys, runs its cases and restores the previous values and
+  redeploys again, also on failure or cancellation (keys reported, never values); without it a
+  differing `config.yaml` is a warning. Exit codes: 0 all passed, 5 a case failed, 7 passed and
+  unrunnable cases, else the cause. Refused on a production tier unless `--allow-production`.
+  `run_tests` counts in MCP build loops like `send_test_message` (each distinct failure once).
+  Schema: [docs/test-case.schema.json](docs/test-case.schema.json); docs:
+  [testing.md](docs/testing.md#test-runs). Go: `pkg/testrun` (`Load`, `Run`, `WriteJUnit`,
+  `List`, `XPath`, `JSONPath`), `ops.StubCall` / `ops.StubCalls`.
+- Mock tenant: an inbound endpoint with `Harness` forwards to the ProcessDirect address in
+  `CpictlTargetAddress` like the test harness flow.
+- Plugin (0.3.2): the cpi-test skill writes cases (new keys, `config.yaml`, `stub_calls`) and runs
+  them with `run_tests` instead of sending each message by hand.
+
 - Production guard: a `tier` setting (profile key, `--tier`, `CPICTL_TIER`). On `prod`
   (`production`, `prd`), `send` and MCP `send_test_message` are refused unless `--allow-production`
   (for MCP: when the server is started with it; no tool argument lifts it). A project

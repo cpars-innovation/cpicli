@@ -1,0 +1,8 @@
+description: An ORDERS05 IDoc is accepted and stored by the order API
+tags: [idoc]
+request:
+  idoc_file: orders05.xml
+  wait: 30
+expect:
+  http_status: 200
+  message_status: COMPLETED

@@ -15,7 +15,160 @@ processing log. How the message gets into the flow depends on the flow's trigger
 | SFTP, FTP, mail, JMS, AMQP, Kafka (polling / queue) | Put input where the flow reads it, or a **test entry** | none, or test entry |
 
 All tests run on a development tenant and trigger real processing, including calls to
-receivers. Use synthetic data.
+receivers. Use synthetic data. Write the tests as cases and run them with `cpictl test run`
+(MCP `run_tests`), see [Test runs](#test-runs); `cpictl send` is for a single message by hand.
+
+## Test runs
+
+Test cases are YAML files, one per case, in `.cpi/tests/<FlowId>/<case>.yaml`; `cpictl test run`
+(MCP `run_tests`) sends each case's message, waits for the message processing log and checks every
+expectation. `cpictl test list` (MCP `list_tests`) shows the cases without sending anything. The
+schema is [test-case.schema.json](test-case.schema.json) (add
+`# yaml-language-server: $schema=...` at the top of a case for editor completion).
+
+```
+.cpi/tests/Orders_In/
+├── valid-order.yaml
+├── valid-order.xml        # body_file, relative to the case
+├── missing-customer.yaml
+└── config.yaml            # optional: parameter values for --apply-config
+```
+
+```yaml
+# .cpi/tests/Orders_In/valid-order.yaml
+description: Valid order is accepted and passed on
+tags: [smoke]
+order: 1                       # optional: sorts the cases of a flow (then by file name)
+# flow: Orders_In              # default: the folder name
+# skip: partner not ready      # skips the case, with the reason
+request:
+  method: POST                 # default POST
+  content_type: application/xml
+  headers: { X-Test-Case: valid-order }
+  body_file: valid-order.xml   # or body: "<Order/>"
+  # url: ...                   # one of several endpoints (old name: endpoint)
+  # path: test                 # sub-path below the flow's endpoint
+  # process_direct_address: /orders/route   # through the test harness
+  # idoc_file: orders.xml      # or idoc: "<ORDERS05>..."; to the flow's IDoc sender
+  # odata: { method: GET, entity_set: SalesOrders, key: "'4711'", query: "$top=1" }
+  wait: 60s                    # how long to wait for the message log (default 60s)
+expect:
+  http_status: 200
+  message_status: COMPLETED
+  response_contains: ["<Status>OK</Status>"]
+  response_not_contains: ["<Error>"]
+  response_xpath: { /Order/Status: OK, "//Item[@pos='1']/Qty": "2" }
+  response_json: { order.no: "4711", order.items.0.qty: 2 }
+  custom_headers: { OrderNo: "4500017001" }
+  steps_include: [Map Order, CallActivity_2]
+  max_duration: 5s
+```
+
+Keys are checked strictly: an unknown key, a wrong type or invalid YAML is a usage error with
+`file:line`. Older cases written for the cpi-test skill (`endpoint`, the list forms) load
+unchanged; `response_contains`, `response_not_contains`, `error_contains`, `steps_include` and
+`body_contains` accept a single string too.
+
+| Expectation | Holds when |
+|-------------|------------|
+| `http_status` | the endpoint answered with this status. Without `http_status` (and without `error_contains`) the status must be 2xx |
+| `message_status` | the message's final status is this one (any case); the case waits for the log |
+| `response_contains` / `response_not_contains` | the response contains / does not contain each text |
+| `response_xpath` | the first match of each path has this text (see below) |
+| `response_json` | the value at each dotted path (`a.b.0.c`: keys and array indexes) equals the expected one: numbers by value (`9.5` = `9.50`, `2` = `"2"`), objects and arrays as JSON |
+| `error_contains` | each text is in the error: the log's error text, the response of a failed call or the send error (negative cases) |
+| `custom_headers` | the message log has these custom header properties with these values |
+| `steps_include` | each name is a step's activity name or model step ID (`.iflw` element ID) in the message's steps |
+| `max_duration` | the message took at most this long (log start to end; without a log, the HTTP call) |
+| `stub_calls` | the receiver stub recorded the expected calls (below) |
+
+The case waits for the processing log (up to `wait`) when an expectation needs it:
+`message_status`, `custom_headers`, `steps_include` or `error_contains`.
+
+**XPath subset** (`response_xpath`, via the etree library): absolute paths (`/a/b/c`), descendants
+(`//name`), `*`, `.`, `..`, positions (`[1]`, `[last()]`), filters (`[@attr]`, `[@attr='v']`,
+`[child]`, `[child='v']`); a final `/@attr` returns the attribute, `/text()` the text. Names
+match in any namespace unless written with the document's prefix (`ns0:Order`). The text of an
+element includes the text of its children, trimmed. No functions or axes beyond these.
+
+### Running
+
+```bash
+cpictl test list
+cpictl test run                                    # every case under .cpi/tests
+cpictl test run --flow Orders_In --case valid-order
+cpictl test run --tag smoke --parallel 4 --junit report.xml --events -
+```
+
+Each case runs like `cpictl send` (same runtime credentials, harness and endpoint rules). A failed
+case lists every expectation that did not hold (expected and actual value) and diagnostics: the
+message GUID and status, the last error, `errorInformation` (the model step that failed last),
+the first failing step and the root of the message's path across flows (as `get_trace_tree` by
+message GUID). The text output ends with a table (case, result, HTTP status, message status, time,
+message GUID); `--output json` puts the whole result in the envelope; `--events` writes one item
+event per case when it is final; `--junit FILE` writes JUnit XML (a test suite per flow, a test
+case per case, `failure` with the messages, `error` for cases that could not run, `skipped`).
+
+Cases run one at a time; `--parallel N` (at most 32; MCP `parallel`, at most 8) runs N at once. Cases with
+`stub_calls` always run alone. A case's status is `passed`, `failed` (an expectation did not hold),
+`error` (it could not run: unknown flow, invalid request, credentials, tenant errors) or
+`skipped`. On a profile with `tier: prod` a test run is refused unless `--allow-production` (MCP:
+unless the server was started with it).
+
+| Exit code | When |
+|-----------|------|
+| 0 | every case passed or was skipped |
+| 5 (`failed`) | a case failed, or `--apply-config` could not restore a configuration |
+| 7 (`partial`) | some cases passed, others could not run, none failed |
+| 2, 3, 4, ... | no case could run: the most specific cause (auth 3, tenant HTTP 4, usage 2, failed 5, timeout 6) |
+| 2 (`usage`) | invalid case files, no matching case, `--parallel` out of range, production guard |
+
+### Test configuration (`config.yaml`)
+
+A flow's receivers usually point at real systems. `config.yaml` next to its cases holds
+externalised parameter values for the test, for example a receiver pointing at the receiver stub:
+
+```yaml
+# .cpi/tests/Orders_Route/config.yaml
+ERP_URL: https://<runtime host>/http/cpictl/stub/erp
+```
+
+With `--apply-config` (MCP `apply_config: true`) the run, per flow with a `config.yaml`: reads the
+current values, sets the differing test values, redeploys the flow and waits until it is started,
+runs the flow's cases, then sets the previous values back and redeploys again. The restore also
+runs when the cases fail or the run is cancelled (with its own context and a 15 minute limit). It
+refuses a flow that is not deployed, is in draft, or whose designtime version differs from the
+running one (a redeployment would deploy another version), and a key the flow does not have; the
+flow's cases are then errors and nothing is changed. The result's `config` lists per flow the keys
+applied and restored and the redeployments; values are never reported. Without `--apply-config` a
+`config.yaml` whose values differ from the tenant is a warning (keys only).
+
+### Receiver stub (`stub_calls`)
+
+The receiver stub flow `CPICTL_Test_Stub` (HTTPS sender `/cpictl/stub/*`) records every request
+it receives and answers by rule (the path segment after `/cpictl/stub/`). Point receivers at it
+with `config.yaml`, then assert the calls the flow made:
+
+```yaml
+expect:
+  stub_calls:
+    - rule: erp                    # the segment after /cpictl/stub/
+      method: POST
+      path_contains: orders
+      body_contains: ["<OrderNo>4711</OrderNo>"]
+      header: { Content-Type: application/xml }
+      count: 1                     # default 1; 0: no such call
+```
+
+The runner reads the calls recorded since the case started (5 seconds earlier for clock skew,
+but not before the previous stub case ended) and polls for up to 10 seconds until every matcher
+has its count. A call matches when every field that is set matches (method and header names in
+any case); exactly `count` calls must match. Cases with `stub_calls` run alone, so the calls of
+other cases do not interfere.
+
+### Go
+
+The runner is `pkg/testrun` (`Load`, `Run`, `WriteJUnit`), see [go-api.md](go-api.md#test-runs-pkgtestrun).
 
 ## Direct: HTTP-based senders
 

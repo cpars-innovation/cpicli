@@ -289,3 +289,46 @@ d, err = iflow.DiffModelsWith(a, b, iflow.DiffOptions{IgnoreGeometry: true})
   (`FileChange.Model`, `FileChange.ModelError`).
 - `iflow.Parse` now also returns `Model.Participants` (with `Element.ProcessRef`) and
   `Model.Collaboration` (the collaboration's properties).
+
+## Test runs (`pkg/testrun`)
+
+`pkg/testrun` is what `cpictl test` and the MCP tools `list_tests` / `run_tests` run
+([testing.md](testing.md#test-runs) has the case format and the rules; the case file schema is
+[test-case.schema.json](test-case.schema.json)).
+
+```go
+cases, err := testrun.Load(".cpi/tests", testrun.Filter{Flows: []string{"Orders_*"}, Tags: []string{"smoke"}})
+// strict: invalid YAML and unknown keys are usage errors "file:line: ..."; sorted by flow, order, name
+newExe := func(url string) (*httpclnt.HTTPExecuter, string, error) {
+	return cpi.NewEndpointExecuter(runtimeDetails, url) // runtime credentials (ESBMessaging.send)
+}
+res, err := testrun.Run(ctx, exe, newExe, cases, testrun.Options{
+	Parallel:    4,                                   // stub_calls cases always run alone
+	Progress:    func(c testrun.CaseResult) { ... },  // each case when final, one call at a time
+	ApplyConfig: true,                                // config.yaml: apply, redeploy, run, restore
+	Tier:        "dev",                               // production guard (ops.GuardProduction)
+	// Harness, StubCalls (default ops.StubCalls), Now, PollInterval, DeployInterval, DeployMaxChecks
+})
+if err != nil { ... }        // production guard or missing executers: nothing ran
+for _, c := range res.Cases { // Flow, Case, File, Status (passed|failed|error|skipped), DurationMs,
+	_ = c.Failures            // MessageGuid, HTTPStatus, MessageStatus, Error, ErrorCategory
+	_ = c.Diagnostics         // MessageGuid, LastError, ErrorInformation, FailedStep, TraceRoot, FirstFailure
+}
+_ = res.Config                // per flow: keys applied and restored, deploys, errors (never values)
+testrun.WriteJUnit(w, res)    // a testsuite per flow, a testcase per case
+return res.Err()              // nil, output.Failed (5), output.Partial (7) or the cause's exit code
+```
+
+- `Case` is the YAML file (`Request`, `Expect`, `Tags`, `Skip`, `Order`, `Flow`); `Name`, `File`
+  and `Config` (the flow's `config.yaml`) are set by `Load`. Cases can also be built in code;
+  `body_file` and `idoc_file` are read relative to `File`. `testrun.LoadCase(file)` reads one.
+- `Run` returns the outcome of every case in the order given; a case that could not run is
+  `StatusError` with `Error` and `ErrorCategory`, never a `Run` error.
+- `Result.Err()`: a failed case (or a configuration that could not be restored) is
+  `output.Failed`; errors next to passed cases `output.Partial`; only errors the most specific
+  cause (auth, tenant HTTP, usage, failed, timeout, error). Skipped cases count as neither.
+- `testrun.List(cases)` groups cases per flow (trigger, tags, config keys) without payloads.
+- `testrun.XPath(doc, path)` and `testrun.JSONPath(doc, path)` are the lookups of
+  `response_xpath` and `response_json`.
+- `ops.StubCalls(ctx, exe, since)` reads the receiver stub's calls (`[]ops.StubCall`); pass
+  another function as `Options.StubCalls` to test without the stub.
