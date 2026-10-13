@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.14.0
+
 - Test tooling: the user role of the harness's and the stub's HTTPS senders is externalised
   (`CPICTL_Harness_Role`, `CPICTL_Stub_Role`, default `ESBMessaging.send`). `cpictl test tools
   install --role <role>` (MCP `install_test_tools` `role`, Go `TestToolsOptions.Role`) sets it
