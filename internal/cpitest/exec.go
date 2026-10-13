@@ -173,6 +173,28 @@ func (x *executor) flowBySender(adapter, address string) (string, *Artifact) {
 	return "", nil
 }
 
+// noConsumer is the error of a ProcessDirect call nobody consumes; the mock
+// adds the addresses of the running ProcessDirect senders (a tenant does
+// not) so that a mismatch or an undeployed flow is easy to see.
+func (x *executor) noConsumer(address string) string {
+	var running []string
+	for _, id := range sortedKeys(x.m.Artifacts) {
+		a := x.m.Artifacts[id]
+		if fi := a.info(); a.running() && fi != nil {
+			for _, s := range fi.fm.Senders {
+				if s.Adapter == "ProcessDirect" {
+					running = append(running, resolve(s.Address, a.Parameters)+" ("+id+")")
+				}
+			}
+		}
+	}
+	text := fmt.Sprintf("com.sap.it.rt.adapter.processdirect.ProcessDirectException: no consumer for address %s", address)
+	if len(running) == 0 {
+		return text + " [mock: no deployed flow has a ProcessDirect sender]"
+	}
+	return text + " [mock: deployed ProcessDirect senders: " + strings.Join(running, ", ") + "]"
+}
+
 // run executes one run of flow id for msg starting at start.
 func (x *executor) run(id string, msg message, start time.Time, predecessor string, depth int) runResult {
 	a := x.m.Artifacts[id]
@@ -298,7 +320,7 @@ func (x *executor) call(ch channel, a *Artifact, msg message, t time.Time, guid 
 	case "ProcessDirect":
 		id, _ := x.flowBySender("ProcessDirect", address)
 		if id == "" || depth > 20 {
-			return t.Add(5 * time.Millisecond), fmt.Sprintf("com.sap.it.rt.adapter.processdirect.ProcessDirectException: no consumer for address %s", address)
+			return t.Add(5 * time.Millisecond), x.noConsumer(address)
 		}
 		r := x.run(id, msg, t.Add(3*time.Millisecond), guid, depth+1)
 		if r.status != "COMPLETED" {

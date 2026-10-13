@@ -3,6 +3,7 @@ package testrun
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -108,4 +109,48 @@ expect:
 	assert.Equal(t, "Orders_Route", res.Config[0].Flow)
 	assert.Equal(t, []string{"ERP_URL"}, res.Config[0].Restored)
 	assert.Equal(t, before, m.Artifacts["Orders_Route"].Parameters["ERP_URL"], "downstream receiver restored")
+}
+
+// The harness installed by InstallTestTools (not the fake of demo) routes a
+// ProcessDirect case to the flow behind the address on the mock tenant: one
+// correlation ID, a message log for both. An address nobody consumes fails
+// with the deployed ProcessDirect senders named.
+func TestRunThroughInstalledHarness(t *testing.T) {
+	m, newExe := demo(t)
+	delete(m.Artifacts, ops.DefaultHarnessID)
+	delete(m.Inbound, "/http/cpictl/test")
+	exe := m.Executer()
+	_, err := ops.InstallTestTools(context.Background(), exe, ops.TestToolsOptions{Deploy: true,
+		DeployOptions: ops.Options{Interval: time.Millisecond, MaxChecks: 5}})
+	require.NoError(t, err)
+
+	cases := []Case{
+		{Flow: "Orders_Route", Name: "routes", Request: Request{ProcessDirectAddress: "/orders/route", Body: "<Order/>"},
+			Expect: Expect{MessageStatus: "COMPLETED"}},
+		{Flow: "Orders_Route", Name: "nobody", Request: Request{ProcessDirectAddress: "/orders/nobody", Body: "<Order/>"},
+			Expect: Expect{HTTPStatus: 500, ErrorContains: StringList{"no consumer for address /orders/nobody", "/orders/route (Orders_Route)"}}},
+	}
+	res, err := Run(context.Background(), exe, newExe, cases, fast(Options{}))
+	require.NoError(t, err)
+	routed := byName(t, res, "Orders_Route", "routes")
+	assert.Equal(t, StatusPassed, routed.Status, "%+v %s", routed.Failures, routed.Error)
+	nobody := byName(t, res, "Orders_Route", "nobody")
+	assert.Equal(t, StatusPassed, nobody.Status, "%+v %s", nobody.Failures, nobody.Error)
+
+	assert.Less(t, nobody.DurationMs, int64(5000), "no wait for a flow that never ran")
+	// the routed case's flow log has the harness log's correlation ID
+	byGuid := map[string]string{}
+	for _, l := range m.MessageLogs() {
+		byGuid[l.Guid] = l.CorrelationID + "|" + l.Artifact
+	}
+	require.NotEmpty(t, routed.MessageGuid)
+	assert.Contains(t, byGuid[routed.MessageGuid], "|Orders_Route")
+	corr, _, _ := strings.Cut(byGuid[routed.MessageGuid], "|")
+	found := false
+	for _, v := range byGuid {
+		if v == corr+"|"+ops.DefaultHarnessID {
+			found = true
+		}
+	}
+	assert.True(t, found, "a harness log with correlation ID %s", corr)
 }

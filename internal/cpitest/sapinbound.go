@@ -162,7 +162,7 @@ func (m *Tenant) handleHarness(w http.ResponseWriter, r *http.Request, in *Inbou
 	}
 	end, errText := start.Add(20*time.Millisecond), ""
 	if id, _ := x.flowBySender("ProcessDirect", address); id == "" {
-		errText = fmt.Sprintf("com.sap.it.rt.adapter.processdirect.ProcessDirectException: no consumer for address %s", address)
+		errText = x.noConsumer(address)
 	} else {
 		res := x.run(id, msg, start.Add(3*time.Millisecond), h.Guid, 1)
 		end, errText = res.end.Add(2*time.Millisecond), res.errorText

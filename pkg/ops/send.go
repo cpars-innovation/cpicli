@@ -502,6 +502,15 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 		return nil, output.Failed(fmt.Errorf("the harness returned no message GUID or correlation ID, cannot find the message of %s", s.ArtifactID))
 	}
 	s.CorrelationID = correlation
+	// the harness failed because no flow consumes the address: the flow
+	// never ran, there is no log of it to wait for
+	if s.HTTPStatus >= 300 && s.HarnessMessageGuid != "" {
+		if h, err := GetMessageLog(exe, s.HarnessMessageGuid, 0); err == nil && h != nil && h.Status == "FAILED" &&
+			strings.Contains(strings.ToLower(h.ErrorText+" "+s.Response.Text), "no consumer") {
+			return h, output.Failed(fmt.Errorf("the test harness could not reach %s: no deployed flow consumes ProcessDirect address %s (harness message %s: %s)",
+				s.ArtifactID, s.ProcessDirectAddress, s.HarnessMessageGuid, firstLine(h.ErrorText)))
+		}
+	}
 	q := MessageLogQuery{ArtifactID: s.ArtifactID, CorrelationID: correlation, Top: 1}
 	list, err := waitForMessageLogs(ctx, exe, q, time.Until(deadline), interval, prog)
 	if err != nil {
@@ -509,4 +518,10 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 	}
 	s.MessageGuid = list.Logs[0].MessageGuid
 	return GetMessageLog(exe, s.MessageGuid, 0)
+}
+
+// firstLine is the first line of a text.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(s, "\n")
+	return strings.TrimSpace(line)
 }

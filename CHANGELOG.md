@@ -5,6 +5,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Test messages through the harness: when no deployed flow consumes the ProcessDirect address,
+  `send` / `send_test_message` / test runs fail at once with that reason instead of waiting the
+  whole timeout for a flow log that cannot appear. The mock tenant's "no consumer" error lists the
+  deployed ProcessDirect senders; a regression test runs cases through the harness that
+  `InstallTestTools` installs ([#10](https://github.com/cpars-innovation/cpicli/issues/10)).
+
 - Upload compares `metainfo.prop` (and other `.prop` files) by their entries as Java reads them:
   the tenant rewrites the description with `:` escaped and a comment line, so an unchanged
   artifact was reported as changed and, with versioning manifest, refused ("content differs but
