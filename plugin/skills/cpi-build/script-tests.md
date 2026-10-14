@@ -103,9 +103,12 @@ and class names, holding only the methods the scripts call (extend them when a s
 Write them in **Java**: a Groovy class with `getProperty(String)` would replace Groovy's own
 property access. They are test code: never upload them.
 
-`tests/stubs/com/sap/gateway/ip/core/customdev/util/Message.java` (version 1 scripts; for version 2
-scripts the same class in `tests/stubs/com/sap/it/script/v2/api/` with
-`package com.sap.it.script.v2.api;`):
+Version 2 scripts (`script/v2/`, `package script.v2`) get
+`tests/stubs/com/sap/it/script/v2/api/Message.java`: `getBody(Class)`, `setBody`, `getHeaders()`,
+`setHeader`, `getProperty`, `setProperty`, and deliberately no `getHeader(...)` (version 1 only), so a
+test fails when a version 2 script calls it. Add a method only when the real 2.x API has it.
+
+`tests/stubs/com/sap/gateway/ip/core/customdev/util/Message.java` (version 1 scripts):
 
 ```java
 package com.sap.gateway.ip.core.customdev.util;

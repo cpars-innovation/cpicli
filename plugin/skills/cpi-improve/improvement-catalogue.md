@@ -50,6 +50,7 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 |------|----------|-----|------|
 | `no-exception-subprocess` | conventions require one (usually) | add the house exception subprocess (copy it from the template flow) | low |
 | `exception-subprocess-message-end` | the sender must not see success, and alerting relies on FAILED messages | end it in an Error End, or call the house error-handling local process that does | low |
+| `header-empty-vs-absent` | always: the callee takes the "set" branch for messages without a value | leave the header absent when there is no value (no row or an expression that yields null), or make the callee test for empty too | low |
 | `swallowed-exception` | always | rethrow, or handle it explicitly (set a status, log, route) | medium: errors now become visible (that is the point) |
 | `collection-script-tests` | always for collections | tests in `tests/scripts/<package>/<collection>/` calling every public function with today's inputs ([script-tests.md](../cpi-build/script-tests.md)) | none (test code, not uploaded) |
 | `collection-script-coverage` | below the minimum, or no report | more test cases for the uncovered branches (JaCoCo HTML report); run the tests before lint | none |
@@ -72,6 +73,9 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 |------|----------|-----|------|
 | `hardcoded-secret` | **always, first** | credential or secure parameter, read with the SecureStoreService; rotate the leaked value | the value is in Git history: rotate it |
 | `hardcoded-endpoint` | always | `{{parameter}}` per environment, or Partner Directory per partner | low |
+| `configure-unknown-parameter` | always | remove the key from the configure file, or externalise it in the flow | none: configure fails today |
+| `configure-missing-parameter` | the tier must not run with the design-time value | add the key with the tier's value | low |
+| `flow-without-deployment` | the flow is meant to run | add a deploy config entry (artifactId, artifactDir, type); retire the folder otherwise | low |
 | `hardcoded-url-in-script` | always | parameter or Partner Directory value passed in a property | low |
 | `odata-hardcoded-query` | the value differs per landscape or partner | `{{parameter}}` in the query options, or `${property.x}` filled from the Partner Directory | low; set the parameter in every landscape |
 | `idoc-sap-client-literal` | always | externalise host and client (`https://{{S4_Host}}/sap/bc/srt/idoc?sap-client={{S4_Client}}`) or the whole address | low; set the values per landscape before the next deploy |

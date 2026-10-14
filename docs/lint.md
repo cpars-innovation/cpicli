@@ -43,6 +43,7 @@ cpictl lint --list-rules
 | | `inline-local-process` | info | a local process called once (not looping) that is a straight line of steps | |
 | robustness | `no-exception-subprocess` | warning | an integration process without exception subprocess | |
 | | `exception-subprocess-message-end` | warning | an exception subprocess ending in a Message End with nothing in it that raises the error again (a script, a called local process with an Error or Escalation End) or sets `CamelHttpResponseCode`: the message is marked completed and the error lost | |
+| | `header-empty-vs-absent` | warning | a flow sets a header to an empty value (content modifier constant without value, `setHeader("X", "")`) and calls, through ProcessDirect, a flow that tests the header against null: an empty header is not null | |
 | | `swallowed-exception` | warning | an empty `catch` block | |
 | | `collection-script-tests` | warning | a public function of a script collection that no test in `scriptTests.dir/<package>/<collection>/` calls ([script tests](#script-collection-tests)) | |
 | | `collection-script-coverage` | warning | a script collection script below `scriptTests.minCoverage` line coverage in the JaCoCo report, not in the report, or changed after it; no report at all | |
@@ -60,6 +61,9 @@ cpictl lint --list-rules
 | | `odata-hardcoded-query` | info | literal OData query options or resource path with environment-specific values: `sap-client=<nnn>`, `CompanyCode`/`BUKRS`, `SalesOrganization`/`VKORG`, `Plant`/`WERKS`, `ControllingArea`/`KOKRS eq '<literal>'` | |
 | | `idoc-sap-client-literal` | warning | an IDoc receiver address that is partly externalised but keeps a literal host or `sap-client` (a fully literal address is `hardcoded-endpoint`, reported once) | |
 | | `idoc-control-record-literal` | info | the control record partners `EDI_DC40` `SNDPRN`, `RCVPRN`, `SNDPOR`, `RCVPOR` set to literals: in a content modifier body, an XSLT (literal result element) or a message mapping (target field from the `const` function) | |
+| | `configure-unknown-parameter` | error | a configure file (`repository.configure`, `--configure`) sets a parameter the flow does not have: configure fails | |
+| | `configure-missing-parameter` | warning | a configure file covering the flow's package sets no value for one of its parameters (or has no entry for the flow): that tier keeps the design-time value | |
+| | `flow-without-deployment` | warning | a flow in a package folder the deploy config (`repository.deployConfig`, `--deploy-config`, `orchestrator.deployConfig`) covers, without an entry of its own | |
 | hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
 | hygiene | `outdated-component` | info | a step or adapter older than the tenant offers (with a [component catalogue](components.md)), else older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
 | | `script-doc` | info | a flow's local script with no comment saying what it does (at the top or above its function) | |
@@ -105,6 +109,9 @@ scriptTests:                # paths relative to the project root (the folder hol
   dir: tests/scripts        # tests in the layout <package>/<collection>/
   coverageReport: build/reports/jacoco/test/jacocoTestReport.xml
   minCoverage: 80           # line coverage per collection script, percent
+repository:                 # offline checks against the pipeline files (relative to the project root)
+  configure: configuration/  # configure file or folder: configure-unknown-parameter, configure-missing-parameter
+  deployConfig: deploy.yml   # deploy config: flow-without-deployment (default: orchestrator.deployConfig)
 ignoreVendors: [SAP]        # default: SAP-delivered content is not checked; [] checks every vendor
 ignore:                     # findings that stay (say why in a comment)
   - artifact: Legacy_*

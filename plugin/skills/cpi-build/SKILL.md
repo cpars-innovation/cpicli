@@ -11,6 +11,10 @@ Read [iflow-structure.md](iflow-structure.md) before editing a model for the fir
 you touch, keep headers absent/empty/set exactly as before, and the model details that break the
 editor. HTTP receivers: [http-receiver.md](http-receiver.md).
 
+Do not invent APIs: a script method, adapter property, OData entity or IDoc segment you use must
+come from the tenant (an existing flow, `list_components`), the plan, the user's files or
+documentation you read in this session. Unsure? Say so and check before you build on it.
+
 ## Before you start
 
 1. Read `.cpi/conventions.md` and the plan `.cpi/plans/<FlowId>.md` if it exists. A change

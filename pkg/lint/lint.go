@@ -88,6 +88,13 @@ type Config struct {
 	// ScriptTests are where the tests of script collection scripts are and
 	// how much of them they must cover.
 	ScriptTests ScriptTestConfig `yaml:"scriptTests" json:"scriptTests"`
+	// Repository names the configure and deploy files the configure-* and
+	// flow-without-deployment rules compare the flows with (relative to
+	// the project root; empty: not checked).
+	Repository struct {
+		Configure    string `yaml:"configure" json:"configure,omitempty"`
+		DeployConfig string `yaml:"deployConfig" json:"deployConfig,omitempty"`
+	} `yaml:"repository" json:"repository"`
 	// IgnoreVendors leaves the artifacts of these package vendors out of
 	// the findings (default SAP: content SAP delivers, which customers do
 	// not edit); [] checks every vendor. Cross-flow rules still see them.
@@ -247,6 +254,12 @@ type Options struct {
 	// Components is the target tenant's component catalogue (nil: rules
 	// compare the flows with each other only).
 	Components *catalog.Catalog
+	// Configure are the configure files the flows' parameters are compared
+	// with (configure-* rules; none: not checked).
+	Configure []ConfigureFile
+	// DeployEntries are the artifact folders the deploy config lists
+	// (flow-without-deployment; nil: not checked).
+	DeployEntries map[string]bool
 }
 
 // DeploymentCopy is one ID an artifact folder is deployed as.

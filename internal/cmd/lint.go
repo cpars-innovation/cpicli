@@ -96,7 +96,8 @@ removes content modifiers that do nothing). Review the diff, raise the versions
 	c.Flags().Bool("fix", false, "Apply the fixes to the local files")
 	c.Flags().StringSlice("fix-rules", nil, "Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step; all: every fixable rule)")
 	c.Flags().Bool("dry-run", false, "With --fix: only list the changes")
-	c.Flags().String("deploy-config", "", "Deploy config for the deployment-copies rule (default: orchestrator.deployConfig)")
+	c.Flags().String("deploy-config", "", "Deploy config for the deployment-copies and flow-without-deployment rules (default: orchestrator.deployConfig, then repository.deployConfig of the rules file)")
+	c.Flags().String("configure", "", "Configure file or folder for the configure-* rules (default: repository.configure of the rules file) (config: lint.configure)")
 	c.Flags().Bool("list-rules", false, "List the rules")
 	c.Flags().String("components", ops.ComponentsFile, "Component catalogue of the target tenant, used when it exists (config: lint.components)")
 	return c
@@ -128,6 +129,13 @@ func lintOptions(cmd *cobra.Command) (lint.Options, error) {
 		return o, err
 	}
 	if o.DeploymentCopies, err = deploymentCopies(cmd, dir); err != nil {
+		return o, err
+	}
+	deployPath := config.GetString(cmd, "deploy-config")
+	if deployPath == "" {
+		deployPath = viper.GetString("orchestrator.deployConfig")
+	}
+	if err := lint.LoadRepositoryFiles(&o, config.GetStringWithFallback(cmd, "configure", "lint.configure"), deployPath); err != nil {
 		return o, err
 	}
 	return o, nil

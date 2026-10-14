@@ -123,6 +123,24 @@ requester confirms. `cpi-plan` then asks only for what is missing and writes the
   repository's `.mcp.json` with different environment variables (example: [examples/claude-code.mcp.json](examples/claude-code.mcp.json)); keep agents on the
   development tenant.
 
+## Research MCP servers (optional)
+
+Planning works better when the agent can look up SAP's own documentation instead of relying on
+memory: `cpi-plan` labels every API, service and event in a plan with its source and marks the
+rest "unverified". cpictl does not ship or need such servers; third-party ones a team has used
+next to the plugin (check their own documentation, terms and data handling before you add them):
+
+| Server | What for | Registration (`.mcp.json`) |
+|--------|----------|----------------------------|
+| `sap-docs` | SAP Help documentation, released objects, Discovery Center | `{"type": "http", "url": "https://mcp-sap-docs.marianzeis.de/mcp"}` |
+| `sap-api-hub` | APIs and events of the SAP Business Accelerator Hub | `{"command": "npx", "args": ["-y", "sap-api-hub-mcp"]}` |
+| `sap-roadmap` | SAP Road Map Explorer | `{"command": "npx", "args": ["-y", "sap-roadmap-mcp"]}` |
+| `sap-notes` | SAP Notes search | `{"command": "npx", "args": ["-y", "sap-note-search-mcp"]}` |
+
+The `npx` servers come from the `marianfoo/sap-mcp-servers` project; the API Hub, Road Map and
+Notes servers need an SAP login from the environment. They are read-only research tools: a name
+they return is evidence for a plan, a name from memory is not.
+
 ## Other MCP clients
 
 Skills and agents are a Claude Code feature. Other clients still get the server's

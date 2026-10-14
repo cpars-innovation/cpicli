@@ -82,6 +82,7 @@ var lintRules = []lintRule{
 	// robustness
 	{id: "no-exception-subprocess", group: GroupRobustness, severity: SevWarning, title: "The integration process has no exception subprocess", artifact: ruleNoExceptionSubprocess},
 	{id: "exception-subprocess-message-end", group: GroupRobustness, severity: SevWarning, title: "An exception subprocess ends in a Message End without raising the error again", artifact: ruleExceptionSubprocessMessageEnd},
+	{id: "header-empty-vs-absent", group: GroupRobustness, severity: SevWarning, title: "A flow sets a header to an empty value and calls a flow that tests it against null", cross: ruleHeaderEmptyVsAbsent},
 	{id: "swallowed-exception", group: GroupRobustness, severity: SevWarning, title: "A script catches an exception and ignores it", artifact: ruleSwallowedExceptions},
 	{id: "collection-script-tests", group: GroupRobustness, severity: SevWarning, title: "A function of a script collection is not called by any test", artifact: ruleCollectionScriptTests},
 	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
@@ -100,6 +101,9 @@ var lintRules = []lintRule{
 	{id: "odata-hardcoded-query", group: GroupConfiguration, severity: SevInfo, title: "OData query options or resource path hold environment-specific values (sap-client, company code)", artifact: ruleODataHardcodedQuery},
 	{id: "idoc-sap-client-literal", group: GroupConfiguration, severity: SevWarning, title: "An IDoc receiver address has a literal sap-client or host", artifact: ruleIDocSAPClientLiteral},
 	{id: "idoc-control-record-literal", group: GroupConfiguration, severity: SevInfo, title: "A mapping or content modifier sets IDoc control record partners (EDI_DC40) to literals", artifact: ruleIDocControlRecordLiteral},
+	{id: "configure-unknown-parameter", group: GroupConfiguration, severity: SevError, title: "A configure file sets a parameter the flow does not have (configure fails)", artifact: ruleConfigureUnknownParameter},
+	{id: "configure-missing-parameter", group: GroupConfiguration, severity: SevWarning, title: "A configure file covering the package sets no value for a parameter of the flow", artifact: ruleConfigureMissingParameter},
+	{id: "flow-without-deployment", group: GroupConfiguration, severity: SevWarning, title: "A flow in a package folder the deploy config covers has no entry of its own", artifact: ruleFlowWithoutDeployment},
 	// hygiene
 	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},
 	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than the tenant offers or other flows use", cross: ruleOutdatedComponents},

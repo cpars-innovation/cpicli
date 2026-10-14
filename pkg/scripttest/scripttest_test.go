@@ -217,6 +217,7 @@ func TestInit(t *testing.T) {
 	assert.Contains(t, res.Written, "build.gradle")
 	assert.Contains(t, res.Written, "tests/stubs/com/sap/gateway/ip/core/customdev/util/Message.java")
 	assert.Contains(t, res.Written, "tests/stubs/com/sap/it/api/ITApiFactory.java")
+	assert.Contains(t, res.Written, "tests/stubs/com/sap/it/script/v2/api/Message.java")
 	assert.Empty(t, res.Skipped)
 
 	write(t, dir, "build.gradle", "// mine\n")

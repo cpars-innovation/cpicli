@@ -5,6 +5,25 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Lint compares the flows with the pipeline files, offline: `configure-unknown-parameter` (a
+  configure file sets a key the flow lacks: configure fails), `configure-missing-parameter` (a
+  configure file covering the package has no value for a parameter) and `flow-without-deployment`
+  (a flow in a package folder the deploy config covers, without its own entry). Files from
+  `repository.configure` / `repository.deployConfig` in `.cpi/lint.yaml`, or `--configure` /
+  `--deploy-config` (also for the MCP `lint` tool through `.cpi/lint.yaml`).
+- Lint `header-empty-vs-absent`: a flow sets a header to an empty value and calls, through
+  ProcessDirect, a flow that tests it against null (an empty header is not null).
+- `cpictl test scripts init` also writes the Groovy script 2.x stand-in
+  (`com.sap.it.script.v2.api.Message`) without the version 1 `getHeader` methods, so tests of
+  `script/v2/` scripts fail on calls the 2.x API lacks.
+- `cpi-plan`: takes a decision log or architecture proposal as input, asks open decisions in
+  rounds (each question with a recommended answer, dependent ones later), and labels every API,
+  service and event with its source (tenant, SAP documentation, user, new; otherwise
+  "unverified"). `cpi-build` must not invent APIs either. docs/plugin.md lists optional
+  third-party research MCP servers (SAP documentation, API Hub, Road Map, Notes).
+- `send_test_message`: the description now says that URLs below a listed endpoint and `path` work
+  (supported since 0.12.0).
+
 - `cpictl mcp --branch-policy <file>` (optional, off by default): tools that change the tenant
   are refused (errorCategory `branch_readonly`) while a repository under `--root` is on a
   read-only branch (`readonlyBranches` patterns, a detached root checkout, a tier outside

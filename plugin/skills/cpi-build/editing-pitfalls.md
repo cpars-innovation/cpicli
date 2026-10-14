@@ -36,7 +36,9 @@ When a script or step replaces others that set headers for another flow, keep ea
 as it was: absent, empty or set. Called flows often test `!= null`; an empty string where the old
 flow left a header absent makes them take another branch (a real case: `partnerId is empty` for
 every unmapped message after a refactor). Read the consuming script (`graph_neighbors`,
-`edge_types: ["sends_to"]`) before deciding, and test the unmapped case end to end.
+`edge_types: ["sends_to"]`) before deciding, and test the unmapped case end to end. Lint
+`header-empty-vs-absent` finds the literal case (a constant without value, or `setHeader("X", "")`,
+before a ProcessDirect call to a flow that tests the header against null).
 
 ## Model details that break the editor or the runtime
 

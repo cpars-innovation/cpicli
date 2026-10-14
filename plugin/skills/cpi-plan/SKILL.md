@@ -15,6 +15,10 @@ user has agreed to. Do not touch the tenant in this phase except for read-only l
   and let the user fill it in. If the team has no `.cpi/templates/brief.md` yet, create it first
   from [brief-template.md](brief-template.md) (the team adapts its copy). Small changes and quick
   questions need no brief.
+- A decision log or an architecture proposal, if the user has one (from a design workshop or an
+  architecture review): its decisions are settled, do not ask them again; take the chosen option,
+  carry its source labels into the plan (see Provenance) and turn its open items into Open points.
+  When it contradicts conventions.md or the tenant, say so instead of picking one silently.
 - `.cpi/conventions.md` (if missing, suggest running the cpi-discover skill first; without it,
   say which choices are your assumptions).
 - The reference flow for the pattern: the **Templates** section of conventions.md. Use an
@@ -31,9 +35,17 @@ user has agreed to. Do not touch the tenant in this phase except for read-only l
 
 ## 2. Clarify
 
-Ask only what you cannot find out yourself, grouped in one message; with a brief, only for
-its empty fields marked (*) and for contradictions. IDs, names and descriptions you propose
-from the naming conventions; the user confirms them. Typical gaps:
+Find facts yourself (conventions, discovery, graph, tenant reads, the brief); ask the user only for
+decisions and for what no tool can tell. With a brief, ask only for its empty fields marked (*) and
+for contradictions. IDs, names and descriptions you propose from the naming conventions; the user
+confirms them.
+
+Work the open decisions as a tree, in rounds: a decision often depends on another (the error
+response depends on sync or async, the retry design on whether the receiver is idempotent).
+Each round, ask every question whose prerequisites are already answered, numbered, each with
+your recommended answer and why; hold back the ones that depend on an answer still open. After the
+answers, the next round. Stop when nothing is open or the user wants to stop; record what is still
+open under Open points. Typical decisions:
 
 - Trigger: who sends (system, protocol, sync/async), or a timer / polling?
 - Receiver(s): systems, protocols, authentication (which credential or certificate exists?).
@@ -41,6 +53,20 @@ from the naming conventions; the user confirms them. Typical gaps:
 - Behaviour on errors: what the sender must get back, retries, alerting.
 - Volumes and sizes, ordering, idempotency (duplicates).
 - Which receivers must not be called from tests.
+
+### Provenance
+
+Never invent an API, OData service, entity set, event, IDoc type, BAdI, SAP Note or system name.
+Each one in the plan says where it comes from:
+
+- **tenant**: an existing flow, adapter or credential (name the flow or the tool);
+- **SAP documentation**: found in this session through a documentation or API catalogue tool
+  (name it and the page or API);
+- **user**: a document, schema or sample the user gave;
+- **new**: proposed by this plan (a new flow, address, parameter or custom service).
+
+Memory can tell you where to look; it is not a source. If nothing confirms a name, write
+"unverified" next to it and add an Open point.
 
 ## 3. Write `.cpi/plans/<FlowId>.md`
 
@@ -59,6 +85,9 @@ Sender: <adapter, address/path, auth>      Receiver(s): <adapter, address, crede
 ## Reference flows                (existing flows this design copies from)
 ## Open points
 ```
+
+APIs, services, events and IDoc types in the plan carry their source (tenant, SAP documentation,
+user, new) as in Provenance above.
 
 - IDs and names must follow conventions.md; spell them out, the builder will not invent them.
 - Prefer components and scripts the tenant already uses over new ones. Every deviation from

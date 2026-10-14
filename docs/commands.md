@@ -1814,7 +1814,8 @@ removes content modifiers that do nothing). Review the diff, raise the versions
       --baseline string        Known findings; --fail-on counts only new ones (config: lint.baseline) (default ".cpi/lint-baseline.json")
       --changed                Only report artifacts changed in Git since --since (committed, uncommitted, untracked)
       --components string      Component catalogue of the target tenant, used when it exists (config: lint.components) (default ".cpi/components.json")
-      --deploy-config string   Deploy config for the deployment-copies rule (default: orchestrator.deployConfig)
+      --configure string       Configure file or folder for the configure-* rules (default: repository.configure of the rules file) (config: lint.configure)
+      --deploy-config string   Deploy config for the deployment-copies and flow-without-deployment rules (default: orchestrator.deployConfig, then repository.deployConfig of the rules file)
       --dir string             Content tree (default: packages if it exists, else the current directory) (config: lint.dir)
       --dry-run                With --fix: only list the changes
       --fail-on string         Exit with code 5 when a new finding has at least this severity: info, warning, error (config: lint.failOn)

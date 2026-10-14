@@ -1224,7 +1224,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "send_test_message", Title: "Send a test message",
-			Description: "Send a test message to an endpoint of a deployed integration flow (only URLs the tenant lists for it) and return the HTTP status, the response and the message GUID. " +
+			Description: "Send a test message to an endpoint of a deployed integration flow (a URL the tenant lists for it, or below one: a longer url or path for senders that route on the path, e.g. SOAP /cxf/out/<anything>) and return the HTTP status, the response and the message GUID. " +
 				"Flows started by ProcessDirect are reached through the test harness flow with process_direct_address. " +
 				"With wait_seconds it also waits for the message processing log and returns it (status, error text, custom headers, attachments). " +
 				"This triggers real processing, including calls to receivers: use test data on a development tenant. On failure: get_message_steps with the message GUID.",
@@ -1944,6 +1944,17 @@ func mcpLintOptions(root, dir string, packages, artifacts []string) (lint.Option
 	if c, err := catalog.Load(filepath.Join(base, filepath.FromSlash(ops.ComponentsFile))); err == nil {
 		o.Components = c
 	} else if !errors.Is(err, fs.ErrNotExist) {
+		return o, err
+	}
+	// the repository files named in .cpi/lint.yaml (inside the root)
+	for _, p := range []string{cfg.Repository.Configure, cfg.Repository.DeployConfig} {
+		if p != "" {
+			if _, err := resolvePath(root, p); err != nil {
+				return o, err
+			}
+		}
+	}
+	if err := lint.LoadRepositoryFiles(&o, "", ""); err != nil {
 		return o, err
 	}
 	return o, nil
