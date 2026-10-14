@@ -238,9 +238,13 @@ cpictl test xslt --flow 'SAP_ERP/*' --junit xslt.xml
 
 ## Script collection tests
 
-`cpictl test scripts init` writes the Gradle build and the stand-ins of SAP's script API
-(`tests/stubs`: `Message`, `MessageLog`, `MessageLogFactory`, `ITApiFactory` with
-`PartnerDirectoryService`) into the project; existing files are kept unless `--force`.
+`cpictl test scripts init` writes the Gradle build and the stand-ins of SAP's script API into the
+project (`tests/stubs`: `Message` v1 and v2, the message log, `ITApiFactory` with secure store,
+keystore, Partner Directory, value mapping and data store, SOAP faults, mapping context); existing
+files are kept unless `--force`. Tests set the values the services answer with
+(`CaseContext.builder()`); [tests/stubs/README.md](../pkg/scripttest/template/tests/stubs/README.md)
+describes the classes, the test-facing API, and which signatures are not verified against SAP's
+javadoc (data store, `ValueMappingApi.getMappedValues`, `MappingContext` / `Output`). Needs JDK 17+.
 
 `cpictl test scripts` runs the Gradle build of the script collection tests (the build skill's
 [script-tests.md](../plugin/skills/cpi-build/script-tests.md): `./gradlew test`, or `gradle test`

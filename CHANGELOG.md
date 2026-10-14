@@ -5,6 +5,20 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Script tests: the stand-ins `cpictl test scripts init` writes (`tests/stubs`) now cover SAP's script
+  API as CPI Studio's library does: `Message` v1 and v2 (body conversion, attachments, SOAP
+  headers), `Exchange`, the message log, `ITApiFactory` with `SecureStoreService`,
+  `KeystoreService`, `PartnerDirectoryService`, `ValueMappingApi`, the data store and number ranges,
+  SOAP fault classes, `MappingContext` / `Output`. Tests set the values the services answer with
+  (`cpictl.standin.CaseContext.builder()`, see `tests/stubs/README.md`). **Change:** `Message` is an
+  interface now, as at SAP: tests use `new MessageV1()` / `new MessageV2()`, and the message log is
+  `messageLogFactory` plus `CaseContext.log`. `build.gradle` gains Camel attachments,
+  `javax.activation`, slf4j-api and Bouncy Castle; the stand-ins need JDK 17+. The data store
+  classes, `ValueMappingApi.getMappedValues` and `MappingContext` / `Output` are not verified against
+  SAP's javadoc (marked in the README). The version 2 `Message` keeps the 0.17.0 rule: no
+  `getHeader(...)`, version 2 scripts read `getHeaders().get(name)`. Existing projects keep their
+  files unless `init --force` ([#14](https://github.com/cpars-innovation/cpicli/issues/14)).
+
 ## 0.17.0
 
 - Lint compares the flows with the pipeline files, offline: `configure-unknown-parameter` (a
