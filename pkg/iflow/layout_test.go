@@ -253,9 +253,9 @@ func TestLayoutDrawsMissingShapes(t *testing.T) {
 	if res.Added < 9 {
 		t.Errorf("added %d", res.Added)
 	}
-	call, recv := bounds(t, out, "call"), bounds(t, out, "Participant_2")
-	if call.cy() <= recv.y || call.cy() >= recv.bottom() {
-		t.Errorf("receiver %v not level with the calling step %v", recv, call)
+	call, recv, pool := bounds(t, out, "call"), bounds(t, out, "Participant_2"), bounds(t, out, "Participant_Process_1")
+	if recv.cx() != call.cx() || recv.bottom() >= pool.y {
+		t.Errorf("receiver %v not above the calling step %v (pool %v)", recv, call, pool)
 	}
 	if !strings.Contains(out, `bpmnElement="MessageFlow_out"`) {
 		t.Error("message flow not drawn")

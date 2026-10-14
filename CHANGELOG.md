@@ -5,6 +5,20 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `cpictl mcp --branch-policy <file>` (optional, off by default): tools that change the tenant
+  are refused (errorCategory `branch_readonly`) while a repository under `--root` is on a
+  read-only branch (`readonlyBranches` patterns, a detached root checkout, a tier outside
+  `writableEnvironments`). Checked on every call, so a checkout during the session counts;
+  `help {"topic": "server"}` shows the verdict. See docs/mcp.md, Branch policy.
+- `iflow layout` / `layout_iflow`: each receiver sits above the step that calls it (below when
+  steps are in the way) with a straight line, the pools moved apart to make room; the column
+  right of the pool is only the fallback.
+- Discovery leaves out cpictl's test tooling flows (`skippedTestTooling`), describes each
+  exception subprocess (`exceptionSubprocesses`: steps, end events, local process calls;
+  summary `emptyExceptionSubprocess`, `exceptionSubprocessEnds`) and counts script steps by
+  collection or local script (`scriptSteps`, `collectionScriptCalls`). `cpi-discover` uses them
+  and treats a uniform log level as a likely default.
+
 - Lint rules from field feedback: `exception-subprocess-message-end` (an exception subprocess
   that swallows the error: Message End with nothing that raises it again),
   `dead-local-process` (a local process nobody calls, with the receivers only it uses),

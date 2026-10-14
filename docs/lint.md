@@ -191,8 +191,9 @@ cramped. `cpictl iflow layout <path>...` (MCP `layout_iflow`) recomputes only th
 - right-angled lines that bend in the gap between two columns, so they cross no step;
 - exception subprocesses below the main flow, inside the pool; local processes as their own
   pools below the integration process;
-- senders left of the pool, level with their start event; receivers right of the pool, level
-  with the step that calls them;
+- senders left of the pool, level with their start event; each receiver above the step that
+  calls it (straight line), below it when steps of the pool are in the way, the pools moved apart
+  to make room; right of the pool only when both are blocked;
 - standard sizes (events 32, gateways 40, steps 100 × 60; widened steps keep their width).
 
 | Option | Meaning |

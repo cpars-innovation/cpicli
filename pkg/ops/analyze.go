@@ -49,7 +49,13 @@ type IFlowFacts struct {
 	ReceiverAdapters []string       `json:"receiverAdapters"`
 	Steps            map[string]int `json:"steps"`
 	// ExceptionSubprocess is true when the flow has an exception subprocess.
-	ExceptionSubprocess     bool   `json:"exceptionSubprocess"`
+	ExceptionSubprocess bool `json:"exceptionSubprocess"`
+	// ExceptionSubprocesses describe each exception subprocess: how many
+	// steps it has and how it ends.
+	ExceptionSubprocesses []ExceptionSubprocessFacts `json:"exceptionSubprocesses,omitempty"`
+	// ScriptSteps counts the script steps; CollectionScripts are those that
+	// call a script collection.
+	ScriptSteps             int    `json:"scriptSteps"`
 	LogLevel                string `json:"logLevel,omitempty"`
 	ReturnExceptionToSender string `json:"returnExceptionToSender,omitempty"`
 	// Parameters are the externalised parameter keys (values are not read).
@@ -109,6 +115,20 @@ type ScriptFacts struct {
 	Functions []ScriptFunction `json:"functions,omitempty"`
 }
 
+// ExceptionSubprocessFacts describe an exception subprocess.
+type ExceptionSubprocessFacts struct {
+	Name string `json:"name"`
+	// Process is the integration or local process it belongs to.
+	Process string `json:"process,omitempty"`
+	// Steps counts its steps (0: start straight to end).
+	Steps int `json:"steps"`
+	// Ends are the kinds of its end events (MessageEndEvent, ErrorEndEvent,
+	// EscalationEndEvent, ...).
+	Ends []string `json:"ends"`
+	// CallsProcess is true when it calls a local process.
+	CallsProcess bool `json:"callsProcess,omitempty"`
+}
+
 // CollectionScriptRef is a step calling a script of a script collection.
 type CollectionScriptRef struct {
 	Collection string `json:"collection"`
@@ -155,6 +175,9 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 		}
 		if err := f.addModel(data); err != nil {
 			return f, fmt.Errorf("%s: %w", path.Base(name), err)
+		}
+		if m, err := iflow.Parse(data); err == nil {
+			f.addExceptionSubprocesses(m)
 		}
 		for _, m := range rePDLiteral.FindAllSubmatch(data, -1) {
 			f.PDReferences = append(f.PDReferences, string(m[1])+":"+string(m[2]))
@@ -307,8 +330,42 @@ func (f *IFlowFacts) addModel(data []byte) error {
 	}
 }
 
+// addExceptionSubprocesses records what each exception subprocess does.
+func (f *IFlowFacts) addExceptionSubprocesses(m *iflow.Model) {
+	for _, id := range m.Order {
+		sub := m.Elements[id]
+		if sub.Tag != "subProcess" || !(sub.TriggeredByEvent || strings.Contains(sub.Kind(), "ErrorEventSubProcess")) {
+			continue
+		}
+		es := ExceptionSubprocessFacts{Name: sub.Name, Ends: []string{}}
+		if c := m.Elements[sub.Container]; c != nil {
+			es.Process = c.Name
+		}
+		for _, cid := range m.Order {
+			el := m.Elements[cid]
+			if el.Container != sub.ID {
+				continue
+			}
+			switch {
+			case el.Tag == "endEvent":
+				es.Ends = append(es.Ends, el.Kind())
+			case el.IsStep() || el.Tag == "subProcess" || strings.HasSuffix(el.Tag, "Gateway"):
+				es.Steps++
+				if el.Props["activityType"] == "ProcessCallElement" {
+					es.CallsProcess = true
+				}
+			}
+		}
+		sort.Strings(es.Ends)
+		f.ExceptionSubprocesses = append(f.ExceptionSubprocesses, es)
+	}
+}
+
 func (f *IFlowFacts) addElement(el *modelElement) {
 	p := el.props
+	if p["activityType"] == "Script" {
+		f.ScriptSteps++
+	}
 	if bundle := p["scriptBundleId"]; bundle != "" && p["script"] != "" {
 		f.CollectionScripts = append(f.CollectionScripts, CollectionScriptRef{Collection: bundle, Script: path.Base(p["script"]),
 			Function: p["scriptFunction"]})

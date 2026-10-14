@@ -42,6 +42,8 @@ type HelpInfo struct {
 	// ActiveToolsets returns the toolsets enabled now (dynamic toolsets);
 	// nil: the toolsets with at least one available tool.
 	ActiveToolsets func() []string
+	// BranchPolicy is the server's branch policy (nil: none).
+	BranchPolicy *BranchPolicy
 }
 
 // Workflow is a task with the skill and tools for it.
@@ -152,6 +154,9 @@ func HelpTool(info HelpInfo) Tool {
 			"loop": map[string]any{"required": info.Loop.Required, "caps": map[string]any{"maxIterations": info.Loop.Caps.MaxIterations,
 				"sameErrorLimit": info.Loop.Caps.SameErrorLimit, "wallClockMinutes": info.Loop.Caps.WallClockMinutes, "maxDeploys": info.Loop.Caps.MaxDeploys}},
 			"masking": map[string]any{"maskPatterns": nonNil(info.MaskPatterns), "redactPayloads": info.RedactPayloads}}
+		if p := info.BranchPolicy; p != nil {
+			server["branchPolicy"] = map[string]any{"file": p.File, "readonlyBranches": p.ReadonlyBranches, "now": p.Decide()}
+		}
 		return map[string]any{
 			"server":    server,
 			"workflows": workflowsFor(available),

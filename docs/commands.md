@@ -1366,8 +1366,8 @@ Lay out the diagram of integration flows: steps in flow order, no overlaps, righ
 ```
 Recompute the diagram (BPMNDiagram) of .iflw files: steps left to right in flow
 order, branches one below the other, exception subprocesses below the main flow,
-senders left and receivers right of the integration process, level with the steps
-they talk to, and right-angled lines that bend between columns. Only the diagram
+senders left of the integration process level with their start event, each
+receiver above (else below) the step that calls it, and right-angled lines that bend between columns. Only the diagram
 changes, never the steps, their configuration or the sequence flows; a second run
 changes nothing.
 
@@ -2292,6 +2292,11 @@ Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, 
 listed; a call to one is an error result (errorCategory usage) that says why; a
 pattern that matches no tool is an error.
 
+Branch policy (optional, off by default):
+  --branch-policy .cpi/branch-policy.yaml
+                                  refuse tenant changes (errorCategory branch_readonly) while a
+                                  repository is on a read-only branch; checked on every call
+
 Loop policy (the model cannot change it):
   --loop-required                 tenant tools are refused (errorCategory loop_required)
                                   until loop_start opened a loop
@@ -2312,6 +2317,7 @@ CPICTL_* environment variables.
 **Flags:**
 
 ```
+      --branch-policy string                Policy file (YAML or JSON): tools that change the tenant are refused while a repository under --root is on a read-only branch (off without it)
       --cache-ttl int                       Seconds list_packages and list_artifacts results are reused (0: no cache); any tool that changes the tenant clears them (default 60)
       --disable-tools strings               Do not offer these tools (names or patterns); wins over --tools
       --dynamic-toolsets                    List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start

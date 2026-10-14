@@ -119,8 +119,8 @@ func newIFlowLayoutCommand() *cobra.Command {
 		Short: "Lay out the diagram of integration flows: steps in flow order, no overlaps, right-angled lines (local files)",
 		Long: `Recompute the diagram (BPMNDiagram) of .iflw files: steps left to right in flow
 order, branches one below the other, exception subprocesses below the main flow,
-senders left and receivers right of the integration process, level with the steps
-they talk to, and right-angled lines that bend between columns. Only the diagram
+senders left of the integration process level with their start event, each
+receiver above (else below) the step that calls it, and right-angled lines that bend between columns. Only the diagram
 changes, never the steps, their configuration or the sequence flows; a second run
 changes nothing.
 

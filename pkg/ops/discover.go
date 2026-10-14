@@ -22,6 +22,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
 
 // Discovery is the inventory of a tenant or a local content repository: the
@@ -36,7 +37,10 @@ type Discovery struct {
 	// ScriptCollections are the script collections with what their scripts
 	// say about themselves (summary, functions, doc comments).
 	ScriptCollections []ScriptCollectionFacts `json:"scriptCollections,omitempty"`
-	Errors            []string                `json:"errors,omitempty"`
+	// SkippedTestTooling are cpictl's own test tooling flows
+	// (CPICTL_Test_*): they say nothing about the tenant's conventions.
+	SkippedTestTooling []string `json:"skippedTestTooling,omitempty"`
+	Errors             []string `json:"errors,omitempty"`
 }
 
 // DiscoveredPackage is a package with its artifact counts per type.
@@ -85,7 +89,22 @@ type DiscoverySummary struct {
 	ReceiverAdapters []Count `json:"receiverAdapters"`
 	Steps            []Count `json:"steps"`
 	// WithExceptionSubprocess is the number of flows with an exception subprocess.
-	WithExceptionSubprocess int     `json:"withExceptionSubprocess"`
+	WithExceptionSubprocess int `json:"withExceptionSubprocess"`
+	// EmptyExceptionSubprocess is the number of flows with an exception
+	// subprocess that has no step (start straight to end: errors are
+	// swallowed when it ends in a Message End).
+	EmptyExceptionSubprocess int `json:"emptyExceptionSubprocess"`
+	// ExceptionSubprocessEnds counts how exception subprocesses end.
+	ExceptionSubprocessEnds []Count `json:"exceptionSubprocessEnds"`
+	// ScriptSteps counts script steps by where the script is: local (in
+	// the flow) or collection (a script collection).
+	ScriptSteps map[string]int `json:"scriptSteps"`
+	// CollectionScriptCalls counts the steps calling each collection script
+	// ("Collection/script.groovy").
+	CollectionScriptCalls []Count `json:"collectionScriptCalls"`
+	// LogLevels are the log levels in the flow models. A value every flow
+	// shares may be the default of the editor or the download, not a
+	// decision.
 	LogLevels               []Count `json:"logLevels"`
 	ReturnExceptionToSender []Count `json:"returnExceptionToSender"`
 
@@ -162,6 +181,10 @@ func DiscoverTenant(ctx context.Context, exe *httpclnt.HTTPExecuter, source stri
 		dp := DiscoveredPackage{ID: p.Root.Id, Name: p.Root.Name, Artifacts: map[string]int{}}
 		for _, a := range arts {
 			dp.Artifacts[a.ArtifactType]++
+			if a.ArtifactType == "Integration" && strings.HasPrefix(a.Id, testtools.IDPrefix) {
+				d.SkippedTestTooling = append(d.SkippedTestTooling, a.Id)
+				continue
+			}
 			if a.ArtifactType == "Integration" && (opts.MaxIFlows == 0 || len(jobs) < opts.MaxIFlows) {
 				jobs = append(jobs, job{pkg: p.Root.Id, id: a.Id, name: a.Name, version: a.Version})
 			}
@@ -291,6 +314,10 @@ func DiscoverDir(ctx context.Context, dir string) (*Discovery, error) {
 			}
 			packages[a.PackageID].Artifacts[a.Type]++
 		}
+		if a.Type == "Integration" && strings.HasPrefix(a.ID, testtools.IDPrefix) {
+			d.SkippedTestTooling = append(d.SkippedTestTooling, a.ID)
+			return
+		}
 		if a.Type == "Integration" {
 			facts, err := AnalyzeIFlow(os.DirFS(a.Dir))
 			if facts == nil {
@@ -389,7 +416,7 @@ func artifactTypeOf(bundleType string) string {
 }
 
 func summarize(d *Discovery) DiscoverySummary {
-	s := DiscoverySummary{Packages: len(d.Packages), IFlows: len(d.IFlows), ArtifactTypes: map[string]int{}}
+	s := DiscoverySummary{Packages: len(d.Packages), IFlows: len(d.IFlows), ArtifactTypes: map[string]int{}, ScriptSteps: map[string]int{}}
 	var pkgIDs, flowIDs, flowNames []string
 	for _, p := range d.Packages {
 		pkgIDs = append(pkgIDs, p.ID)
@@ -425,6 +452,19 @@ func summarize(d *Discovery) DiscoverySummary {
 		if f.ExceptionSubprocess {
 			s.WithExceptionSubprocess++
 		}
+		empty := false
+		for _, es := range f.ExceptionSubprocesses {
+			empty = empty || es.Steps == 0
+			add("exceptionEnds", es.Ends...)
+		}
+		if empty {
+			s.EmptyExceptionSubprocess++
+		}
+		s.ScriptSteps["collection"] += len(f.CollectionScripts)
+		s.ScriptSteps["local"] += max(0, f.ScriptSteps-len(f.CollectionScripts))
+		for _, c := range f.CollectionScripts {
+			add("collectionCalls", c.Collection+"/"+c.Script)
+		}
 		add("log", f.LogLevel)
 		add("returnException", f.ReturnExceptionToSender)
 		add("params", f.Parameters...)
@@ -454,6 +494,7 @@ func summarize(d *Discovery) DiscoverySummary {
 	s.HeadersSet, s.PropertiesSet = top(counters["headers"], 1), top(counters["properties"], 1)
 	s.ParameterKeys, s.CredentialRefs = top(counters["params"], 1), top(counters["creds"], 1)
 	s.RuntimeStatuses = top(counters["runtime"], 1)
+	s.ExceptionSubprocessEnds, s.CollectionScriptCalls = top(counters["exceptionEnds"], 1), top(counters["collectionCalls"], 1)
 	s.SharedScripts = []SharedScript{}
 	for _, sc := range scripts {
 		if len(sc.IFlows) > 1 {

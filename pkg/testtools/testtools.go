@@ -33,6 +33,10 @@ const (
 	PackageName      = "cpictl test tooling"
 	PackageShortText = "cpictl test tooling: test harness and receiver stub (do not transport)"
 
+	// IDPrefix starts the ID of every tooling flow: tools that learn from
+	// a tenant's flows (discovery) leave them out.
+	IDPrefix = "CPICTL_Test_"
+
 	// HarnessID is the test harness flow: HTTPS sender HarnessPath ->
 	// Request Reply -> ProcessDirect receiver ${header.CpictlTargetAddress}.
 	HarnessID = "CPICTL_Test_Harness"

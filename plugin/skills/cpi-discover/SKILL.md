@@ -62,6 +62,19 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   with those.
 - If the repository has downloaded flows, read one `.iflw` of a typical flow to see how the
   exception subprocess and the logging steps are built.
+- cpictl's own test tooling (`CPICTL_Test_*` flows) is left out (`skippedTestTooling`); leave out
+  other test, demo and template flows the same way when you count.
+- Scripts: `summary.scriptSteps` says how many script steps call a script collection and how many
+  carry their own script; `summary.collectionScriptCalls` which collection scripts are called most.
+  `scriptNames` only counts local file names (`script1.groovy` says nothing): describe the shared
+  collections as the convention when most steps call them.
+- Error handling: `iflows[].exceptionSubprocesses` (steps, end events, local process calls) and
+  `summary.emptyExceptionSubprocess` / `exceptionSubprocessEnds`. An exception subprocess with no
+  step, or one ending in a Message End without calling something that raises the error again,
+  swallows errors: report it as a finding (lint `exception-subprocess-message-end`), never as the
+  house convention.
+- Log level: when every flow has the same `logLevel` (often `All events`), it is probably the
+  editor's or the download's default, not a decision. Write it as observed and ask.
 
 ## 3. Write `.cpi/conventions.md`
 

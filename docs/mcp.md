@@ -109,6 +109,7 @@ server: [plugin.md](plugin.md).
 | `--disable-tools` | none | Do not offer these tools (names or patterns); wins over `--tools` |
 | `--opt-in` | none | Also offer these opt-in tools (exact names), without limiting the others |
 | `--versioning` | not set | Versioning mode of `upload_artifact` and `deploy` (`manifest`, `keep`, `tenant-bump`), see [versioning.md](versioning.md) |
+| `--branch-policy` | not set | Policy file: refuse tenant tools (errorCategory `branch_readonly`) while a repository is on a read-only branch, see [Branch policy](#branch-policy) |
 | `--loop-required` | `false` | Refuse tenant tools (errorCategory `loop_required`) while no loop is open, see [Build loops](#build-loops) |
 | `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors`, `--loop-max-minutes` | `0` (no cap) | Highest `max_iterations`, `max_deploys`, `same_error_limit`, `wall_clock_minutes` that `loop_start` accepts; they also lower the defaults |
 | `--mask-pattern` | none | Also mask the values of names matching this regular expression (case-insensitive, repeatable), see [Masking](#masking) |
@@ -247,6 +248,31 @@ complement the client's own permission rules (in Claude Code, `permissions.deny`
 as `mcp__cpi-dev__undeploy` in `.claude/settings.json`), which still prompt or block per call.
 The strongest limit is the tenant's: give the OAuth client of a QA or production server only
 read roles.
+
+### Branch policy
+
+Optional and off by default. With `--branch-policy <file>` the server refuses the tools that
+change the tenant (errorCategory `branch_readonly`, exit code usage) while a repository is on a
+protected branch, so an agent changes the tenant from a feature branch, never from `main`. Read
+and local tools keep working. The branches are read on every such call (`git rev-parse`), so a
+checkout during the session counts.
+
+```yaml
+# .cpi/branch-policy.yaml (JSON works too)
+default: readwrite            # readonly: always read-only
+readonlyBranches: [main, "release/*"]   # '*' matches any characters, also '/'
+repos: [".", integration-test]          # relative to --root; default ["."]
+writableEnvironments: [dev]             # tiers (--tier) that may be changed at all
+```
+
+- The root checkout (`.`) on a detached HEAD, or whose branch cannot be read (no git), is
+  read-only. Other repos on a detached HEAD (submodules at their pinned commit) and missing ones
+  are not judged.
+- `writableEnvironments` is checked only when the server has a `--tier`; a server for another tier
+  is read-only.
+- The server instructions and `help {"topic": "server"}` (`branchPolicy`) say whether tenant
+  changes are allowed now and why not. File edits by the agent are the client's business (for
+  example a Claude Code `PreToolUse` hook).
 
 ## Tools
 
@@ -448,6 +474,7 @@ Every tool call returns the same structure, both as `structuredContent` and as J
 | `partial` | 7 | Some items failed: look at the per-item results |
 | `stopped` | 8 | A loop limit was reached: tenant changes are refused; call `loop_end` and report |
 | `loop_required` | 2 | The server runs with `--loop-required` and no loop is open: call `loop_start` first |
+| `branch_readonly` | 2 | The server runs with `--branch-policy` and a repository is on a read-only branch: switch branches or ask the user |
 
 Tool failures are returned as tool results with `isError: true`, not as JSON-RPC errors,
 so the model sees them; so are calls to tools the mode or filters removed (`usage`). JSON-RPC

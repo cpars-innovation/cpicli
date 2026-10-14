@@ -218,3 +218,46 @@ func TestDiscoverDir(t *testing.T) {
 	_, err = DiscoverDir(context.Background(), filepath.Join(root, "missing"))
 	require.Error(t, err)
 }
+
+// Discovery leaves out cpictl's test tooling, describes each exception
+// subprocess and counts script steps by where their script lives.
+func TestDiscoverDirStructure(t *testing.T) {
+	root := t.TempDir()
+	prop := func(k, v string) string {
+		return "<ifl:property><key>" + k + "</key><value>" + v + "</value></ifl:property>"
+	}
+	model := `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:ifl="http:///com.sap.ifl.model/Ifl.xsd">
+<bpmn2:collaboration id="C"><bpmn2:extensionElements>` + prop("log", "All events") + `</bpmn2:extensionElements></bpmn2:collaboration>
+<bpmn2:process id="Process_1" name="Integration Process">
+<bpmn2:extensionElements>` + prop("cmdVariantUri", "ctype::FlowElementVariant/cname::IntegrationProcess/version::1.2.0") + `</bpmn2:extensionElements>
+<bpmn2:callActivity id="S1" name="Common"><bpmn2:extensionElements>` + prop("activityType", "Script") + prop("scriptBundleId", "Shared_Scripts") +
+		prop("script", "log.groovy") + prop("cmdVariantUri", "ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2") + `</bpmn2:extensionElements></bpmn2:callActivity>
+<bpmn2:callActivity id="S2" name="Local"><bpmn2:extensionElements>` + prop("activityType", "Script") + prop("script", "x.groovy") +
+		prop("cmdVariantUri", "ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2") + `</bpmn2:extensionElements></bpmn2:callActivity>
+<bpmn2:subProcess id="Sub" name="Exception Subprocess 1"><bpmn2:extensionElements>` + prop("cmdVariantUri", "ctype::FlowElementVariant/cname::ErrorEventSubProcessTemplate/version::1.1.0") + `</bpmn2:extensionElements>
+<bpmn2:startEvent id="ES" name="Error Start"><bpmn2:extensionElements>` + prop("cmdVariantUri", "ctype::FlowElementVariant/cname::ErrorStartEvent/version::1.0") + `</bpmn2:extensionElements></bpmn2:startEvent>
+<bpmn2:endEvent id="EE" name="End"><bpmn2:extensionElements>` + prop("cmdVariantUri", "ctype::FlowElementVariant/cname::MessageEndEvent/version::1.0") + `</bpmn2:extensionElements></bpmn2:endEvent>
+</bpmn2:subProcess>
+</bpmn2:process>
+</bpmn2:definitions>
+`
+	for _, id := range []string{"Orders_In", "CPICTL_Test_Harness"} {
+		writeFlow(t, filepath.Join(root, "P", id), map[string]string{
+			"META-INF/MANIFEST.MF": "Manifest-Version: 1.0\nBundle-SymbolicName: " + id + "\nBundle-Version: 1.0.0\nSAP-BundleType: IntegrationFlow\n",
+			"src/main/resources/scenarioflows/integrationflow/" + id + ".iflw": model,
+		})
+	}
+	d, err := DiscoverDir(context.Background(), root)
+	require.NoError(t, err)
+	require.Len(t, d.IFlows, 1)
+	assert.Equal(t, []string{"CPICTL_Test_Harness"}, d.SkippedTestTooling)
+	f := d.IFlows[0]
+	assert.Equal(t, []ExceptionSubprocessFacts{{Name: "Exception Subprocess 1", Process: "Integration Process", Ends: []string{"MessageEndEvent"}}}, f.ExceptionSubprocesses)
+	assert.Equal(t, 2, f.ScriptSteps)
+	s := d.Summary
+	assert.Equal(t, 1, s.EmptyExceptionSubprocess)
+	assert.Equal(t, []Count{{"MessageEndEvent", 1}}, s.ExceptionSubprocessEnds)
+	assert.Equal(t, map[string]int{"collection": 1, "local": 1}, s.ScriptSteps)
+	assert.Equal(t, []Count{{"Shared_Scripts/log.groovy", 1}}, s.CollectionScriptCalls)
+}

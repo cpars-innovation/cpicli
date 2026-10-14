@@ -51,6 +51,11 @@ Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, 
 listed; a call to one is an error result (errorCategory usage) that says why; a
 pattern that matches no tool is an error.
 
+Branch policy (optional, off by default):
+  --branch-policy .cpi/branch-policy.yaml
+                                  refuse tenant changes (errorCategory branch_readonly) while a
+                                  repository is on a read-only branch; checked on every call
+
 Loop policy (the model cannot change it):
   --loop-required                 tenant tools are refused (errorCategory loop_required)
                                   until loop_start opened a loop
@@ -113,6 +118,15 @@ CPICTL_* environment variables.`,
 				Tier:                config.GetString(cmd, "tier"),
 				AllowProduction:     config.GetBool(cmd, "allow-production"),
 			}))
+			var branchPolicy *mcp.BranchPolicy
+			if file := config.GetString(cmd, "branch-policy"); file != "" {
+				if branchPolicy, err = mcp.LoadBranchPolicy(file, root, config.GetString(cmd, "tier")); err != nil {
+					return err
+				}
+				all = branchPolicy.Wrap(all)
+				d := branchPolicy.Decide()
+				log.Info().Bool("readOnly", d.ReadOnly).Strs("reasons", d.Reasons).Msgf("Branch policy %s", file)
+			}
 			readOnly, _ := cmd.Flags().GetBool("read-only")
 			filter := mcp.ToolFilter{ReadOnly: readOnly, Allow: config.GetStringSlice(cmd, "tools"), Deny: config.GetStringSlice(cmd, "disable-tools"),
 				OptIn: config.GetStringSlice(cmd, "opt-in")}
@@ -142,7 +156,10 @@ CPICTL_* environment variables.`,
 			var server *mcp.Server
 			help := mcp.HelpInfo{Tools: tools, Removed: removed, Reasons: reasons, Mode: mode, ReadOnly: readOnly,
 				Commands: commandInfos(cmd.Root()), Loop: ledger.Policy, MaskPatterns: maskPatterns, RedactPayloads: redactPayloads,
-				ServerInstructions: mcp.ModeInstructions(mode) + mcp.LoopPolicyInstructions(ledger.Policy)}
+				ServerInstructions: mcp.ModeInstructions(mode) + mcp.LoopPolicyInstructions(ledger.Policy), BranchPolicy: branchPolicy}
+			if branchPolicy != nil {
+				help.ServerInstructions += branchPolicy.Instructions()
+			}
 			if dynamic {
 				help.ActiveToolsets = func() []string { return server.EnabledToolsets() }
 			}
@@ -180,6 +197,7 @@ CPICTL_* environment variables.`,
 	c.Flags().Bool("dynamic-toolsets", false, "List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start")
 	c.Flags().StringSlice("opt-in", nil, "Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does")
 	c.Flags().StringSlice("disable-tools", nil, "Do not offer these tools (names or patterns); wins over --tools")
+	c.Flags().String("branch-policy", "", "Policy file (YAML or JSON): tools that change the tenant are refused while a repository under --root is on a read-only branch (off without it)")
 	c.Flags().Bool("loop-required", false, "Refuse tools that change the tenant or trigger processing (errorCategory loop_required) while no loop is open (loop_start)")
 	c.Flags().Int("loop-max-iterations", 0, "Highest max_iterations loop_start accepts (0: no cap); also lowers the default")
 	c.Flags().Int("loop-max-deploys", 0, "Highest max_deploys loop_start accepts (0: no cap); also lowers the default")

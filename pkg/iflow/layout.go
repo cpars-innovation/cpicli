@@ -168,8 +168,8 @@ type layouter struct {
 
 // Layout recomputes the diagram (BPMNDiagram) of an .iflw model: steps left
 // to right in flow order, branches one below the other, exception
-// subprocesses below the main flow, senders left and receivers right of the
-// integration process, right-angled lines. Only the diagram changes, never
+// subprocesses below the main flow, senders left of the integration process,
+// receivers above (or below) the step that calls them, right-angled lines. Only the diagram changes, never
 // the steps, their configuration or the sequence flows.
 func Layout(data []byte, o LayoutOptions) ([]byte, *LayoutResult, error) {
 	o, err := o.Normalized()
@@ -283,17 +283,102 @@ func (l *layouter) layoutAll(root *etree.Element) {
 		x0 += endpointW + endpointGap
 	}
 	poolW := math.Max(contentW+poolPadL+poolPadR, 400)
-	y := float64(topMargin)
-	var pools []rect
-	for _, b := range blocks {
-		h := math.Max(b.h+poolPadT+poolPadB, 160)
-		pool := rect{x0, y, poolW, h}.rounded()
-		pools = append(pools, pool)
-		if b.pool != "" {
-			l.set(b.pool, pool)
+	heights := make([]float64, len(blocks))
+	for i, b := range blocks {
+		heights[i] = math.Max(b.h+poolPadT+poolPadB, 160)
+	}
+	placePools := func(bandAbove, bandBelow []bool) []rect {
+		y := float64(topMargin)
+		var pools []rect
+		for i, b := range blocks {
+			if bandAbove != nil && bandAbove[i] {
+				y += endpointH + endpointGap
+			}
+			h := heights[i]
+			pool := rect{x0, y, poolW, h}.rounded()
+			pools = append(pools, pool)
+			if b.pool != "" {
+				l.set(b.pool, pool)
+			}
+			l.place(b, pool.x+poolPadL, pool.y+poolPadT+math.Round((h-poolPadT-poolPadB-b.h)/2), pool)
+			y += h + poolGap
+			if bandBelow != nil && bandBelow[i] {
+				y += endpointH + endpointGap
+			}
 		}
-		l.place(b, pool.x+poolPadL, pool.y+poolPadT+math.Round((h-poolPadT-poolPadB-b.h)/2), pool)
-		y += h + poolGap
+		return pools
+	}
+	pools := placePools(nil, nil)
+
+	// receivers above (else below) the step that calls them, with a straight
+	// line when nothing of the pool is in between; the others to the right
+	poolIndex := map[rect]int{}
+	for i, p := range pools {
+		poolIndex[p] = i
+	}
+	type stacked struct {
+		id, step string
+		pool     int
+		below    bool
+	}
+	var near []stacked
+	var right []*etree.Element
+	bandAbove, bandBelow := make([]bool, len(pools)), make([]bool, len(pools))
+	for _, p := range receivers {
+		id := p.SelectAttrValue("id", "")
+		step := ""
+		for _, f := range flows {
+			if f.SelectAttrValue("targetRef", "") == id {
+				if _, ok := l.node[f.SelectAttrValue("sourceRef", "")]; ok {
+					step = f.SelectAttrValue("sourceRef", "")
+					break
+				}
+			}
+		}
+		i, ok := poolIndex[l.poolOf[step]]
+		if step == "" || !ok {
+			right = append(right, p)
+			continue
+		}
+		r, pool := l.pos[step], pools[i]
+		switch {
+		case l.clearV(r.cx(), pool.y, r.y, step):
+			near, bandAbove[i] = append(near, stacked{id, step, i, false}), true
+		case l.clearV(r.cx(), r.bottom(), pool.bottom(), step):
+			near, bandBelow[i] = append(near, stacked{id, step, i, true}), true
+		default:
+			right = append(right, p)
+		}
+	}
+	if len(near) > 0 {
+		pools = placePools(bandAbove, bandBelow)
+		sort.SliceStable(near, func(i, j int) bool { return l.pos[near[i].step].cx() < l.pos[near[j].step].cx() })
+		for i := range pools {
+			for _, below := range []bool{false, true} {
+				var group []stacked
+				for _, n := range near {
+					if n.pool == i && n.below == below {
+						group = append(group, n)
+					}
+				}
+				if len(group) == 0 {
+					continue
+				}
+				desired, seps := make([]float64, len(group)), make([]float64, len(group))
+				for k, n := range group {
+					desired[k], seps[k] = l.pos[n.step].cx()-endpointW/2, endpointW+20
+				}
+				xs := isotonic(desired, seps)
+				shift := math.Max(0, margin-xs[0])
+				y := pools[i].y - endpointGap - endpointH
+				if below {
+					y = pools[i].bottom() + endpointGap
+				}
+				for k, n := range group {
+					l.set(n.id, rect{xs[k] + shift, y, endpointW, endpointH}.rounded())
+				}
+			}
+		}
 	}
 	poolRight := x0 + poolW
 	if len(pools) == 0 {
@@ -304,9 +389,9 @@ func (l *layouter) layoutAll(root *etree.Element) {
 		defaultY = pools[0].cy()
 	}
 
-	// endpoints next to the steps they talk to
+	// senders left, level with the step they talk to
 	l.placeEndpoints(senders, flows, "targetRef", margin, defaultY)
-	l.placeEndpoints(receivers, flows, "sourceRef", poolRight+endpointGap, defaultY)
+	l.placeEndpoints(right, flows, "sourceRef", poolRight+endpointGap, defaultY)
 
 	// lines
 	for _, b := range blocks {
@@ -925,6 +1010,17 @@ func (l *layouter) endpointRoute(ep rect, el string) []point {
 	r := l.pos[el]
 	pool := l.poolOf[el]
 	c := r.center()
+	// above or below the pool: down (up) to the step, the bend in the gap
+	if above, below := ep.bottom() <= pool.y, ep.y >= pool.bottom(); above || below {
+		if math.Abs(ep.cx()-c.x) < 0.5 {
+			return []point{ep.center(), c}
+		}
+		midY := math.Round((ep.bottom() + pool.y) / 2)
+		if below {
+			midY = math.Round((pool.bottom() + ep.y) / 2)
+		}
+		return []point{ep.center(), {ep.cx(), midY}, {c.x, midY}, c}
+	}
 	left := ep.cx() < pool.x
 	gapX := math.Round((ep.right() + pool.x) / 2)
 	edgeX := pool.x
