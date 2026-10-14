@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.17.0
+
 - Lint compares the flows with the pipeline files, offline: `configure-unknown-parameter` (a
   configure file sets a key the flow lacks: configure fails), `configure-missing-parameter` (a
   configure file covering the package has no value for a parameter) and `flow-without-deployment`
