@@ -1,0 +1,34 @@
+plugins {
+    id 'groovy'
+    id 'jacoco'
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation 'org.apache.groovy:groovy:4.0.21'
+    implementation 'org.apache.groovy:groovy-json:4.0.21'  // JsonSlurper, JsonOutput (the runtime has them)
+    implementation 'org.apache.groovy:groovy-xml:4.0.21'   // XmlSlurper, XmlUtil, MarkupBuilder
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// the script folders of all script collections below packages/
+def collectionScriptDirs = fileTree('packages') { include '**/META-INF/MANIFEST.MF' }.files
+    .findAll { it.text.contains('SAP-BundleType: ScriptCollection') }
+    .collect { new File(it.parentFile.parentFile, 'src/main/resources/script') }
+    .findAll { it.directory }
+
+sourceSets {
+    main { groovy { srcDirs = collectionScriptDirs + ['tests/stubs'] } }
+    test { groovy { srcDirs = ['tests/scripts'] } }
+}
+
+test {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    reports { xml.required = true; html.required = true }
+}

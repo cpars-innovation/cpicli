@@ -95,6 +95,9 @@ class HeadersTest {
 
 ## Stubs
 
+`cpictl test scripts init` writes the stubs below and `build.gradle` into the project (existing
+files are kept; `--force` replaces them). The listings show what they contain.
+
 The SAP script API is not on Maven Central. The tests use small stub classes with the same package
 and class names, holding only the methods the scripts call (extend them when a script needs more).
 Write them in **Java**: a Groovy class with `getProperty(String)` would replace Groovy's own

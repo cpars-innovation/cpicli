@@ -209,3 +209,25 @@ func TestStatusPerTestMethod(t *testing.T) {
 	}
 	assert.Equal(t, []string{"a", "spock feature", "b"}, names)
 }
+
+func TestInit(t *testing.T) {
+	dir := t.TempDir()
+	res, err := Init(dir, false)
+	require.NoError(t, err)
+	assert.Contains(t, res.Written, "build.gradle")
+	assert.Contains(t, res.Written, "tests/stubs/com/sap/gateway/ip/core/customdev/util/Message.java")
+	assert.Contains(t, res.Written, "tests/stubs/com/sap/it/api/ITApiFactory.java")
+	assert.Empty(t, res.Skipped)
+
+	write(t, dir, "build.gradle", "// mine\n")
+	res, err = Init(dir, false)
+	require.NoError(t, err)
+	assert.Empty(t, res.Written)
+	assert.Contains(t, res.Skipped, "build.gradle")
+	data, _ := os.ReadFile(filepath.Join(dir, "build.gradle"))
+	assert.Equal(t, "// mine\n", string(data), "kept")
+
+	res, err = Init(dir, true)
+	require.NoError(t, err)
+	assert.Contains(t, res.Written, "build.gradle")
+}

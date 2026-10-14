@@ -46,3 +46,4 @@
 
 # Test tooling artifacts embedded in the binary (go:embed)
 !pkg/testtools/artifacts/**
+!pkg/scripttest/template/**

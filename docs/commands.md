@@ -151,6 +151,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`test list`](#test-list) | List the test cases (offline) |
 | [`test run`](#test-run) | Run test cases against the deployed flows and check the expectations |
 | [`test scripts`](#test-scripts) | Run the tests of script collection scripts and report them per function (offline) |
+| [`test scripts init`](#test-scripts-init) | Write the Gradle build and the SAP script API stand-ins the script tests run with |
 | [`test stub`](#test-stub) | Configure the answers of the receiver stub per rule |
 | [`test stub clear`](#test-stub-clear) | Remove the stub's answer for a rule (it then answers 200 with {}) |
 | [`test stub set`](#test-stub-set) | Set the stub's answer for a rule |
@@ -3511,6 +3512,33 @@ Nothing is sent to the tenant. Exit code 5 when a test failed.
   cpictl test scripts
   cpictl test scripts --no-run --output json
   cpictl test scripts --command "gradle test --offline"
+```
+
+## test scripts init
+
+Write the Gradle build and the SAP script API stand-ins the script tests run with
+
+```
+Write build.gradle and the stand-ins of SAP's script API (tests/stubs: Message,
+MessageLog, MessageLogFactory, ITApiFactory with PartnerDirectoryService) into
+the project, as the build skill's script-tests.md describes. Existing files are
+kept unless --force. The stand-ins are test code: never upload them.
+```
+
+**Usage:** `cpictl test scripts init [flags]`
+
+**Flags:**
+
+```
+      --force            Replace existing files
+      --project string   Project root (default ".")
+```
+
+**Examples:**
+
+```
+  cpictl test scripts init
+  cpictl test scripts init --project ./my-repo --force
 ```
 
 ## test stub

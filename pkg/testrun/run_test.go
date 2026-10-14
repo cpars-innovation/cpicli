@@ -10,9 +10,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
@@ -137,6 +139,10 @@ func TestRunFailureDiagnostics(t *testing.T) {
 	assert.Equal(t, "FAILED", c.Failures[1].Actual)
 	require.NotNil(t, c.Diagnostics)
 	assert.Contains(t, c.Diagnostics.LastError, "Read timed out")
+	// the response of the failed case
+	require.NotNil(t, c.Response)
+	assert.Contains(t, c.Response.Text, "Read timed out")
+	assert.Equal(t, len(c.Response.Text), c.Response.Size)
 	require.NotNil(t, c.Diagnostics.FailedStep)
 	assert.Equal(t, "ServiceTask_0", c.Diagnostics.FailedStep.ModelStepID)
 	// the path: the steps that ran in order, the failing one last
@@ -443,4 +449,21 @@ func TestPathOf(t *testing.T) {
 		{ModelStepID: "Call", State: PathFailed},
 	}, pathOf(steps))
 	assert.Empty(t, pathOf(&ops.MessageSteps{}))
+}
+
+func TestResponseExcerpt(t *testing.T) {
+	big := strings.Repeat("ä", ResponseExcerptBytes) // 2 bytes each
+	sent := &ops.SentMessage{HTTPStatus: 500, ResponseContentType: "text/plain", Response: ops.NewContent([]byte(big), -1)}
+	cr := withResponse(CaseResult{Status: StatusFailed}, sent)
+	require.NotNil(t, cr.Response)
+	assert.True(t, cr.Response.Truncated)
+	assert.Equal(t, 2*ResponseExcerptBytes, cr.Response.Size, "the full size")
+	assert.LessOrEqual(t, len(cr.Response.Text), ResponseExcerptBytes)
+	assert.True(t, utf8.ValidString(cr.Response.Text))
+	assert.Equal(t, "text/plain", cr.ResponseContentType)
+
+	assert.Nil(t, withResponse(CaseResult{Status: StatusPassed}, sent).Response, "only failed cases")
+	assert.Nil(t, withResponse(CaseResult{Status: StatusError}, nil).Response, "nothing sent")
+	bin := &ops.SentMessage{HTTPStatus: 200, Response: ops.NewContent([]byte{0xff, 0, 1, 2}, 0)}
+	assert.NotEmpty(t, withResponse(CaseResult{Status: StatusFailed}, bin).Response.Base64)
 }

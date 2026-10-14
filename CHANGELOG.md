@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Test runs: a failed case (or an error after the message was sent) carries the first 8 KB of
+  the endpoint's answer (`CaseResult.Response`, `ResponseContentType`); the MCP server redacts
+  it with `--redact-payloads` ([#15](https://github.com/cpars-innovation/cpicli/issues/15)).
+- `cpictl test scripts init` (Go `scripttest.Init`) writes `build.gradle` and the SAP script API
+  stand-ins into the project, so `cpictl test scripts` runs without copying them from the skill
+  ([#14](https://github.com/cpars-innovation/cpicli/issues/14)).
+
 ## 0.15.0
 
 - `cpictl test scripts` (Go `pkg/scripttest`): runs the Gradle build of the script collection

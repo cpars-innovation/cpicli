@@ -195,6 +195,10 @@ The runner is `pkg/testrun` (`Load`, `Run`, `WriteJUnit`), see [go-api.md](go-ap
 
 ## Script collection tests
 
+`cpictl test scripts init` writes the Gradle build and the stand-ins of SAP's script API
+(`tests/stubs`: `Message`, `MessageLog`, `MessageLogFactory`, `ITApiFactory` with
+`PartnerDirectoryService`) into the project; existing files are kept unless `--force`.
+
 `cpictl test scripts` runs the Gradle build of the script collection tests (the build skill's
 [script-tests.md](../plugin/skills/cpi-build/script-tests.md): `./gradlew test`, or `gradle test`
 without a wrapper; `--command` for another one) and reads its JUnit and JaCoCo reports:

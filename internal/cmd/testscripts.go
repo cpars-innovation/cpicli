@@ -81,6 +81,38 @@ Nothing is sent to the tenant. Exit code 5 when a test failed.`,
 	c.Flags().String("rules", ".cpi/lint.yaml", "Lint configuration with scriptTests (relative to --project)")
 	c.Flags().String("command", "", "Test command (default ./gradlew test, or gradle test without a wrapper)")
 	c.Flags().Bool("no-run", false, "Only read the reports of an earlier run")
+
+	initCmd := &cobra.Command{
+		Use:   "init",
+		Short: "Write the Gradle build and the SAP script API stand-ins the script tests run with",
+		Long: `Write build.gradle and the stand-ins of SAP's script API (tests/stubs: Message,
+MessageLog, MessageLogFactory, ITApiFactory with PartnerDirectoryService) into
+the project, as the build skill's script-tests.md describes. Existing files are
+kept unless --force. The stand-ins are test code: never upload them.`,
+		Example: `  cpictl test scripts init
+  cpictl test scripts init --project ./my-repo --force`,
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		Annotations:  map[string]string{annotationOffline: "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			force, _ := cmd.Flags().GetBool("force")
+			res, err := scripttest.Init(config.GetString(cmd, "project"), force)
+			if err != nil {
+				return err
+			}
+			output.SetResult(cmd.Context(), res)
+			for _, f := range res.Written {
+				log.Info().Msgf("wrote %s", f)
+			}
+			for _, f := range res.Skipped {
+				log.Info().Msgf("kept  %s (exists; --force replaces it)", f)
+			}
+			return nil
+		},
+	}
+	initCmd.Flags().String("project", ".", "Project root")
+	initCmd.Flags().Bool("force", false, "Replace existing files")
+	c.AddCommand(initCmd)
 	return c
 }
 

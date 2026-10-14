@@ -51,6 +51,19 @@ func NewContent(b []byte, max int) Content {
 	return c
 }
 
+// Excerpt returns c cut to max bytes; Size stays the full size.
+func (c Content) Excerpt(max int) Content {
+	b := []byte(c.Text)
+	if c.Base64 != "" {
+		if d, err := base64.StdEncoding.DecodeString(c.Base64); err == nil {
+			b = d
+		}
+	}
+	e := NewContent(b, max)
+	e.Size, e.Truncated = c.Size, e.Truncated || c.Truncated
+	return e
+}
+
 // trimIncompleteRune drops a trailing UTF-8 sequence cut by truncation
 // (at most utf8.UTFMax-1 bytes); other invalid input is left unchanged.
 func trimIncompleteRune(b []byte) []byte {

@@ -307,6 +307,14 @@ func TestRedactorRedactsTestRunFailures(t *testing.T) {
 	assert.Equal(t, RedactedPayload, resp["message"])
 	assert.Equal(t, "<ok/>", resp["expected"])
 	assert.Equal(t, "FAILED", fs[1].(map[string]any)["actual"], "statuses are no payload")
+
+	// the response excerpt of a failed case (testrun.CaseResult.Response)
+	e := ops.NewContent([]byte("<customer>ACME</customer>"), 0)
+	m = applyJSON(t, r, "run_tests", map[string]any{"cases": []any{map[string]any{"case": "c", "response": e, "responseContentType": "application/xml"}}})
+	c := m["cases"].([]any)[0].(map[string]any)
+	assert.Equal(t, RedactedPayload, c["response"].(map[string]any)["text"])
+	assert.EqualValues(t, 25, c["response"].(map[string]any)["size"])
+	assert.Equal(t, "application/xml", c["responseContentType"])
 }
 
 func TestRedactorRedactsPayloads(t *testing.T) {

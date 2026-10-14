@@ -48,7 +48,27 @@ type CaseResult struct {
 	Failures      []Failure `json:"failures,omitempty"`
 	// Diagnostics are attached to failed cases (and errors after a send).
 	Diagnostics *Diagnostics `json:"diagnostics,omitempty"`
-	code        int
+	// Response is the first ResponseExcerptBytes of the endpoint's answer
+	// (Size is the full size) and ResponseContentType its type, for failed
+	// cases and errors after a send. The MCP server redacts it with
+	// --redact-payloads.
+	Response            *ops.Content `json:"response,omitempty"`
+	ResponseContentType string       `json:"responseContentType,omitempty"`
+	code                int
+}
+
+// ResponseExcerptBytes is the size of CaseResult.Response.
+const ResponseExcerptBytes = 8 * 1024
+
+// withResponse adds the response excerpt of sent to a failed case or an
+// error after a send.
+func withResponse(cr CaseResult, sent *ops.SentMessage) CaseResult {
+	if sent == nil || sent.HTTPStatus == 0 || cr.Status == StatusPassed || cr.Status == StatusSkipped {
+		return cr
+	}
+	e := sent.Response.Excerpt(ResponseExcerptBytes)
+	cr.Response, cr.ResponseContentType = &e, sent.ResponseContentType
+	return cr
 }
 
 // Diagnostics locate a failure: the message, its last error, the failing
@@ -541,7 +561,7 @@ func (r *runner) runCase(ctx context.Context, c Case) CaseResult {
 		if sent != nil && res.MessageGuid != "" {
 			er.Diagnostics = r.diagnoseCase(ctx, c, sent)
 		}
-		return finish(er)
+		return finish(withResponse(er, sent))
 	}
 	obs := &observation{sent: sent, sendErr: err, elapsed: elapsed}
 	if len(c.Expect.StepsInclude) > 0 {
@@ -562,7 +582,7 @@ func (r *runner) runCase(ctx context.Context, c Case) CaseResult {
 		res.Status = StatusFailed
 		res.Diagnostics = r.diagnoseCase(ctx, c, sent)
 	}
-	return finish(res)
+	return finish(withResponse(res, sent))
 }
 
 // stubCalls reads the stub's calls since the case started (less the clock
