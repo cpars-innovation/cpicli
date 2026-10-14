@@ -40,9 +40,8 @@ class MessageV2ConformanceTest {
         m.resetBodyStream();
         assertEquals(4, m.getBodySize());
         m.setHeader("Content-Type", "text/xml");
-        assertEquals("text/xml", m.getHeader("content-type"));
-        assertEquals("dflt", m.getHeader("missing", "dflt"));
-        assertEquals("text/xml", m.getHeader("CONTENT-TYPE", String.class));
+        assertEquals("text/xml", m.getHeaders().get("content-type"));
+        assertEquals("text/xml", m.getHeaders().get("CONTENT-TYPE"));
         m.setHeaders(Map.of("A", "1"));
         assertEquals(1, m.getHeaders().size());
         m.setProperty("P", 2);
@@ -50,6 +49,17 @@ class MessageV2ConformanceTest {
         m.setProperties(Map.of("Q", 3));
         assertNull(m.getProperty("P"));
         m.clearSoapHeaders();
+    }
+
+    @Test
+    void noGetHeaderInVersion2() {
+        // getHeader(...) is the version 1 API: version 2 scripts read getHeaders().get(name)
+        for (var method : MessageV2.class.getMethods()) {
+            assertFalse(method.getName().equals("getHeader"), method.toString());
+        }
+        for (var method : Message.class.getMethods()) {
+            assertFalse(method.getName().equals("getHeader"), method.toString());
+        }
     }
 
     @Test
