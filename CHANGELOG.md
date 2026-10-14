@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.16.0
+
 - `cpictl test xslt --online` (Go `XSLTOptions.Online`): XSLT cases run on the tenant's XSLT
   engine through the new test tooling flow `CPICTL_Test_XSLT` (HTTPS `/cpictl/xslt`, XSLT mapping
   with the stylesheet from the Partner Directory, PID `CPICTL_Test`); the stylesheet is uploaded
