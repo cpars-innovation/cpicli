@@ -1,35 +1,82 @@
 package com.sap.gateway.ip.core.customdev.util;
 
-import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import javax.activation.DataHandler;
 
-public class Message {
-    private Object body;
-    private Map<String, Object> headers = new HashMap<>();
-    private Map<String, Object> properties = new HashMap<>();
-    private final MessageLog messageLog = new MessageLog();
+/**
+ * Stand-in of SAP's script API message (version 1 scripts), written from SAP's published API
+ * documentation. The implementation is {@code cpictl.standin.MessageV1}.
+ */
+public interface Message {
+    <T> T getBody(Class<T> type);
 
-    public Object getBody() { return body; }
-    @SuppressWarnings("unchecked")
-    public <T> T getBody(Class<T> type) {
-        if (body == null) return null;
-        if (type == String.class) return (T) body.toString();
-        return type.cast(body);
-    }
-    public void setBody(Object body) { this.body = body; }
-    public Map<String, Object> getHeaders() { return headers; }
-    public void setHeaders(Map<String, Object> headers) { this.headers = new HashMap<>(headers); }
-    @SuppressWarnings("unchecked")
-    public <T> T getHeader(String name, Class<T> type) {
-        Object v = headers.get(name);
-        if (v == null) return null;
-        if (type == String.class) return (T) v.toString();
-        return type.cast(v);
-    }
-    public void setHeader(String name, Object value) { headers.put(name, value); }
-    public Map<String, Object> getProperties() { return properties; }
-    public void setProperties(Map<String, Object> properties) { this.properties = new HashMap<>(properties); }
-    public Object getProperty(String name) { return properties.get(name); }
-    public void setProperty(String name, Object value) { properties.put(name, value); }
-    public MessageLog getMessageLog() { return messageLog; }
+    Object getBody();
+
+    void setBody(Object exchangeBody);
+
+    Map<String, DataHandler> getAttachments();
+
+    void setAttachments(Map<String, DataHandler> attachments);
+
+    Map<String, Object> getHeaders();
+
+    <T> T getHeader(String headerName, Class<T> headerType);
+
+    void setHeaders(Map<String, Object> exchangeHeaders);
+
+    void setHeader(String name, Object value);
+
+    Map<String, Object> getProperties();
+
+    void setProperties(Map<String, Object> exchangeProperties);
+
+    void setProperty(String name, Object value);
+
+    Object getProperty(String name);
+
+    long getBodySize();
+
+    long getAttachmentsSize();
+
+    void addAttachmentHeader(String headerName, String headerValue, AttachmentWrapper attachment);
+
+    void setAttachmentHeader(String headerName, String headerValue, AttachmentWrapper attachment);
+
+    String getAttachmentHeader(String headerName, AttachmentWrapper attachment);
+
+    void removeAttachmentHeader(String headerName, AttachmentWrapper attachment);
+
+    Map<String, AttachmentWrapper> getAttachmentWrapperObjects();
+
+    void setAttachmentWrapperObjects(Map<String, AttachmentWrapper> attachmentObjects);
+
+    void addAttachmentObject(String id, AttachmentWrapper content);
+
+    @Deprecated
+    void addAttachmentHeader(String headerName, String headerValue, org.apache.camel.attachment.Attachment attachment);
+
+    @Deprecated
+    void setAttachmentHeader(String headerName, String headerValue, org.apache.camel.attachment.Attachment attachment);
+
+    @Deprecated
+    String getAttachmentHeader(String headerName, org.apache.camel.attachment.Attachment attachment);
+
+    @Deprecated
+    void removeAttachmentHeader(String headerName, org.apache.camel.attachment.Attachment attachment);
+
+    @Deprecated
+    Map<String, org.apache.camel.attachment.Attachment> getAttachmentObjects();
+
+    @Deprecated
+    void setAttachmentObjects(Map<String, org.apache.camel.attachment.Attachment> attachmentObjects);
+
+    @Deprecated
+    void addAttachmentObject(String id, org.apache.camel.attachment.Attachment content);
+
+    List<SoapHeader> getSoapHeaders();
+
+    void setSoapHeaders(List<SoapHeader> headers);
+
+    void clearSoapHeaders();
 }

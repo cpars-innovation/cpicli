@@ -54,7 +54,7 @@ Tests live outside the artifact folders, in the same layout as the content tree:
 ```
 packages/Orders/Orders_Scripts/src/main/resources/script/Headers.groovy
 tests/scripts/Orders/Orders_Scripts/HeadersTest.groovy
-tests/stubs/...                     # Message stubs (see below), shared by all tests
+tests/stubs/...                     # SAP script API stand-ins (see below), shared by all tests
 build.gradle, settings.gradle       # test build at the project root
 ```
 
@@ -66,126 +66,71 @@ names (missing header, empty body, wrong type). A script class is instantiated w
 bindings such as `messageLogFactory` through `binding`:
 
 ```groovy
-import com.sap.gateway.ip.core.customdev.util.Message
-import com.sap.gateway.ip.core.customdev.util.MessageLogFactory
+import cpictl.standin.CaseContext
+import cpictl.standin.MessageV1
+import cpictl.standin.Services
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Test
 import static org.junit.jupiter.api.Assertions.*
 
 class HeadersTest {
+    @AfterEach
+    void clear() { CaseContext.clear() }
+
     Headers script() {
         def s = new Headers()
-        s.binding = new Binding(messageLogFactory: new MessageLogFactory())
+        s.binding = new Binding(messageLogFactory: new Services.LogFactory())
         s
     }
 
     @Test
     void setsOrderHeader() {
-        def msg = new Message(headers: [OrderNo: '4711'])
+        def ctx = CaseContext.builder().build().install()
+        def msg = new MessageV1(headers: [OrderNo: '4711'])
         script().setOrderHeader(msg)
-        assertEquals('4711', msg.messageLog.customHeaders['OrderNo'])
+        assertEquals(['4711'], ctx.log.customHeaders['OrderNo'])
         assertEquals('4711', msg.getHeader('OrderNo', String))
     }
 
     @Test
     void missingOrderNoFails() {
-        assertThrows(IllegalStateException) { script().setOrderHeader(new Message()) }
+        assertThrows(IllegalStateException) { script().setOrderHeader(new MessageV1()) }
     }
 }
 ```
 
 ## Stubs
 
-`cpictl test scripts init` writes the stubs below and `build.gradle` into the project (existing
-files are kept; `--force` replaces them). The listings show what they contain.
+`cpictl test scripts init` writes the stand-ins below and `build.gradle` into the project (existing
+files are kept; `--force` replaces them).
 
-The SAP script API is not on Maven Central. The tests use small stub classes with the same package
-and class names, holding only the methods the scripts call (extend them when a script needs more).
-Write them in **Java**: a Groovy class with `getProperty(String)` would replace Groovy's own
-property access. They are test code: never upload them.
+The SAP script API is not on Maven Central. The tests use stand-in classes with the same package and
+class names, written in **Java** (a Groovy class with `getProperty(String)` would replace Groovy's own
+property access). They are test code: never upload them. `tests/stubs/README.md`, written with them,
+is the reference: what each stand-in covers, how a test sets the values the services answer with, which
+signatures are verified against SAP's javadoc and which are not, and how to extend them.
 
-Version 2 scripts (`script/v2/`, `package script.v2`) get
-`tests/stubs/com/sap/it/script/v2/api/Message.java`: `getBody(Class)`, `setBody`, `getHeaders()`,
-`setHeader`, `getProperty`, `setProperty`, and deliberately no `getHeader(...)` (version 1 only), so a
-test fails when a version 2 script calls it. Add a method only when the real 2.x API has it.
-
-`tests/stubs/com/sap/gateway/ip/core/customdev/util/Message.java` (version 1 scripts):
-
-```java
-package com.sap.gateway.ip.core.customdev.util;
-
-import java.util.HashMap;
-import java.util.Map;
-
-public class Message {
-    private Object body;
-    private Map<String, Object> headers = new HashMap<>();
-    private Map<String, Object> properties = new HashMap<>();
-    private final MessageLog messageLog = new MessageLog();
-
-    public Object getBody() { return body; }
-    @SuppressWarnings("unchecked")
-    public <T> T getBody(Class<T> type) {
-        if (body == null) return null;
-        if (type == String.class) return (T) body.toString();
-        return type.cast(body);
-    }
-    public void setBody(Object body) { this.body = body; }
-    public Map<String, Object> getHeaders() { return headers; }
-    public void setHeaders(Map<String, Object> headers) { this.headers = new HashMap<>(headers); }
-    @SuppressWarnings("unchecked")
-    public <T> T getHeader(String name, Class<T> type) {
-        Object v = headers.get(name);
-        if (v == null) return null;
-        if (type == String.class) return (T) v.toString();
-        return type.cast(v);
-    }
-    public void setHeader(String name, Object value) { headers.put(name, value); }
-    public Map<String, Object> getProperties() { return properties; }
-    public void setProperties(Map<String, Object> properties) { this.properties = new HashMap<>(properties); }
-    public Object getProperty(String name) { return properties.get(name); }
-    public void setProperty(String name, Object value) { properties.put(name, value); }
-    public MessageLog getMessageLog() { return messageLog; }
-}
-```
-
-`tests/stubs/com/sap/gateway/ip/core/customdev/util/MessageLog.java`:
-
-```java
-package com.sap.gateway.ip.core.customdev.util;
-
-import java.util.HashMap;
-import java.util.Map;
-
-public class MessageLog {
-    private final Map<String, String> customHeaders = new HashMap<>();
-    private final Map<String, String> stringProperties = new HashMap<>();
-    private final Map<String, String> attachments = new HashMap<>();
-
-    public void addCustomHeaderProperty(String name, String value) { customHeaders.put(name, value); }
-    public void setStringProperty(String name, String value) { stringProperties.put(name, value); }
-    public void addAttachmentAsString(String name, String text, String type) { attachments.put(name, text); }
-    public Map<String, String> getCustomHeaders() { return customHeaders; }
-    public Map<String, String> getStringProperties() { return stringProperties; }
-    public Map<String, String> getAttachments() { return attachments; }
-}
-```
-
-`tests/stubs/com/sap/gateway/ip/core/customdev/util/MessageLogFactory.java` (scripts reach it
-through the `messageLogFactory` binding; the test sets it):
-
-```java
-package com.sap.gateway.ip.core.customdev.util;
-
-public class MessageLogFactory {
-    public MessageLog getMessageLog(Message message) { return message.getMessageLog(); }
-}
-```
+- `Message` v1 (`com.sap.gateway.ip.core.customdev.util`) and v2 (`com.sap.it.script.v2.api`) are
+  interfaces, as at SAP. A test creates `new MessageV1()` or `new MessageV2()` (`cpictl.standin`);
+  Groovy's map constructor sets body, headers and properties: `new MessageV1(headers: [OrderNo: '4711'])`.
+- Version 2 scripts (`script/v2/`, `package script.v2`) have no `getHeader(...)` (version 1 only):
+  they read `message.getHeaders().get("name")`. The v2 stand-in lacks it too, so a test fails when a
+  version 2 script calls it.
+- Scripts reach the message log as the binding `messageLogFactory`: `new Services.LogFactory()`. What
+  a script logged is `CaseContext.current().log`.
+- `ITApiFactory.getService(SecureStoreService | KeystoreService | PartnerDirectoryService |
+  ValueMappingApi | NumberRangeConfigurationService, ctx)` and the data store answer from the values
+  the test sets: `CaseContext.builder().pd(...).valueMapping(...).secure(...).keystore(...).build().install()`
+  (thread-local; `CaseContext.clear()` after the test). Test values only, never real secrets.
+- Something a stand-in does not implement throws `UnsupportedInStandInsException`: test that part on
+  the tenant, or extend the stand-in (README).
 
 ## Build
 
 `build.gradle` at the project root. It compiles the collection scripts in place, so they are tested
 exactly as they are uploaded, and writes the JaCoCo report that lint reads. Check the versions
-against what your tenant runs (version 1 scripts: Groovy 2.4; version 2: Groovy 4):
+against what your tenant runs (version 1 scripts: Groovy 2.4; version 2: Groovy 4). JDK 17 or newer
+compiles the stand-ins:
 
 ```groovy
 plugins {
@@ -199,6 +144,13 @@ dependencies {
     implementation 'org.apache.groovy:groovy:4.0.21'
     implementation 'org.apache.groovy:groovy-json:4.0.21'  // JsonSlurper, JsonOutput (the runtime has them)
     implementation 'org.apache.groovy:groovy-xml:4.0.21'   // XmlSlurper, XmlUtil, MarkupBuilder
+    // libraries of the SAP script API stand-ins (tests/stubs), the versions the CPI runtime ships
+    implementation 'org.apache.camel:camel-attachments:3.14.10'   // Attachment, DefaultAttachment (also brings camel-api, camel-support)
+    implementation 'com.sun.activation:javax.activation:1.2.0'     // DataHandler, DataSource
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'        // keystore stand-in: test key and certificate generation
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+    implementation 'org.bouncycastle:bcutil-jdk18on:1.78.1'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -235,8 +187,8 @@ collections the build compiles (the class name is the file name).
 1. Before writing a new function, look for an existing one: `graph_search` (type `script`) with
    words of the purpose; reuse it when its comment fits.
 2. Write or change the function together with its doc comment.
-3. Write or extend the test in `tests/scripts/<package>/<collection>/`; create the stubs and
-   `build.gradle` from this page if the repository has none (ask before adding a build to a
+3. Write or extend the test in `tests/scripts/<package>/<collection>/`; run `cpictl test scripts init` for the
+   stubs and `build.gradle` if the repository has none (ask before adding a build to a
    repository that has its own).
 4. Run the tests (`cpictl test scripts`) when a JDK and Gradle are available; otherwise say so in the
    summary, so a person or CI runs them.

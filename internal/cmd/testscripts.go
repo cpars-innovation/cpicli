@@ -85,10 +85,12 @@ Nothing is sent to the tenant. Exit code 5 when a test failed.`,
 	initCmd := &cobra.Command{
 		Use:   "init",
 		Short: "Write the Gradle build and the SAP script API stand-ins the script tests run with",
-		Long: `Write build.gradle and the stand-ins of SAP's script API (tests/stubs: Message,
-MessageLog, MessageLogFactory, ITApiFactory with PartnerDirectoryService) into
-the project, as the build skill's script-tests.md describes. Existing files are
-kept unless --force. The stand-ins are test code: never upload them.`,
+		Long: `Write build.gradle and the stand-ins of SAP's script API (tests/stubs: Message v1
+and v2, the message log, ITApiFactory with secure store, keystore, Partner
+Directory, value mapping and data store, SOAP faults; tests/stubs/README.md
+explains them) into the project, as the build skill's script-tests.md
+describes. Existing files are kept unless --force. The stand-ins are test code:
+never upload them.`,
 		Example: `  cpictl test scripts init
   cpictl test scripts init --project ./my-repo --force`,
 		Args:         cobra.NoArgs,
