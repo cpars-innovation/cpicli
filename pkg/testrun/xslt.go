@@ -4,10 +4,15 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,7 +22,9 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
 
 // XSLTDir is the folder below the tests folder with the XSLT cases of
@@ -161,13 +168,68 @@ type XSLTOptions struct {
 	Progress func(CaseResult)
 	// Now is the clock (default time.Now).
 	Now func() time.Time
+
+	// Online runs the cases on the tenant instead of Saxon: the stylesheet
+	// is uploaded as the Partner Directory binary
+	// testtools.XSLTPID/<PID>.<ID> and the input is sent to the XSLT test
+	// flow (testtools.XSLTID, see cpictl test tools install), which runs
+	// it with the tenant's XSLT engine. Exe and NewExe are the tenant and
+	// runtime credentials; Tier and AllowProduction feed the production
+	// guard. The uploaded stylesheets are removed afterwards unless Keep.
+	Online          bool
+	Exe             *httpclnt.HTTPExecuter
+	NewExe          ops.EndpointExecuterFunc
+	Tier            string
+	AllowProduction bool
+	Keep            bool
+
+	uploads *onlineUploads
+}
+
+// onlineUploads are the stylesheets uploaded in one online run (by
+// parameter ID), uploaded once each.
+type onlineUploads struct {
+	mu   sync.Mutex
+	done map[string]error
+}
+
+// OnlineXSLTID is the Partner Directory parameter ID (in testtools.XSLTPID)
+// a case's stylesheet is uploaded as: <PID>.<ID>, characters other than
+// letters, digits, '_', '.', '-' replaced by '_', at most 60 characters
+// (longer IDs end with a hash).
+func OnlineXSLTID(pid, id string) string {
+	key := []rune(pid + "." + id)
+	for i, r := range key {
+		if !(r == '_' || r == '.' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			key[i] = '_'
+		}
+	}
+	s := string(key)
+	if len(s) > 60 {
+		sum := sha256.Sum256([]byte(pid + "/" + id))
+		s = s[:47] + "." + hex.EncodeToString(sum[:6])
+	}
+	return s
 }
 
 // RunXSLT runs the XSLT cases with Saxon and checks their expectations.
 // The result has one CaseResult per case (Flow pd:<PID>/<ID>, Response the
 // output); Result.Err gives the exit code. Nothing is sent to a tenant.
 func RunXSLT(ctx context.Context, cases []XSLTCase, o XSLTOptions) (*Result, error) {
-	if len(o.Command) == 0 {
+	switch {
+	case o.Online:
+		if err := ops.GuardProduction(o.Tier, o.AllowProduction, "online XSLT tests"); err != nil {
+			return nil, err
+		}
+		if o.Exe == nil || o.NewExe == nil {
+			return nil, output.Usagef("online XSLT tests need the tenant and runtime endpoint credentials")
+		}
+		o.Exe = o.Exe.WithContext(ctx)
+		o.uploads = &onlineUploads{done: map[string]error{}}
+		if !o.Keep {
+			defer o.uploads.cleanup(o.Exe)
+		}
+	case len(o.Command) == 0:
 		return nil, output.Usagef("no XSLT processor: give the Saxon command (e.g. --saxon-jar saxon-he.jar)")
 	}
 	o.PDDir = cmp.Or(o.PDDir, "partner-directory")
@@ -258,6 +320,14 @@ func runXSLTCase(ctx context.Context, c XSLTCase, o XSLTOptions) CaseResult {
 			return errResult(output.Usage(err))
 		}
 	}
+	if o.Online {
+		result, errText, failed, guid, err := runOnline(ctx, c, xsl, input, o)
+		if err != nil {
+			return errResult(err)
+		}
+		cr.MessageGuid = guid
+		return finish(xsltOutcome(cr, c, result, errText, failed))
+	}
 	tmp, err := os.MkdirTemp("", "cpictl-xslt-*")
 	if err != nil {
 		return errResult(err)
@@ -286,20 +356,87 @@ func runXSLTCase(ctx context.Context, c XSLTCase, o XSLTOptions) CaseResult {
 	if runErr == nil {
 		errText = ""
 	}
-	failures, err := checkXSLT(c, result, errText, runErr != nil)
+	return finish(xsltOutcome(cr, c, result, errText, runErr != nil))
+}
+
+// xsltOutcome checks a transformation's outcome and fills the case result.
+func xsltOutcome(cr CaseResult, c XSLTCase, result []byte, errText string, failed bool) CaseResult {
+	failures, err := checkXSLT(c, result, errText, failed)
 	if err != nil {
-		return errResult(err)
+		cr.Status, cr.Error, cr.code = StatusError, err.Error(), output.ExitCode(err)
+		cr.ErrorCategory = categoryOf(cr.code)
+		return cr
 	}
 	cr.Status = StatusPassed
 	if len(failures) > 0 {
 		cr.Status, cr.Failures = StatusFailed, failures
 		e := ops.NewContent(result, ResponseExcerptBytes)
 		cr.Response = &e
-		if runErr != nil {
-			cr.Diagnostics = &Diagnostics{LastError: excerpt(errText)}
+		if failed {
+			cr.Diagnostics = &Diagnostics{MessageGuid: cr.MessageGuid, LastError: excerpt(errText)}
 		}
 	}
-	return finish(cr)
+	return cr
+}
+
+// runOnline uploads the stylesheet (once per run) and sends the case to
+// the XSLT test flow. failed is a transformation error (HTTP status >= 300,
+// errText the answer); err a case that could not be run.
+func runOnline(ctx context.Context, c XSLTCase, xsl string, input []byte, o XSLTOptions) (result []byte, errText string, failed bool, guid string, err error) {
+	id := OnlineXSLTID(c.PID, c.ID)
+	if err := o.uploads.upload(o.Exe, id, xsl); err != nil {
+		return nil, "", false, "", err
+	}
+	params, err := json.Marshal(map[string]map[string]string{"headers": c.Headers, "properties": c.Properties})
+	if err != nil {
+		return nil, "", false, "", err
+	}
+	headers := map[string]string{testtools.XSLTIDHeader: id, testtools.XSLTParamsHeader: string(params)}
+	sent, err := ops.SendTestMessage(ctx, o.Exe, o.NewExe, ops.TestMessage{ArtifactID: testtools.XSLTID, Body: input,
+		ContentType: "application/xml", Headers: headers, MaxBytes: -1})
+	if sent == nil {
+		return nil, "", false, "", err
+	}
+	if sent.HTTPStatus == http.StatusUnauthorized || sent.HTTPStatus == http.StatusForbidden || sent.HTTPStatus == 0 {
+		return nil, "", false, "", err
+	}
+	body := []byte(sent.Response.Text)
+	if sent.Response.Base64 != "" {
+		body, _ = base64.StdEncoding.DecodeString(sent.Response.Base64)
+	}
+	if sent.HTTPStatus >= 300 {
+		return body, strings.TrimSpace(string(body)), true, sent.MessageGuid, nil
+	}
+	return body, "", false, sent.MessageGuid, nil
+}
+
+// upload stores the stylesheet as testtools.XSLTPID/<id> once per run.
+func (u *onlineUploads) upload(exe *httpclnt.HTTPExecuter, id, file string) error {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if err, ok := u.done[id]; ok {
+		return err
+	}
+	data, err := os.ReadFile(file)
+	if err == nil {
+		err = ops.SetBinaryParameter(exe, testtools.XSLTPID, id, "xsl", data)
+	}
+	if err != nil {
+		err = fmt.Errorf("uploading the stylesheet as %s/%s: %w", testtools.XSLTPID, id, err)
+	}
+	u.done[id] = err
+	return err
+}
+
+// cleanup removes the uploaded stylesheets.
+func (u *onlineUploads) cleanup(exe *httpclnt.HTTPExecuter) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for id, err := range u.done {
+		if err == nil {
+			_ = ops.DeleteBinaryParameter(exe, testtools.XSLTPID, id)
+		}
+	}
 }
 
 // checkXSLT compares the transformation's outcome with the expectations.

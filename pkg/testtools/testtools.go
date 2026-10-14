@@ -61,11 +61,28 @@ const (
 	// StubMaxBody is the most of a request body the stub records (characters).
 	StubMaxBody = 64 * 1024
 
+	// XSLTID is the XSLT test flow: HTTPS sender XSLTPath -> script (header
+	// CpictlXslt = pd:XSLTPID:<CpictlXsltId>:Binary, the headers and
+	// properties of XSLTParamsHeader set) -> XSLT mapping from that header.
+	XSLTID = "CPICTL_Test_XSLT"
+	// XSLTPath is the XSLT test flow's address.
+	XSLTPath = "/cpictl/xslt"
+	// XSLTPID is the Partner Directory partner that holds the stylesheets
+	// under test (binary parameters; the flow reads no other PID).
+	XSLTPID = "CPICTL_Test"
+	// XSLTIDHeader names the stylesheet (parameter ID in XSLTPID);
+	// XSLTParamsHeader carries the case's headers and properties as JSON
+	// {"headers":{...},"properties":{...}}: HTTP header names lose their
+	// case on the way, stylesheet parameter names must keep it.
+	XSLTIDHeader     = "CpictlXsltId"
+	XSLTParamsHeader = "CpictlXsltParams"
+
 	// HarnessRoleParameter and StubRoleParameter are the externalised user
 	// role of each tool's HTTPS sender: a runtime client needs this role
 	// to call the tool. DefaultRole is their value in parameters.prop.
 	HarnessRoleParameter = "CPICTL_Harness_Role"
 	StubRoleParameter    = "CPICTL_Stub_Role"
+	XSLTRoleParameter    = "CPICTL_XSLT_Role"
 	DefaultRole          = "ESBMessaging.send"
 )
 
@@ -73,12 +90,13 @@ const (
 const (
 	ToolHarness = "harness"
 	ToolStub    = "stub"
+	ToolXSLT    = "xslt"
 )
 
 // Artifact is one embedded flow.
 type Artifact struct {
 	ID      string `json:"id"`
-	Tool    string `json:"tool"` // harness or stub
+	Tool    string `json:"tool"` // harness, stub or xslt
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	// RoleParameter is the externalised user role of the HTTPS sender.
@@ -87,10 +105,12 @@ type Artifact struct {
 
 var reManifest = regexp.MustCompile(`(?m)^(Bundle-Name|Bundle-Version): *(.+?)\r?$`)
 
-// Artifacts returns the embedded flows: the harness, then the stub.
+// Artifacts returns the embedded flows: the harness, the stub, the XSLT
+// test flow.
 func Artifacts() []Artifact {
 	out := []Artifact{{ID: HarnessID, Tool: ToolHarness, RoleParameter: HarnessRoleParameter},
-		{ID: StubID, Tool: ToolStub, RoleParameter: StubRoleParameter}}
+		{ID: StubID, Tool: ToolStub, RoleParameter: StubRoleParameter},
+		{ID: XSLTID, Tool: ToolXSLT, RoleParameter: XSLTRoleParameter}}
 	for i := range out {
 		mf, err := content.ReadFile("artifacts/" + out[i].ID + "/META-INF/MANIFEST.MF")
 		if err != nil {
@@ -113,10 +133,10 @@ func Select(only string) ([]Artifact, error) {
 	switch only {
 	case "", "all":
 		return all, nil
-	case ToolHarness, ToolStub:
+	case ToolHarness, ToolStub, ToolXSLT:
 		return slices.DeleteFunc(all, func(a Artifact) bool { return a.Tool != only }), nil
 	}
-	return nil, fmt.Errorf("invalid tool %q (harness or stub)", only)
+	return nil, fmt.Errorf("invalid tool %q (harness, stub or xslt)", only)
 }
 
 // FS returns the files of an embedded artifact (META-INF/MANIFEST.MF,

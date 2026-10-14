@@ -12,6 +12,7 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 )
 
@@ -368,4 +369,23 @@ func upsertBinary(api *cpi.PartnerDirectory, p cpi.BinaryParameter, dryRun bool)
 		return "UPDATED", err
 	}
 	return "UNCHANGED", nil
+}
+
+// SetBinaryParameter creates or updates one Partner Directory binary
+// parameter (contentType as in PDContentTypes, e.g. "xsl").
+func SetBinaryParameter(exe *httpclnt.HTTPExecuter, pid, id, contentType string, content []byte) error {
+	_, err := upsertBinary(cpi.NewPartnerDirectory(exe), cpi.BinaryParameter{Pid: pid, ID: id, ContentType: contentType,
+		Value: base64.StdEncoding.EncodeToString(content)}, false)
+	return err
+}
+
+// DeleteBinaryParameter removes one Partner Directory binary parameter; a
+// missing one is not an error.
+func DeleteBinaryParameter(exe *httpclnt.HTTPExecuter, pid, id string) error {
+	pd := cpi.NewPartnerDirectory(exe)
+	p, err := pd.GetBinaryParameter(pid, id)
+	if err != nil || p == nil {
+		return err
+	}
+	return pd.DeleteBinaryParameter(pid, id)
 }

@@ -23,7 +23,7 @@ func testToolingTools(cfg Config) []Tool {
 				"Development tenants only; never transport the package. Refused on a production tier.",
 			InputSchema: object(props{
 				"package_id":            str("Package of the test tooling, default " + testtools.PackageID + " (letters and digits only)"),
-				"only":                  enum("Install only one tool (default both)", testtools.ToolHarness, testtools.ToolStub),
+				"only":                  enum("Install only one tool (default all)", testtools.ToolHarness, testtools.ToolStub, testtools.ToolXSLT),
 				"deploy":                boolean("Deploy the artifacts and wait for them (default false)"),
 				"role":                  str("User role a runtime client needs to call the tools (their HTTPS senders' externalised role, set before the deploy). Default: keep the configured one (" + testtools.DefaultRole + " on a first install). A tenant-specific role keeps arbitrary ESBMessaging.send clients off the harness"),
 				"poll_interval_seconds": integer("Seconds between deployment status checks"),

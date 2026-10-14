@@ -23,7 +23,7 @@ func installTools(t *testing.T, m *cpitest.Tenant) {
 	res, err := ops.InstallTestTools(context.Background(), m.Executer(), ops.TestToolsOptions{Deploy: true,
 		DeployOptions: ops.Options{Interval: time.Millisecond, MaxChecks: 5}})
 	require.NoError(t, err)
-	require.Len(t, res.Artifacts, 2)
+	require.Len(t, res.Artifacts, 3)
 }
 
 func post(t *testing.T, url, contentType, body string, headers map[string]string) *http.Response {

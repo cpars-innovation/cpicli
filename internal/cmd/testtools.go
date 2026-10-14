@@ -30,7 +30,7 @@ func NewTestToolsCommand() *cobra.Command {
 
 	install := &cobra.Command{
 		Use:   "install",
-		Short: "Upload (and deploy) the test harness and the receiver stub",
+		Short: "Upload (and deploy) the test harness, the receiver stub and the XSLT test flow",
 		Long: `Upload the test tooling that ships with cpictl into a package of its own
 (created when missing) and, with --deploy, deploy it:
 
@@ -39,11 +39,13 @@ func NewTestToolsCommand() *cobra.Command {
   ` + testtools.StubID + `     HTTPS /cpictl/stub/* : records each request (message log attachment
                        ` + testtools.StubAttachment + `) and answers per rule from the Partner Directory
                        (PID ` + testtools.StubPID + `, see 'test stub set')
+  ` + testtools.XSLTID + `     HTTPS /cpictl/xslt : runs a stylesheet from the Partner Directory
+                       (PID ` + testtools.XSLTPID + `) on the request (test xslt --online)
 
-Both HTTPS senders require a user role (default ` + testtools.DefaultRole + `). The harness
+The HTTPS senders require a user role (default ` + testtools.DefaultRole + `). The harness
 reaches any ProcessDirect address, so on a shared tenant give it a role of its
 own with --role (a custom role defined in the tenant's role collections); it is
-set as the parameters ` + testtools.HarnessRoleParameter + ` and ` + testtools.StubRoleParameter + ` before the
+set as the parameters ` + testtools.HarnessRoleParameter + `, ` + testtools.StubRoleParameter + ` and ` + testtools.XSLTRoleParameter + ` before the
 deploy. Without --role the configured role stays.
 
 Existing artifacts are updated to the version of this cpictl (versioning
@@ -85,7 +87,7 @@ tier is prod it is refused unless --allow-production.`,
 		},
 	}
 	install.Flags().String("package", testtools.PackageID, "Package of the test tooling (letters and digits only; created when missing)")
-	install.Flags().String("only", "", "Install only one tool: harness or stub (default both)")
+	install.Flags().String("only", "", "Install only one tool: harness, stub or xslt (default all)")
 	install.Flags().Bool("deploy", false, "Deploy the artifacts and wait for them")
 	install.Flags().String("role", "", "User role a runtime client needs to call the tools (default: keep the configured one, "+testtools.DefaultRole+" on a first install)")
 	install.Flags().Int("delay-length", defaultDeployDelaySeconds, "Seconds between deployment status checks")

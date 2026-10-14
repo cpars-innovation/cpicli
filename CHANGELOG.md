@@ -5,6 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `cpictl test xslt --online` (Go `XSLTOptions.Online`): XSLT cases run on the tenant's XSLT
+  engine through the new test tooling flow `CPICTL_Test_XSLT` (HTTPS `/cpictl/xslt`, XSLT mapping
+  with the stylesheet from the Partner Directory, PID `CPICTL_Test`); the stylesheet is uploaded
+  for the run and removed afterwards (`--keep-uploads`). `cpictl test tools install` installs the
+  three tools (`--only xslt`) ([#13](https://github.com/cpars-innovation/cpicli/issues/13)).
+- HTTP requests send header names exactly as given (Go canonicalised them, e.g.
+  `SAP_ApplicationID` went out as `Sap_applicationid`): scripts and stylesheets see test message
+  headers with their real names.
+
 - XSLT mappings in the Partner Directory: `cpictl test xslt` (Go `testrun.LoadXSLT`,
   `testrun.RunXSLT`) runs cases from `.cpi/tests/pd/<PID>/<ID>/<case>.yaml` with Saxon
   (`--saxon-jar`, `CPICTL_SAXON_JAR` or `--command`): headers and properties as `xsl:param`,

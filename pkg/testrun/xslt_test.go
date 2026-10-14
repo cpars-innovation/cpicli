@@ -2,13 +2,17 @@ package testrun
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -164,4 +168,62 @@ func TestSameOutput(t *testing.T) {
 	assert.False(t, sameOutput([]byte(`<a x="1"/>`), []byte(`<a x="2"/>`)))
 	assert.True(t, sameOutput([]byte("plain text \n"), []byte("plain text")), "text output")
 	assert.False(t, sameOutput([]byte("a"), []byte("b")))
+}
+
+// Online: the stylesheet goes to the Partner Directory, the case to the
+// XSLT test flow (emulated by the mock with a fake transformer), the
+// uploads are removed afterwards.
+func TestRunXSLTOnline(t *testing.T) {
+	tests, pd := xsltProject(t)
+	cases, err := LoadXSLT(tests, Filter{})
+	require.NoError(t, err)
+	m, newExe := demo(t)
+	_, err = ops.InstallTestTools(context.Background(), m.Executer(), ops.TestToolsOptions{Only: testtools.ToolXSLT, Deploy: true,
+		DeployOptions: ops.Options{Interval: time.Millisecond, MaxChecks: 5}})
+	require.NoError(t, err)
+	var seenXSL string
+	m.XSLT = func(xsl, input []byte, params map[string]string) ([]byte, error) {
+		seenXSL = string(xsl)
+		if strings.Contains(string(input), "FAIL") {
+			return nil, errors.New("XPTY0004: A sequence of more than one item")
+		}
+		names := []string{}
+		for _, k := range []string{"Mode", "SAP_Sender"} {
+			if v, ok := params[k]; ok {
+				names = append(names, k+"="+v)
+			}
+		}
+		return []byte(`<out p="` + strings.Join(names, ",") + `">` + string(input) + `</out>`), nil
+	}
+
+	res, err := RunXSLT(context.Background(), cases, XSLTOptions{PDDir: pd, Online: true, Exe: m.Executer(), NewExe: newExe})
+	require.NoError(t, err)
+	by := map[string]CaseResult{}
+	for _, c := range res.Cases {
+		by[c.Case] = c
+	}
+	assert.Equal(t, StatusPassed, by["maps"].Status, "%+v %s", by["maps"].Failures, by["maps"].Error)
+	assert.NotEmpty(t, by["maps"].MessageGuid)
+	assert.Equal(t, StatusPassed, by["fails"].Status, "%+v %s", by["fails"].Failures, by["fails"].Error)
+	assert.Equal(t, StatusFailed, by["wrong"].Status)
+	assert.Equal(t, StatusFailed, by["breaks"].Status)
+	assert.Contains(t, by["breaks"].Diagnostics.LastError, "XPTY0004")
+	assert.Equal(t, "<xsl:stylesheet/>", seenXSL, "the stylesheet from the Partner Directory folder")
+	assert.Empty(t, m.PDBinaries, "uploads removed")
+
+	// Keep leaves them for inspection
+	_, err = RunXSLT(context.Background(), cases[:1], XSLTOptions{PDDir: pd, Online: true, Exe: m.Executer(), NewExe: newExe, Keep: true})
+	require.NoError(t, err)
+	assert.Contains(t, m.PDBinaries, testtools.XSLTPID+"/"+OnlineXSLTID("SAP_ERP", "OrderMap"))
+
+	_, err = RunXSLT(context.Background(), cases, XSLTOptions{PDDir: pd, Online: true, Exe: m.Executer(), NewExe: newExe, Tier: "prod"})
+	assert.Equal(t, exitcode.Usage, output.ExitCode(err), "refused on prod")
+}
+
+func TestOnlineXSLTID(t *testing.T) {
+	assert.Equal(t, "SAP_ERP.OrderMap", OnlineXSLTID("SAP_ERP", "OrderMap"))
+	assert.Equal(t, "P_1.a_b", OnlineXSLTID("P 1", "a/b"))
+	long := OnlineXSLTID(strings.Repeat("P", 50), strings.Repeat("I", 50))
+	assert.Len(t, long, 60)
+	assert.NotEqual(t, long, OnlineXSLTID(strings.Repeat("P", 50), strings.Repeat("I", 49)+"J"))
 }

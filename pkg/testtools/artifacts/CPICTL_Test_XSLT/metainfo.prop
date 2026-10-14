@@ -1,0 +1,1 @@
+description=cpictl XSLT test: runs an XSLT under test from the Partner Directory (PID CPICTL_Test) on a request to /cpictl/xslt (installed by cpictl test tools install; do not transport)

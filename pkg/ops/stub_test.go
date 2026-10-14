@@ -41,7 +41,7 @@ func TestInstallTestTools(t *testing.T) {
 
 	status, err := TestToolsStatus(context.Background(), exe)
 	require.NoError(t, err)
-	require.Len(t, status, 2)
+	require.Len(t, status, 3)
 	for _, s := range status {
 		assert.False(t, s.Installed, s.ID)
 		assert.False(t, s.Deployed, s.ID)
@@ -62,7 +62,7 @@ func TestInstallTestTools(t *testing.T) {
 	res, err = InstallTestTools(context.Background(), exe, TestToolsOptions{Deploy: true, DeployOptions: fastDeploy})
 	require.NoError(t, err)
 	assert.Equal(t, "EXISTS", res.Package.Action)
-	require.Len(t, res.Artifacts, 2)
+	require.Len(t, res.Artifacts, 3)
 	byID := map[string]TestToolResult{}
 	for _, a := range res.Artifacts {
 		byID[a.ID] = a

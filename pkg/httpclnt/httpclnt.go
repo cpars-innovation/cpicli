@@ -225,7 +225,11 @@ func (e *HTTPExecuter) send(method string, path string, payload []byte, headers 
 		req.SetBasicAuth(e.basicUserId, e.basicPassword)
 	}
 	for k, v := range headers {
-		req.Header.Set(k, v)
+		// as given: header names are case-insensitive in HTTP, but flows
+		// see them as sent (a script iterating the headers, an XSLT
+		// parameter named after one)
+		req.Header.Del(k)
+		req.Header[k] = []string{v}
 	}
 	for _, cookie := range cookies {
 		req.AddCookie(cookie)

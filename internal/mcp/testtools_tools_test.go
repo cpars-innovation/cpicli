@@ -41,7 +41,7 @@ func TestTestToolingTools(t *testing.T) {
 	res, err := callTool(t, toolByName(t, cfg, "install_test_tools"), map[string]any{"deploy": true, "role": "ACME.Test"})
 	require.NoError(t, err)
 	install := res.(*ops.TestToolsInstallResult)
-	require.Len(t, install.Artifacts, 2)
+	require.Len(t, install.Artifacts, 3)
 	for _, a := range install.Artifacts {
 		require.NotNil(t, a.Deploy, a.ID)
 		assert.Equal(t, ops.StatusDeployed, a.Deploy.Status, a.ID)

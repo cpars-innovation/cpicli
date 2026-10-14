@@ -156,7 +156,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`test stub clear`](#test-stub-clear) | Remove the stub's answer for a rule (it then answers 200 with {}) |
 | [`test stub set`](#test-stub-set) | Set the stub's answer for a rule |
 | [`test tools`](#test-tools) | Install the test harness and the receiver stub, or show their state |
-| [`test tools install`](#test-tools-install) | Upload (and deploy) the test harness and the receiver stub |
+| [`test tools install`](#test-tools-install) | Upload (and deploy) the test harness, the receiver stub and the XSLT test flow |
 | [`test tools status`](#test-tools-status) | Show whether the test harness and the receiver stub are installed and deployed |
 | [`test xslt`](#test-xslt) | Run the tests of XSLT mappings stored in the Partner Directory (offline, with Saxon) |
 | [`transport`](#transport) | Prepare a transport between tiers: dependencies, pre-checks against the target, copy artifact folders |
@@ -3602,7 +3602,7 @@ Install the test harness and the receiver stub, or show their state
 
 ## test tools install
 
-Upload (and deploy) the test harness and the receiver stub
+Upload (and deploy) the test harness, the receiver stub and the XSLT test flow
 
 ```
 Upload the test tooling that ships with cpictl into a package of its own
@@ -3613,11 +3613,13 @@ Upload the test tooling that ships with cpictl into a package of its own
   CPICTL_Test_Stub     HTTPS /cpictl/stub/* : records each request (message log attachment
                        cpictl-stub-request) and answers per rule from the Partner Directory
                        (PID CPICTL_Stub, see 'test stub set')
+  CPICTL_Test_XSLT     HTTPS /cpictl/xslt : runs a stylesheet from the Partner Directory
+                       (PID CPICTL_Test) on the request (test xslt --online)
 
-Both HTTPS senders require a user role (default ESBMessaging.send). The harness
+The HTTPS senders require a user role (default ESBMessaging.send). The harness
 reaches any ProcessDirect address, so on a shared tenant give it a role of its
 own with --role (a custom role defined in the tenant's role collections); it is
-set as the parameters CPICTL_Harness_Role and CPICTL_Stub_Role before the
+set as the parameters CPICTL_Harness_Role, CPICTL_Stub_Role and CPICTL_XSLT_Role before the
 deploy. Without --role the configured role stays.
 
 Existing artifacts are updated to the version of this cpictl (versioning
@@ -3634,7 +3636,7 @@ tier is prod it is refused unless --allow-production.
       --delay-length int      Seconds between deployment status checks (default 10)
       --deploy                Deploy the artifacts and wait for them
       --max-check-limit int   Deployment status checks per artifact (default 30)
-      --only string           Install only one tool: harness or stub (default both)
+      --only string           Install only one tool: harness, stub or xslt (default all)
       --package string        Package of the test tooling (letters and digits only; created when missing) (default "CPICTLTesting")
       --role string           User role a runtime client needs to call the tools (default: keep the configured one, ESBMessaging.send on a first install)
 ```
@@ -3682,6 +3684,13 @@ does.
 
 The transformation runs with Saxon on this machine: --saxon-jar (java -jar
 <jar>, also CPICTL_SAXON_JAR) or --command. Nothing is sent to a tenant.
+
+--online runs the same cases on the tenant's XSLT engine instead: the
+stylesheet is uploaded as the Partner Directory binary CPICTL_Test/<PID>.<ID>
+(removed afterwards unless --keep-uploads) and each case is sent to the XSLT
+test flow CPICTL_Test_XSLT ('cpictl test tools install --deploy'). Refused on a
+production tier unless --allow-production.
+
 Exit code 5 when a case failed.
 ```
 
@@ -3690,15 +3699,22 @@ Exit code 5 when a case failed.
 **Flags:**
 
 ```
-      --case strings       Only these cases (file name without .yaml; patterns allowed; repeatable)
-      --command string     XSLT processor command instead of --saxon-jar; Saxon's -s: -xsl: -o: and name=value arguments are appended
-      --dir string         Directory of the test cases (XSLT cases in <dir>/pd/<PID>/<ID>/<case>.yaml) (default ".cpi/tests")
-      --flow strings       Only these parameters (<PID>/<ID>, patterns allowed; repeatable)
-      --junit string       Write a JUnit XML report to this file
-      --parallel int       Cases run at the same time (default 1)
-      --pd-dir string      Partner Directory folder of pd-snapshot (the stylesheets) (default "partner-directory")
-      --saxon-jar string   Saxon-HE jar, run with java -jar (config: CPICTL_SAXON_JAR)
-      --tag strings        Only cases with one of these tags (repeatable)
+      --case strings                        Only these cases (file name without .yaml; patterns allowed; repeatable)
+      --command string                      XSLT processor command instead of --saxon-jar; Saxon's -s: -xsl: -o: and name=value arguments are appended
+      --dir string                          Directory of the test cases (XSLT cases in <dir>/pd/<PID>/<ID>/<case>.yaml) (default ".cpi/tests")
+      --flow strings                        Only these parameters (<PID>/<ID>, patterns allowed; repeatable)
+      --junit string                        Write a JUnit XML report to this file
+      --keep-uploads                        With --online: keep the uploaded stylesheets in the Partner Directory (PID CPICTL_Test)
+      --online                              Run on the tenant's XSLT engine through the XSLT test flow (cpictl test tools install)
+      --parallel int                        Cases run at the same time (default 1)
+      --pd-dir string                       Partner Directory folder of pd-snapshot (the stylesheets) (default "partner-directory")
+      --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
+      --runtime-oauth-clientsecret string   OAuth client secret for runtime endpoints
+      --runtime-oauth-host string           OAuth token server host for runtime endpoints (default: --oauth-host)
+      --runtime-password string             Password for Basic Auth on runtime endpoints
+      --runtime-userid string               User ID for Basic Auth on runtime endpoints
+      --saxon-jar string                    Saxon-HE jar, run with java -jar (config: CPICTL_SAXON_JAR)
+      --tag strings                         Only cases with one of these tags (repeatable)
 ```
 
 **Examples:**
@@ -3707,6 +3723,7 @@ Exit code 5 when a case failed.
   cpictl test xslt --saxon-jar ~/lib/saxon-he-12.5.jar
   cpictl test xslt --flow 'SAP_ERP/*' --tag smoke --junit xslt.xml
   cpictl test xslt --command "saxon"
+  cpictl test xslt --online --flow 'SAP_ERP/*'
 ```
 
 ## transport

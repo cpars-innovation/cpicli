@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 	"io"
 	mrand "math/rand/v2"
 	"net"
@@ -261,6 +262,11 @@ type Tenant struct {
 	// "<pid>/<id>".
 	PDStrings  map[string]string
 	PDBinaries map[string]PDBinary
+	// XSLT transforms for the emulated XSLT test flow (testtools.XSLTID):
+	// the stylesheet from the Partner Directory, the input and the
+	// stylesheet parameters (headers and properties). The mock runs no
+	// XSLT itself: without XSLT the flow answers 500.
+	XSLT func(stylesheet, input []byte, params map[string]string) ([]byte, error)
 	// Listings page like the tenant: $skip/$top, at most 30 binary and 1000
 	// string parameters per page whatever $top asks for, __count with
 	// $inlinecount=allpages. PDNextLinks adds __next links (absolute URLs).
@@ -715,6 +721,10 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	if a := m.Artifacts[in.Artifact]; m.Live && a != nil && a.isStub() {
 		m.handleStub(w, r, in.Artifact, rest, body)
+		return
+	}
+	if a := m.Artifacts[in.Artifact]; m.Live && a != nil && a.running() && in.Artifact == testtools.XSLTID {
+		m.handleXSLT(w, r, in, body)
 		return
 	}
 	switch in.Kind {

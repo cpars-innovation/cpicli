@@ -226,6 +226,15 @@ cpictl test xslt --flow 'SAP_ERP/*' --junit xslt.xml
   5 when a case failed. Go: `testrun.LoadXSLT`, `testrun.RunXSLT`.
 - Saxon runs on this machine (Java required); nothing is sent to a tenant. Use the Saxon version
   closest to your tenant's XSLT engine.
+- `--online` runs the same cases on the tenant's XSLT engine: the stylesheet is uploaded as the
+  Partner Directory binary `CPICTL_Test/<PID>.<ID>` (removed afterwards unless `--keep-uploads`)
+  and each case goes to the XSLT test flow `CPICTL_Test_XSLT` of the test tooling (`cpictl test
+  tools install --deploy`; role parameter `CPICTL_XSLT_Role`). The flow only reads PID
+  `CPICTL_Test`. Headers and properties travel as one JSON header (`CpictlXsltParams`) and are
+  set with their exact names, since HTTP loses the case of header names and `xsl:param` names
+  are case-sensitive. Refused on a production tier unless `--allow-production`. Go:
+  `XSLTOptions{Online: true, Exe, NewExe, Tier, AllowProduction, Keep}`. *(The flow passes a
+  real tenant's Check; its run on a deployed tenant is still to be verified.)*
 
 ## Script collection tests
 
@@ -342,6 +351,7 @@ cpictl test tools status                  # installed, deployed, version, endpoi
 |------|-------|----------|
 | `CPICTL_Test_Harness` | HTTPS sender `/cpictl/test` -> Request Reply -> ProcessDirect receiver `${header.CpictlTargetAddress}` | `send --process-direct`, test runs of ProcessDirect flows |
 | `CPICTL_Test_Stub` | HTTPS sender `/cpictl/stub/*` -> Groovy script | a receiver for the flow under test: records each request and answers per rule |
+| `CPICTL_Test_XSLT` | HTTPS sender `/cpictl/xslt` -> Groovy script -> XSLT mapping from the Partner Directory (PID `CPICTL_Test`) | `test xslt --online`: XSLT cases on the tenant's engine |
 
 - `install` creates the package (`--package`, default `CPICTLTesting`: package IDs take letters
   and digits only) and creates or updates both flows (`--only harness|stub` for one). The
