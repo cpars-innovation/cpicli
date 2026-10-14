@@ -1,26 +1,62 @@
 package com.sap.it.script.v2.api;
 
-import java.util.HashMap;
+import com.sap.it.script.v2.api.extensions.ExtensionFunctions;
 import java.util.Map;
+import javax.activation.DataHandler;
 
-// Stand-in for the Groovy script step 2.x message (scripts under script/v2/,
-// package script.v2). It has only what the 2.x API offers as far as known:
-// no getHeader(name) or getHeader(name, Class) (version 1 only), so a test
-// fails when a script calls them. Add a method only when the real API has it.
-public class Message {
-    private Object body;
-    private final Map<String, Object> headers = new HashMap<>();
-    private final Map<String, Object> properties = new HashMap<>();
+/**
+ * Stand-in of the version 2 script API message, written from SAP's published API documentation.
+ * The implementation is {@code cpictl.standin.MessageV2}. It has no {@code getHeader(...)}: that is
+ * the version 1 API; version 2 scripts read {@code getHeaders().get(name)}.
+ */
+public interface Message {
+    <T> T getBody(Class<T> type);
 
-    @SuppressWarnings("unchecked")
-    public <T> T getBody(Class<T> type) {
-        if (body == null) return null;
-        if (type == String.class) return (T) body.toString();
-        return type.cast(body);
-    }
-    public void setBody(Object body) { this.body = body; }
-    public Map<String, Object> getHeaders() { return headers; }
-    public void setHeader(String name, Object value) { headers.put(name, value); }
-    public Object getProperty(String name) { return properties.get(name); }
-    public void setProperty(String name, Object value) { properties.put(name, value); }
+    Object getBody();
+
+    void setBody(Object exchangeBody);
+
+    Map<String, DataHandler> getAttachments();
+
+    void setAttachments(Map<String, DataHandler> attachments);
+
+    Map<String, Object> getHeaders();
+
+    void setHeaders(Map<String, Object> exchangeHeaders);
+
+    void setHeader(String name, Object value);
+
+    Map<String, Object> getProperties();
+
+    void setProperties(Map<String, Object> exchangeProperties);
+
+    void setProperty(String name, Object value);
+
+    Object getProperty(String name);
+
+    long getBodySize();
+
+    long getAttachmentsSize();
+
+    void addAttachmentHeader(String headerName, String headerValue, Attachment attachment);
+
+    void setAttachmentHeader(String headerName, String headerValue, Attachment attachment);
+
+    String getAttachmentHeader(String headerName, Attachment attachment);
+
+    void removeAttachmentHeader(String headerName, Attachment attachment);
+
+    Map<String, Attachment> getAttachmentObjects();
+
+    void setAttachmentObjects(Map<String, Attachment> attachmentObjects);
+
+    void addAttachmentObject(String id, Attachment content);
+
+    void clearSoapHeaders();
+
+    void clearAttachments();
+
+    void resetBodyStream();
+
+    ExtensionFunctions getExtensionFunctions(Class<? extends ExtensionFunctions> clazz);
 }

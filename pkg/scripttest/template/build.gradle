@@ -9,6 +9,13 @@ dependencies {
     implementation 'org.apache.groovy:groovy:4.0.21'
     implementation 'org.apache.groovy:groovy-json:4.0.21'  // JsonSlurper, JsonOutput (the runtime has them)
     implementation 'org.apache.groovy:groovy-xml:4.0.21'   // XmlSlurper, XmlUtil, MarkupBuilder
+    // libraries of the SAP script API stand-ins (tests/stubs), the versions the CPI runtime ships
+    implementation 'org.apache.camel:camel-attachments:3.14.10'   // Attachment, DefaultAttachment (also brings camel-api, camel-support)
+    implementation 'com.sun.activation:javax.activation:1.2.0'     // DataHandler, DataSource
+    implementation 'org.slf4j:slf4j-api:1.7.36'
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'        // keystore stand-in: test key and certificate generation
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+    implementation 'org.bouncycastle:bcutil-jdk18on:1.78.1'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
