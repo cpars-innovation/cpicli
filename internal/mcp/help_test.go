@@ -58,6 +58,7 @@ func TestHelpTool(t *testing.T) {
 		if s["name"] == "build" {
 			assert.Contains(t, s["tools"], "lint")
 			assert.NotContains(t, s["tools"], "deploy", "only tools the server offers")
+			assert.Contains(t, s["notOffered"], "deploy", "members the server does not offer are named")
 		}
 	}
 

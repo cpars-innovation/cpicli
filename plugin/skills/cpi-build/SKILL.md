@@ -6,7 +6,10 @@ description: Build or change an SAP Cloud Integration flow and get it deployed -
 # Build an integration flow
 
 Work on local files in the repository and use the cpi MCP tools to move them to the tenant.
-Read [iflow-structure.md](iflow-structure.md) before editing a model for the first time.
+Read [iflow-structure.md](iflow-structure.md) before editing a model for the first time, and
+[editing-pitfalls.md](editing-pitfalls.md) before changing an existing flow: review the whole flow
+you touch, keep headers absent/empty/set exactly as before, and the model details that break the
+editor. HTTP receivers: [http-receiver.md](http-receiver.md).
 
 ## Before you start
 
@@ -90,4 +93,5 @@ the plan does not cover.
   directories) as `{{Parameter}}`, with keys named as in the conventions.
 - Do not put secrets, tokens or productive data into files, parameters or test messages.
 - Keep `Bundle-SymbolicName` in META-INF/MANIFEST.MF equal to the flow ID.
-- Report what you changed (files, parameters, deployed version) at the end.
+- Report what you changed (files, parameters, deployed version) at the end, and say what you
+  checked locally, what on the tenant, and what you did not run.

@@ -5,6 +5,24 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Lint rules from field feedback: `exception-subprocess-message-end` (an exception subprocess
+  that swallows the error: Message End with nothing that raises it again),
+  `dead-local-process` (a local process nobody calls, with the receivers only it uses),
+  `inline-local-process` (a local process called once that is a straight line of steps) and
+  `duplicate-header-case` (`OrderNo` and `orderNo`: one header in Camel). Checked against SAP's
+  Pipeline flows without findings.
+- A refused upload (4xx) says what the tenant answered and, when the artifact is open in the
+  Web UI, who holds the edit lock since when and how to remove it (`upload_artifact`,
+  `update artifact`, the orchestrator).
+- `cpictl mcp --opt-in <tool>` (`CPICTL_OPT_IN`) offers an opt-in tool (`unlock_artifact`, the
+  delete tools) without limiting the other tools as `--tools` does. `help` lists every toolset
+  with the members the server does not offer and why (`notOffered`).
+- Skills: `cpi-build` has `editing-pitfalls.md` (review the whole flow, absent vs empty, model
+  details that break the editor) and `http-receiver.md` (address and query handling, dynamic
+  method, CSRF, 4xx diagnosis); `cpi-review` and `cpi-operate` adopt the matching checks
+  (TRACE only after deploy, report times in UTC and local time, local / tenant / not run kept
+  apart).
+
 ## 0.16.0
 
 - `cpictl test xslt --online` (Go `XSLTOptions.Online`): XSLT cases run on the tenant's XSLT

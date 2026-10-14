@@ -35,11 +35,14 @@ cpictl lint --list-rules
 | | `unused-parameter` | warning | a `parameters.prop` key no `{{key}}` uses | |
 | | `noop-content-modifier` | warning | a content modifier without headers, properties and body | removes it (`--fix-rules`) |
 | | `property-never-read` | info | an exchange property set but never read in the flow | |
+| | `dead-local-process` | warning | a local integration process no process call references (names the receivers only it uses) | |
 | simplify | `consecutive-content-modifiers` | info | content modifiers in a row | |
 | | `converter-roundtrip` | warning | XML to JSON and straight back (or the reverse) | |
 | | `trivial-script` | info | a script that only sets literal headers or properties | |
 | | `large-script` | info | a script over 300 lines | |
+| | `inline-local-process` | info | a local process called once (not looping) that is a straight line of steps | |
 | robustness | `no-exception-subprocess` | warning | an integration process without exception subprocess | |
+| | `exception-subprocess-message-end` | warning | an exception subprocess ending in a Message End with nothing in it that raises the error again (a script, a called local process with an Error or Escalation End) or sets `CamelHttpResponseCode`: the message is marked completed and the error lost | |
 | | `swallowed-exception` | warning | an empty `catch` block | |
 | | `collection-script-tests` | warning | a public function of a script collection that no test in `scriptTests.dir/<package>/<collection>/` calls ([script tests](#script-collection-tests)) | |
 | | `collection-script-coverage` | warning | a script collection script below `scriptTests.minCoverage` line coverage in the JaCoCo report, not in the report, or changed after it; no report at all | |
@@ -63,6 +66,7 @@ cpictl lint --list-rules
 | | `default-step-name` | info | "Groovy Script 1", "Content Modifier 2", ... | |
 | | `layout` | info | the diagram has steps or lines that are not drawn, overlapping shapes, shapes outside their pool, lines through steps or shapes that nearly touch ([diagram layout](#diagram-layout)) | yes |
 | | `naming` | warning | a flow ID not matching `naming.iflowId` | |
+| | `duplicate-header-case` | warning | one header written in different spellings (`OrderNo`, `orderNo`) in content modifiers and scripts: header names are case-insensitive | |
 
 The OData and IDoc rules read the adapter properties the Web UI writes (`operation`,
 `resourcePath`, `queryOptions`, `customQueryOptions`, `pagination`, `enableBatchProcessing`,

@@ -123,7 +123,7 @@ func ClassOf(name string) Class {
 // the Web UI's Monitor, no content changes.
 var operateTenantTools = []string{"set_log_level", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state"}
 
-// optInTools are offered only when the user's --tools names them exactly
+// optInTools are offered only when the user's --opt-in or --tools names them exactly
 // (not by a pattern), whatever the mode: they can destroy someone else's work
 // or content that cannot be restored.
 var optInTools = []string{"unlock_artifact", "delete_artifact", "delete_package", "delete_jms_messages",
@@ -139,6 +139,10 @@ type ToolFilter struct {
 	Allow []string
 	// Deny drops matching tools; it wins over Allow.
 	Deny []string
+	// OptIn offers these opt-in tools (exact names) in addition, without
+	// limiting the others as Allow does. Deny, ReadOnly and the mode still
+	// apply.
+	OptIn []string
 }
 
 // Filter applies f and returns the remaining tools and the names of the
@@ -253,7 +257,17 @@ func ApplyFiltersWithReasons(tools []Tool, mode string, user ToolFilter) (kept [
 	if err != nil {
 		return nil, nil, err
 	}
-	kept, names, err := Filter(tools, user)
+	for _, n := range user.OptIn {
+		if !slices.Contains(optInTools, n) {
+			return nil, nil, output.Usagef("%q is not an opt-in tool (opt-in tools: %s)", n, strings.Join(optInTools, ", "))
+		}
+	}
+	filter := user
+	if len(user.Allow) > 0 {
+		// an opt-in tool is offered next to the tools --tools selects
+		filter.Allow = append(slices.Clone(user.Allow), user.OptIn...)
+	}
+	kept, names, err := Filter(tools, filter)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -261,8 +275,8 @@ func ApplyFiltersWithReasons(tools []Tool, mode string, user ToolFilter) (kept [
 		removed = append(removed, RemovedTool{Name: n, Reason: userFilterReason(n, user)})
 	}
 	kept = slices.DeleteFunc(kept, func(t Tool) bool {
-		if slices.Contains(optInTools, t.Name) && !slices.Contains(user.Allow, t.Name) {
-			removed = append(removed, RemovedTool{Name: t.Name, Reason: "opt-in: offered only when --tools names it exactly (it can destroy content or someone else's work)"})
+		if slices.Contains(optInTools, t.Name) && !slices.Contains(user.Allow, t.Name) && !slices.Contains(user.OptIn, t.Name) {
+			removed = append(removed, RemovedTool{Name: t.Name, Reason: "opt-in: offered only when --opt-in or --tools names it exactly (it can destroy content or someone else's work)"})
 			return true
 		}
 		return false
@@ -315,7 +329,7 @@ func ModeInstructions(mode string) string {
 	case "develop":
 		return "\n\nMode: develop. Build loop on a development tenant; pd_deploy full_sync is refused, undeploy needs confirm. Open a loop with loop_start before changing anything."
 	case "full":
-		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy, delete_data_store_entry and the other delete tools still need confirm; unlock_artifact and the delete tools of content, JMS messages, security material and partners only when --tools names them."
+		return "\n\nMode: full. All tools without restrictions, including pd_deploy full_sync (which deletes remote parameters: run pd_diff first). undeploy, delete_data_store_entry and the other delete tools still need confirm; unlock_artifact and the delete tools of content, JMS messages, security material and partners only when --opt-in or --tools names them."
 	}
 	return ""
 }

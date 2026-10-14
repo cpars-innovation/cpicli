@@ -107,6 +107,7 @@ server: [plugin.md](plugin.md).
 | `--read-only` | `false` | Offer only tools that do not change the tenant or trigger processing |
 | `--tools` | all | Offer only these tools: names or patterns, e.g. `list_*,get_*,validate_artifact` |
 | `--disable-tools` | none | Do not offer these tools (names or patterns); wins over `--tools` |
+| `--opt-in` | none | Also offer these opt-in tools (exact names), without limiting the others |
 | `--versioning` | not set | Versioning mode of `upload_artifact` and `deploy` (`manifest`, `keep`, `tenant-bump`), see [versioning.md](versioning.md) |
 | `--loop-required` | `false` | Refuse tenant tools (errorCategory `loop_required`) while no loop is open, see [Build loops](#build-loops) |
 | `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors`, `--loop-max-minutes` | `0` (no cap) | Highest `max_iterations`, `max_deploys`, `same_error_limit`, `wall_clock_minutes` that `loop_start` accepts; they also lower the defaults |
@@ -136,8 +137,10 @@ restrictive wins:
 of the tool, not of a mode.
 
 `unlock_artifact` and these delete tools (all but `delete_data_store_entry`) are **opt-in**: no mode
-offers them (not even `full`), only `--tools` naming them exactly (`--tools
-'list_*,unlock_artifact'`; a pattern such as `unlock_*`, `delete_*` or `*` does not count).
+offers them (not even `full`), only `--opt-in` or `--tools` naming them exactly. `--opt-in
+delete_artifact` adds the tool and keeps all others; `--tools 'list_*,unlock_artifact'` also limits
+the server to the listed tools. A pattern such as `unlock_*`, `delete_*` or `*` does not count.
+`--disable-tools`, `--read-only` and the mode still apply to an opted-in tool.
 Removing a lock discards the unsaved changes of whoever holds it; a deleted artifact or package
 cannot be restored; deleted JMS messages are never processed; deleting a keystore entry breaks the
 flows that use it; deleting an access policy lifts its restriction.
@@ -209,7 +212,7 @@ The server enforces the limits itself, for every MCP client: disabled tools are 
 are unavailable. A call to a disabled tool returns a normal tool result with `isError: true`,
 `errorCategory: "usage"` and an error that names the reason (`not offered in mode discover
 (read-only)`, `the server is read-only (--read-only) …`, `disabled by --disable-tools`, `not
-selected by --tools / --toolset`, `opt-in: offered only when --tools names it exactly …`); only a
+selected by --tools / --toolset`, `opt-in: offered only when --opt-in or --tools names it exactly …`); only a
 name that is no cpictl tool at all is a JSON-RPC error (-32602). A pattern that matches no tool stops the server with exit code 2, so a typo never
 leaves a tool enabled by accident.
 
@@ -293,18 +296,18 @@ read roles.
 | `get_tenant_settings` | | External logging and archiving on/off, last archiving runs |
 | `download_log_archive` | local file | Zip of the latest `http` or `trace` log files, below the server root |
 | `list_components` | | Adapter and step variants (cmdVariantUri, version) the tenant offers, from `.cpi/components.json` ([components.md](components.md)); filter by name, kind, direction |
-| `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--tools unlock_artifact` |
+| `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--opt-in unlock_artifact` |
 | `list_value_mappings` | | Value mapping artifacts: ID, version, package |
 | `get_value_mapping` | | Schemas of a value mapping (source agency/identifier -> target agency/identifier) with value pairs and default values; filter by agency or identifier |
 | `set_value_mapping` | designtime | Add a value pair to an existing schema or change the target value of a source value (`added`, `changed` with `previous`, `unchanged`); deploy with `artifact_type: ValueMapping` to use it; requires `confirm: true` |
-| `delete_artifact` | designtime, **destructive**, opt-in | Delete a designtime artifact of any type (type found on the tenant unless `artifact_type`); a deployed one is refused unless `undeploy_first`; requires `confirm: true` and `--tools delete_artifact` |
-| `delete_package` | designtime, **destructive**, opt-in | Delete a package; refused while it has artifacts unless `with_artifacts`, and while they are deployed unless `undeploy_first`; requires `confirm: true` and `--tools delete_package` |
+| `delete_artifact` | designtime, **destructive**, opt-in | Delete a designtime artifact of any type (type found on the tenant unless `artifact_type`); a deployed one is refused unless `undeploy_first`; requires `confirm: true` and `--opt-in delete_artifact` |
+| `delete_package` | designtime, **destructive**, opt-in | Delete a package; refused while it has artifacts unless `with_artifacts`, and while they are deployed unless `undeploy_first`; requires `confirm: true` and `--opt-in delete_package` |
 | `list_variables`, `get_variable` | | Global and flow variables, and a value |
 | `list_jms_queues`, `get_jms_broker` | | Queues with message counts and the flows that use them; broker capacity and usage |
 | `list_jms_messages` | | Messages of a queue: JMS message ID, failed, retry count, next retry, message GUID of the last attempt |
 | `retry_jms_messages` | tenant | Process messages of a queue again now (ids or `all`); requires `confirm: true` |
 | `move_jms_messages` | tenant | Move messages to another queue (e.g. error queue back to the processing queue); requires `confirm: true` |
-| `delete_jms_messages` | tenant, **destructive**, opt-in | Delete messages from a queue; requires `confirm: true` and `--tools delete_jms_messages` |
+| `delete_jms_messages` | tenant, **destructive**, opt-in | Delete messages from a queue; requires `confirm: true` and `--opt-in delete_jms_messages` |
 | `set_jms_queue_state` | tenant | Deactivate a queue (messages are kept, not consumed) or activate it |
 | `list_number_ranges` | | Number range objects and current values |
 | `list_log_files`, `get_log_file` | | System / HTTP log files and the end of one (adapter errors without a message log) |
@@ -317,11 +320,11 @@ read roles.
 | `get_ssh_public_key` | | Public key of an entry in OpenSSH format (for an SFTP server's `authorized_keys`) |
 | `generate_key_pair` | keystore | The tenant generates a key pair (self-signed; RSA 2048, one year by default); `update` replaces an alias |
 | `upload_certificate_chain` | keystore | Replace a key pair's certificate with the CA-signed chain (PEM; private keys refused) |
-| `delete_keystore_entry` | keystore, **destructive**, opt-in | Delete an entry of the system keystore (not SAP-owned ones); requires `confirm: true` and `--tools delete_keystore_entry` |
+| `delete_keystore_entry` | keystore, **destructive**, opt-in | Delete an entry of the system keystore (not SAP-owned ones); requires `confirm: true` and `--opt-in delete_keystore_entry` |
 | `list_pgp_keys` | | PGP public and secret keys: key ID, user IDs, sub keys, validity (never key material) |
 | `list_access_policies` | | Access policies (role) with their artifact references |
 | `create_access_policy`, `add_artifact_reference` | access policies | Create a policy for a role (optionally with references); add a reference (type, attribute, `EXACT_MATCH` / `REGULAR_EXPRESSION`) |
-| `delete_access_policy`, `delete_artifact_reference` | access policies, **destructive**, opt-in | Delete a policy (with its references) or one reference; requires `confirm: true` and `--tools` naming the tool |
+| `delete_access_policy`, `delete_artifact_reference` | access policies, **destructive**, opt-in | Delete a policy (with its references) or one reference; requires `confirm: true` and `--opt-in` naming the tool |
 | `list_audit_logs` | | Audit log, newest first (`since`, `top`, `user`, `object`); `status: "missing_role"` (ok) when the key may not read it (HTTP 403) |
 | `lint` | | Local flows: findings per rule (reuse, Partner Directory candidates, dead weight, simplify, robustness, performance, configuration, hygiene) with suggestions; `.cpi/lint.yaml`, baseline. See [lint.md](lint.md) |
 | `lint_fix` | local files | Apply the mechanical fixes: scripts into script collections, unused scripts deleted, unconnected steps removed; `dry_run` |
@@ -337,7 +340,7 @@ read roles.
 | `list_pd_partners` | | Partner IDs with the number of string and binary parameters, binary content types, alternative partners, authorized users; values are not read (`sizes: true` reads the binaries for their total size) |
 | `list_alternative_partners`, `list_authorized_users` | | Alternative partners (agency / scheme / ID -> PID) and authorized users (user -> PID) |
 | `create_alternative_partner`, `create_authorized_user` | Partner Directory | Add an alternative partner or an authorized user |
-| `delete_alternative_partner`, `delete_authorized_user` | Partner Directory, **destructive**, opt-in | Remove one; requires `confirm: true` and `--tools` naming the tool |
+| `delete_alternative_partner`, `delete_authorized_user` | Partner Directory, **destructive**, opt-in | Remove one; requires `confirm: true` and `--opt-in` naming the tool |
 | `get_pd_parameters` | | Partner Directory parameters of one PID (binaries: content type, size, sha256; content with `include_content`) |
 | `pd_diff` | | Local Partner Directory files vs tenant: create / update / unchanged / remote_only per parameter |
 | `pd_dependencies` | | Which local flows reference which Partner Directory parameters; dynamic references; unknown PIDs |
@@ -363,7 +366,7 @@ the mode and tool filters, so it reports what is really available on this server
 | Call | Returns |
 |------|---------|
 | `help` | Mode, available and disabled tools (each with `effect` and `class`), toolsets, workflows (task -> skill, tools, docs), skills, CLI commands |
-| `help {"topic": "server"}` | The server's capabilities in one call: mode, effective `readOnly` (no available tool changes the tenant, whether by `--read-only`, the mode or the filters), disabled tools, the toolsets with their available tools and each tool's `effect` and `class` (`toolEffects`), an `other` toolset for available tools in no toolset, the loop policy (`loop.required`, `loop.caps`) and the masking options |
+| `help {"topic": "server"}` | The server's capabilities in one call: mode, effective `readOnly` (no available tool changes the tenant, whether by `--read-only`, the mode or the filters), disabled tools, every toolset with its available tools, each tool's `effect` and `class` (`toolEffects`) and the members the server does not offer with the reason (`notOffered`, e.g. `opt-in: …` or `not offered in mode discover`), an `other` toolset for available tools in no toolset, the loop policy (`loop.required`, `loop.caps`) and the masking options |
 | `help {"topic": "copy_iflow"}` | Description, input schema, effect and class of a tool, or why it is not available here |
 | `help {"topic": "cpi-test"}` | The skill's instructions (`SKILL.md`) and its reference files |
 | `help {"topic": "cpi-plan/brief-template.md"}` | One reference file of a skill |

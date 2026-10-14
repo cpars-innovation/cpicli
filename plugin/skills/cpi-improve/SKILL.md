@@ -40,8 +40,8 @@ Group findings into **proposals** by what a person would approve, not one per fi
 | One script collection per cluster of shared scripts (package or shared) | `duplicate-script`, `use-script-collection`, `similar-script`, `large-script` |
 | One shared mapping artifact per duplicated mapping | `duplicate-mapping` |
 | One Partner Directory design per routing table, lookup table or flow family | `router-literals`, `lookup-table-in-script`, `deployment-copies`, `hardcoded-endpoint` |
-| A dead-weight sweep per package | `unconnected-step`, `unused-*`, `noop-content-modifier`, `property-never-read` |
-| Robustness and security per flow | `no-exception-subprocess`, `swallowed-exception`, `hardcoded-secret`, `payload-attachment` |
+| A dead-weight sweep per package | `unconnected-step`, `unused-*`, `noop-content-modifier`, `property-never-read`, `dead-local-process` |
+| Robustness and security per flow | `no-exception-subprocess`, `exception-subprocess-message-end`, `swallowed-exception`, `hardcoded-secret`, `payload-attachment` |
 | Simplifications per flow | `consecutive-content-modifiers`, `converter-roundtrip`, `trivial-script` |
 | Hygiene in passing (only with another change to the flow) | `outdated-component`, `default-step-name`, `naming` |
 

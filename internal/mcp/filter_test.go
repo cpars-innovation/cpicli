@@ -126,3 +126,33 @@ func TestToolsets(t *testing.T) {
 func allToolsForTest() []Tool {
 	return NewLedger(os.TempDir()).Wrap(Tools(Config{}))
 }
+
+// --opt-in adds an opt-in tool without limiting the others; deny and the
+// mode still apply.
+func TestOptIn(t *testing.T) {
+	all := allToolsForTest()
+	kept, _, err := ApplyFiltersWithReasons(all, "", ToolFilter{OptIn: []string{"delete_artifact"}})
+	require.NoError(t, err)
+	names := toolNames(kept)
+	assert.Contains(t, names, "delete_artifact")
+	assert.Contains(t, names, "deploy", "the other tools stay")
+	assert.NotContains(t, names, "delete_package")
+
+	kept, _, err = ApplyFiltersWithReasons(all, "", ToolFilter{Allow: []string{"list_*"}, OptIn: []string{"unlock_artifact"}})
+	require.NoError(t, err)
+	names = toolNames(kept)
+	assert.Contains(t, names, "unlock_artifact", "offered next to the --tools selection")
+	assert.NotContains(t, names, "deploy")
+
+	kept, removed, err := ApplyFiltersWithReasons(all, "discover", ToolFilter{OptIn: []string{"delete_artifact"}})
+	require.NoError(t, err)
+	assert.NotContains(t, toolNames(kept), "delete_artifact", "the mode still applies")
+	assert.Contains(t, removed, RemovedTool{Name: "delete_artifact", Reason: "not offered in mode discover (read-only)"})
+
+	kept, _, err = ApplyFiltersWithReasons(all, "", ToolFilter{OptIn: []string{"delete_artifact"}, Deny: []string{"delete_*"}})
+	require.NoError(t, err)
+	assert.NotContains(t, toolNames(kept), "delete_artifact", "--disable-tools wins")
+
+	_, _, err = ApplyFiltersWithReasons(all, "", ToolFilter{OptIn: []string{"deploy"}})
+	assert.ErrorContains(t, err, `"deploy" is not an opt-in tool`)
+}

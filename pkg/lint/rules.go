@@ -72,13 +72,16 @@ var lintRules = []lintRule{
 	{id: "unused-parameter", group: GroupDeadWeight, severity: SevWarning, title: "An externalised parameter is not used", artifact: ruleUnusedParameters},
 	{id: "noop-content-modifier", group: GroupDeadWeight, severity: SevWarning, title: "A content modifier changes nothing", artifact: ruleNoopModifier},
 	{id: "property-never-read", group: GroupDeadWeight, severity: SevInfo, title: "An exchange property is set but never read in the flow", artifact: rulePropertyNeverRead},
+	{id: "dead-local-process", group: GroupDeadWeight, severity: SevWarning, title: "A local integration process is not called by any process call", artifact: ruleDeadLocalProcess},
 	// simplify
 	{id: "consecutive-content-modifiers", group: GroupSimplify, severity: SevInfo, title: "Content modifiers in a row can be one", artifact: ruleConsecutiveModifiers},
 	{id: "converter-roundtrip", group: GroupSimplify, severity: SevWarning, title: "XML to JSON and back (or the reverse) in a row", artifact: ruleConverterRoundtrip},
 	{id: "trivial-script", group: GroupSimplify, severity: SevInfo, title: "A script only sets headers or properties: a content modifier does that", artifact: ruleTrivialScripts},
 	{id: "large-script", group: GroupSimplify, severity: SevInfo, title: "A very long script: split it or move parts to a script collection", artifact: ruleLargeScripts},
+	{id: "inline-local-process", group: GroupSimplify, severity: SevInfo, title: "A local process called once is a straight line of steps: inline it", artifact: ruleInlineLocalProcess},
 	// robustness
 	{id: "no-exception-subprocess", group: GroupRobustness, severity: SevWarning, title: "The integration process has no exception subprocess", artifact: ruleNoExceptionSubprocess},
+	{id: "exception-subprocess-message-end", group: GroupRobustness, severity: SevWarning, title: "An exception subprocess ends in a Message End without raising the error again", artifact: ruleExceptionSubprocessMessageEnd},
 	{id: "swallowed-exception", group: GroupRobustness, severity: SevWarning, title: "A script catches an exception and ignores it", artifact: ruleSwallowedExceptions},
 	{id: "collection-script-tests", group: GroupRobustness, severity: SevWarning, title: "A function of a script collection is not called by any test", artifact: ruleCollectionScriptTests},
 	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
@@ -105,6 +108,7 @@ var lintRules = []lintRule{
 	{id: "default-step-name", group: GroupHygiene, severity: SevInfo, title: "A step has its default name", artifact: ruleDefaultNames},
 	{id: "layout", group: GroupHygiene, severity: SevInfo, title: "The diagram has overlapping or undrawn shapes, or lines through steps", artifact: ruleLayout},
 	{id: "naming", group: GroupHygiene, severity: SevWarning, title: "The flow ID does not follow the naming rule of .cpi/lint.yaml", artifact: ruleNaming},
+	{id: "duplicate-header-case", group: GroupHygiene, severity: SevWarning, title: "One header is written in different spellings (header names are case-insensitive)", artifact: ruleDuplicateHeaderCase},
 }
 
 var lintRuleByID = func() map[string]lintRule {

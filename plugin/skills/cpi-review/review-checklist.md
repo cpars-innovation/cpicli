@@ -15,6 +15,16 @@ Apply `.cpi/conventions.md` first; its "Review checklist additions" are mandator
 - Shared scripts are reused (identical copy or script collection), not modified copies.
 
 ## Design
+- The whole flow is reviewed, not only the changed part ([editing-pitfalls.md](../cpi-build/editing-pitfalls.md)):
+  dead or single-use linear local processes, properties and headers nothing reads (properties do
+  not cross ProcessDirect), duplicated headers, generic names. These are findings even when they
+  predate the change.
+- Headers the flow passes to other flows keep their absent/empty/set behaviour (callers' and
+  callees' `!= null` checks).
+- No exception subprocess ends in a Message End event (it swallows the error); lint
+  `exception-subprocess-message-end`.
+- HTTP receivers follow [http-receiver.md](../cpi-build/http-receiver.md): `CamelHttpUri` /
+  `CamelHttpPath` / `CamelHttpQuery` cleared, no body on GET/HEAD/DELETE, CSRF handled.
 - Matches the plan; deviations are explained.
 - No unreachable steps, every route of a router has a sensible end, default routes exist.
 - The diagram is readable: `lint` reports no `layout` finding for the flow (otherwise
@@ -57,5 +67,6 @@ Apply `.cpi/conventions.md` first; its "Review checklist additions" are mandator
 ## Report format
 
 For each finding: severity (**blocker** / **major** / **minor** / **nit**), location (file and
-element id, or tenant object), what is wrong, why it matters, suggested fix. End with a verdict:
-ready / ready after fixes / not ready.
+element id, or tenant object), what is wrong, why it matters, suggested fix. Keep the checks that
+ran locally, the tenant checks that ran, and the checks that did not run apart; never report a
+check as passed that did not run. End with a verdict: ready / ready after fixes / not ready.

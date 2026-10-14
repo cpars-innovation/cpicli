@@ -1,10 +1,14 @@
 package ops
 
 import (
+	"cmp"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/sync"
@@ -90,6 +94,76 @@ func UploadArtifact(exe *httpclnt.HTTPExecuter, req UploadRequest) (*UploadResul
 		return &UploadResult{ID: req.ID, PackageID: req.PackageID, UploadOutcome: outcome, Skipped: SkippedDraft,
 			Reason: "draft on the tenant (someone is editing it in the Web UI): save the version first; not uploaded"}, nil
 	}
+	if err != nil {
+		err = explainUploadError(exe, req.ID, err)
+	}
 	// the outcome (versionRule, version) is returned with the error as well
 	return &UploadResult{ID: req.ID, PackageID: req.PackageID, UploadOutcome: outcome}, err
+}
+
+// explainUploadError adds what the tenant said to a refused upload and, when
+// the artifact is open in the Web UI, who holds the edit lock: the tenant
+// answers an update of a locked artifact with a bare 400.
+func explainUploadError(exe *httpclnt.HTTPExecuter, artifactID string, err error) error {
+	code := httpclnt.StatusCode(err)
+	if code < 400 || code >= 500 || httpclnt.IsAuthError(err) {
+		return err
+	}
+	var notes []string
+	var he *httpclnt.HTTPError
+	if errors.As(err, &he) {
+		if msg := tenantErrorText(he.Body); msg != "" {
+			notes = append(notes, "the tenant says: "+msg)
+		}
+	}
+	if locks, lerr := ListLocks(exe, artifactID, ""); lerr == nil {
+		for _, l := range locks {
+			since := ""
+			if l.CreatedAt != nil {
+				since = " since " + l.CreatedAt.UTC().Format(time.RFC3339)
+			}
+			notes = append(notes, fmt.Sprintf("%s is locked by %s%s (open in the Web UI): close the editor there, or remove the lock with cpictl locks unlock --artifact-id %s --confirm (unsaved changes are lost)",
+				artifactID, cmp.Or(l.CreatedBy, "someone"), since, artifactID))
+		}
+	}
+	if len(notes) == 0 {
+		return err
+	}
+	return fmt.Errorf("%w; %s", err, strings.Join(notes, "; "))
+}
+
+// tenantErrorText is the message of an OData error body ({"error":{"message":
+// {"value":...}}} or {"error":{"message":"..."}}), else the body's text,
+// shortened.
+func tenantErrorText(body []byte) string {
+	var odata struct {
+		Error struct {
+			Message json.RawMessage `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &odata) == nil && len(odata.Error.Message) > 0 {
+		var s string
+		var v struct {
+			Value string `json:"value"`
+		}
+		if json.Unmarshal(odata.Error.Message, &s) == nil && s != "" {
+			return shorten(s)
+		}
+		if json.Unmarshal(odata.Error.Message, &v) == nil && v.Value != "" {
+			return shorten(v.Value)
+		}
+	}
+	text := strings.TrimSpace(string(body))
+	if text == "" || strings.HasPrefix(text, "<") {
+		return ""
+	}
+	return shorten(text)
+}
+
+func shorten(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 300 {
+		return s[:300] + "…"
+	}
+	return s
 }

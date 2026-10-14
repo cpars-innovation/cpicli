@@ -823,6 +823,9 @@ func (orc *Orchestrator) uploadOneArtifact(pkg *models.Package, artifact *models
 	synchroniser.Versioning = mode
 	outcome, err := synchroniser.UploadArtifact(finalArtifactID, finalArtifactName, artifactType,
 		finalPackageID, tempArtifactDir, jobDir, "", nil)
+	if err != nil && !sync.IsDraft(err) {
+		err = explainUploadError(orc.exe, finalArtifactID, err)
+	}
 	if sync.IsDraft(err) {
 		running := ""
 		if rt, rerr := cpi.NewRuntime(orc.exe).GetArtifact(finalArtifactID); rerr == nil && rt != nil {

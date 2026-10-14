@@ -35,7 +35,13 @@ agreed to, one change at a time, and say what you did. On a productive tenant ev
   `get_trace_tree` (the path across flows: ProcessDirect, JMS, key headers).
 - Payload at a step: `get_message_attachment` / `get_message_store_entry`; still unclear and the
   user agrees: `set_log_level` TRACE for that flow (it reverts on its own), reproduce,
-  `get_message_trace` / `get_trace_message`.
+  `get_message_trace` / `get_trace_message`. Set TRACE only after a deployment has finished: a
+  redeployment resets the level. A 403 on trace content means the service key lacks the role to
+  read message content: report it, it is not a fault of the flow.
+- Payloads are business data: summarise them, never paste them into the answer.
+- Report a message with package, flow, sender, receiver, correlation ID, application message ID,
+  status, start and duration. The tenant reports UTC: give UTC and the user's local time. Say which
+  tenant you looked at and what you did not check.
 - Errors outside message processing (adapter connection errors, polling failures):
   `list_log_files` / `get_log_file`; `download_log_archive` saves the latest http or trace logs as
   a zip for the user or SAP support.

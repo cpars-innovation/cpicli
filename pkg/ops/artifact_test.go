@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
@@ -96,4 +97,33 @@ func TestUploadArtifactRejectsDraftAndWrongPackage(t *testing.T) {
 	assert.Contains(t, err.Error(), "OrderIntake already exists in package Other, not in Orders")
 	assert.Equal(t, exitcode.Error, output.ExitCode(err))
 	assert.Zero(t, mock.Artifacts["OrderIntake"].Uploads)
+}
+
+// An update of an artifact open in the Web UI is refused with a bare 400:
+// the error names who holds the lock and keeps the tenant's message.
+func TestUploadArtifactLocked(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "OrderIntake")
+	writeIFlow(t, dir, "println 'v1'")
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{})
+	req := UploadRequest{ID: "OrderIntake", Type: "Integration", PackageID: "Orders", Dir: dir}
+	_, err := UploadArtifact(mock.Executer(), req)
+	require.NoError(t, err)
+
+	since := time.Date(2026, 10, 14, 9, 30, 0, 0, time.UTC)
+	mock.Locks = append(mock.Locks, cpitest.Lock{ResourceID: "r1", ArtifactID: "OrderIntake", CreatedBy: "anna@customer.example", CreatedAt: since})
+	writeIFlow(t, dir, "println 'v2'")
+	_, err = UploadArtifact(mock.Executer(), req)
+	require.Error(t, err)
+	assert.Equal(t, exitcode.TenantHTTP, output.ExitCode(err), "still a tenant error")
+	assert.Contains(t, err.Error(), "the tenant says: Artifact OrderIntake is locked")
+	assert.Contains(t, err.Error(), "OrderIntake is locked by anna@customer.example since 2026-10-14T09:30:00Z")
+	assert.Contains(t, err.Error(), "cpictl locks unlock --artifact-id OrderIntake --confirm")
+}
+
+func TestTenantErrorText(t *testing.T) {
+	assert.Equal(t, "bad", tenantErrorText([]byte(`{"error":{"code":"x","message":{"lang":"en","value":"bad"}}}`)))
+	assert.Equal(t, "plain", tenantErrorText([]byte(`{"error":{"message":"plain"}}`)))
+	assert.Equal(t, "some text", tenantErrorText([]byte("  some\n text ")))
+	assert.Empty(t, tenantErrorText([]byte("<html>login</html>")))
+	assert.Empty(t, tenantErrorText(nil))
 }

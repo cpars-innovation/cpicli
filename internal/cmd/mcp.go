@@ -42,11 +42,12 @@ Limit the tools per server, e.g. for a QA or production tenant:
   --read-only                     no tool that changes the tenant or sends messages
   --tools list_*,get_*            only matching tools
   --disable-tools undeploy,pd_*   everything except these
+  --opt-in delete_artifact        also offer an opt-in tool (unlock_artifact, delete_*), keeping the rest
   --toolset build,test            only the tools of these tasks
   --dynamic-toolsets              start with a few tools; the agent enables toolsets as needed
   --mode discover|operate|develop|full presets (combined with the above, the most
                                   restrictive wins)
-Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS. Disabled tools are not
+Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS, CPICTL_OPT_IN. Disabled tools are not
 listed; a call to one is an error result (errorCategory usage) that says why; a
 pattern that matches no tool is an error.
 
@@ -113,7 +114,8 @@ CPICTL_* environment variables.`,
 				AllowProduction:     config.GetBool(cmd, "allow-production"),
 			}))
 			readOnly, _ := cmd.Flags().GetBool("read-only")
-			filter := mcp.ToolFilter{ReadOnly: readOnly, Allow: config.GetStringSlice(cmd, "tools"), Deny: config.GetStringSlice(cmd, "disable-tools")}
+			filter := mcp.ToolFilter{ReadOnly: readOnly, Allow: config.GetStringSlice(cmd, "tools"), Deny: config.GetStringSlice(cmd, "disable-tools"),
+				OptIn: config.GetStringSlice(cmd, "opt-in")}
 			toolsets := config.GetStringSlice(cmd, "toolset")
 			dynamic := config.GetBool(cmd, "dynamic-toolsets")
 			if len(toolsets) > 0 && !dynamic {
@@ -176,6 +178,7 @@ CPICTL_* environment variables.`,
 	c.Flags().StringSlice("tools", nil, "Offer only these tools (names or patterns such as list_*)")
 	c.Flags().StringSlice("toolset", nil, "Offer only the tools of these tasks: "+strings.Join(mcp.ToolsetNames(), ", ")+" (combined with --tools; the mode still applies)")
 	c.Flags().Bool("dynamic-toolsets", false, "List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start")
+	c.Flags().StringSlice("opt-in", nil, "Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does")
 	c.Flags().StringSlice("disable-tools", nil, "Do not offer these tools (names or patterns); wins over --tools")
 	c.Flags().Bool("loop-required", false, "Refuse tools that change the tenant or trigger processing (errorCategory loop_required) while no loop is open (loop_start)")
 	c.Flags().Int("loop-max-iterations", 0, "Highest max_iterations loop_start accepts (0: no cap); also lowers the default")

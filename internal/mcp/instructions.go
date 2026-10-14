@@ -73,13 +73,13 @@ the latest http or trace logs).`},
 	{[]string{"monitor", "test"}, `find_messages_by_header finds messages by a business key the flows write (e.g. an order number).`},
 	{[]string{"monitor"}, `JMS: list_jms_messages shows the messages of a queue (failed ones wait for a retry);
 retry_jms_messages, move_jms_messages (confirm) and set_jms_queue_state act on them;
-delete_jms_messages (confirm; offered only when the server's --tools names it) loses them for good.`},
+delete_jms_messages (confirm; offered only when the server's --opt-in or --tools names it) loses them for good.`},
 	{[]string{"build"}, `Locks: list_locks shows artifacts open for editing (an update fails while someone holds the
-lock). unlock_artifact (confirm; offered only when the server's --tools names it) discards the
+lock). unlock_artifact (confirm; offered only when the server's --opt-in or --tools names it) discards the
 lock holder's unsaved changes: only on the user's explicit request.`},
 	{[]string{"inspect", "build"}, `Value mappings: list_value_mappings, get_value_mapping (schemas with value pairs),
 set_value_mapping (confirm) adds or changes a pair; deploy with artifact_type ValueMapping to use it.`},
-	{[]string{OtherToolset}, `Deleting: delete_artifact and delete_package (confirm; offered only when --tools names them)
+	{[]string{OtherToolset}, `Deleting: delete_artifact and delete_package (confirm; offered only when --opt-in or --tools names them)
 cannot be undone and refuse deployed artifacts unless undeploy_first: only on the user's request.
 undeploy requires confirm=true.`},
 	{[]string{"inspect", "build"}, `Conventions: discover_tenant writes an inventory of existing flows (adapters, steps, error
@@ -105,7 +105,7 @@ it signed -> upload_certificate_chain. create_access_policy / add_artifact_refer
 artifacts to a role. Secrets and private keys never pass through this server (credentials, SSH
 key import and PGP keyrings: ask the user to run cpictl). The delete tools (delete_keystore_entry,
 delete_access_policy, delete_artifact_reference, delete_alternative_partner,
-delete_authorized_user) need confirm and are offered only when --tools names them.`},
+delete_authorized_user) need confirm and are offered only when --opt-in or --tools names them.`},
 }
 
 // Instructions is sent to the client on initialize: all fragments.

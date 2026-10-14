@@ -32,6 +32,7 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `unused-parameter` | always | remove from `parameters.prop`, `parameters.propdef` and configure files | low: configure files still setting it fail with an unknown key |
 | `noop-content-modifier` (fix on request) | always | remove it and connect its neighbours | low; check the step really has no body (empty body field) |
 | `property-never-read` | when sure no subprocess or script reads it dynamically | remove the property | low |
+| `dead-local-process` | the process is not called dynamically and nobody plans to wire it in | remove the process and the receivers only it uses | low |
 
 ## Simplify
 
@@ -41,12 +42,14 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `converter-roundtrip` | always | remove both converters (or add the missing step between them) | medium: namespaces and arrays may differ after a round trip |
 | `trivial-script` | always | a content modifier with the same headers/properties | low |
 | `large-script` | the script mixes concerns | split into functions, move reusable parts to a collection, use standard steps | medium |
+| `inline-local-process` | the process is not a deliberate unit (shared by convention, or about to get a second caller) | move its steps into the caller in place of the process call | low: names and properties stay the same |
 
 ## Robustness
 
 | Rule | Act when | How | Risk |
 |------|----------|-----|------|
 | `no-exception-subprocess` | conventions require one (usually) | add the house exception subprocess (copy it from the template flow) | low |
+| `exception-subprocess-message-end` | the sender must not see success, and alerting relies on FAILED messages | end it in an Error End, or call the house error-handling local process that does | low |
 | `swallowed-exception` | always | rethrow, or handle it explicitly (set a status, log, route) | medium: errors now become visible (that is the point) |
 | `collection-script-tests` | always for collections | tests in `tests/scripts/<package>/<collection>/` calling every public function with today's inputs ([script-tests.md](../cpi-build/script-tests.md)) | none (test code, not uploaded) |
 | `collection-script-coverage` | below the minimum, or no report | more test cases for the uncovered branches (JaCoCo HTML report); run the tests before lint | none |
@@ -82,3 +85,4 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `script-doc` | the flow is changed anyway | one sentence at the top of the script: what the step does | none |
 | `default-step-name` | the flow is changed anyway | name steps after what they do | none |
 | `naming` | new flows; existing ones only with a migration | `iflow copy` to a new ID, switch, undeploy the old | high for existing flows |
+| `duplicate-header-case` | always | one spelling in every content modifier and script (the one receivers and the conventions expect) | low: a receiver may see a different case than before |

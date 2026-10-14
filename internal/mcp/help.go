@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"slices"
@@ -80,12 +81,13 @@ var workflows = []Workflow{
 		Tools: []string{"get_parameters", "set_parameters", "config_diff", "pd_dependencies", "pd_diff", "pd_deploy"}, Docs: "partner-directory.md"},
 }
 
-// toolsetsFor returns the toolsets with the tools of each that are
-// available (toolsets without any are left out), so that a client can
-// select tools by task itself. "other" holds the available tools in no
-// toolset (help excluded). Each toolset carries the effect and class of its
-// tools.
-func toolsetsFor(available map[string]Tool) []map[string]any {
+// toolsetsFor returns every toolset with the tools of it that are
+// available, so that a client can select tools by task itself, and the
+// members this server does not offer with the reason (notOffered), so an
+// agent sees what exists and how to get it. "other" holds the available
+// tools in no toolset (help excluded). Each toolset carries the effect and
+// class of its available tools.
+func toolsetsFor(available map[string]Tool, reasons map[string]string) []map[string]any {
 	out := []map[string]any{}
 	inSome := map[string]bool{"help": true}
 	entry := func(name, description string, tools []string) map[string]any {
@@ -97,15 +99,20 @@ func toolsetsFor(available map[string]Tool) []map[string]any {
 	}
 	for _, n := range ToolsetNames() {
 		tools := []string{}
+		notOffered := map[string]string{}
 		for _, t := range Toolsets[n] {
 			if _, ok := available[t]; ok {
 				tools = append(tools, t)
 				inSome[t] = true
+			} else {
+				notOffered[t] = cmp.Or(reasons[t], "not offered by this server")
 			}
 		}
-		if len(tools) > 0 {
-			out = append(out, entry(n, ToolsetDescriptions[n], tools))
+		e := entry(n, ToolsetDescriptions[n], tools)
+		if len(notOffered) > 0 {
+			e["notOffered"] = notOffered
 		}
+		out = append(out, e)
 	}
 	var other []string
 	for name := range available {
@@ -141,7 +148,7 @@ func HelpTool(info HelpInfo) Tool {
 		// tenant (by --read-only, the mode or the tool filters)
 		readOnly := info.ReadOnly || !slices.ContainsFunc(info.Tools, func(t Tool) bool { return EffectOf(t.Name) == EffectTenant })
 		server := map[string]any{"mode": mode, "readOnly": readOnly, "tools": len(info.Tools), "disabledTools": nonNil(info.Removed),
-			"toolsets": toolsetsFor(available),
+			"toolsets": toolsetsFor(available, info.Reasons),
 			"loop": map[string]any{"required": info.Loop.Required, "caps": map[string]any{"maxIterations": info.Loop.Caps.MaxIterations,
 				"sameErrorLimit": info.Loop.Caps.SameErrorLimit, "wallClockMinutes": info.Loop.Caps.WallClockMinutes, "maxDeploys": info.Loop.Caps.MaxDeploys}},
 			"masking": map[string]any{"maskPatterns": nonNil(info.MaskPatterns), "redactPayloads": info.RedactPayloads}}
@@ -149,7 +156,7 @@ func HelpTool(info HelpInfo) Tool {
 			"server":    server,
 			"workflows": workflowsFor(available),
 			"tools":     tools,
-			"toolsets":  toolsetsFor(available),
+			"toolsets":  toolsetsFor(available, info.Reasons),
 			"skills":    skills.List(),
 			"agents":    skills.Agents(),
 			"cli":       commandSummaries(info.Commands),
@@ -238,9 +245,10 @@ func instructionsFor(info HelpInfo, available map[string]Tool, toolsets []string
 		if info.ActiveToolsets != nil {
 			toolsets = info.ActiveToolsets()
 		} else {
-			for _, set := range toolsetsFor(available) {
+			for _, set := range toolsetsFor(available, info.Reasons) {
 				// doctor is part of every toolset, not a reason for "other"
-				if tools := set["tools"].([]string); set["name"] != OtherToolset || slices.ContainsFunc(tools, func(t string) bool { return t != "doctor" }) {
+				tools := set["tools"].([]string)
+				if len(tools) > 0 && (set["name"] != OtherToolset || slices.ContainsFunc(tools, func(t string) bool { return t != "doctor" })) {
 					toolsets = append(toolsets, set["name"].(string))
 				}
 			}

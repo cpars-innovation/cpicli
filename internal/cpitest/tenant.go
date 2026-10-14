@@ -1609,6 +1609,14 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			odataError(w, http.StatusInternalServerError, "Internal Server Error", msg)
 			return
 		}
+		// an artifact open in the Web UI cannot be updated: the tenant
+		// answers 400 (the message text here is the mock's own)
+		for _, l := range m.Locks {
+			if l.ArtifactID == mm[2] {
+				odataError(w, http.StatusBadRequest, "Bad Request", "Artifact "+mm[2]+" is locked")
+				return
+			}
+		}
 		a.applyContent(tenantSerialised(zipData))
 		a.Uploads++
 		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r)

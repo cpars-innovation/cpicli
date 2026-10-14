@@ -198,6 +198,7 @@ func TestHelpServerTopic(t *testing.T) {
 		sets[s.(map[string]any)["name"].(string)] = s.(map[string]any)
 	}
 	require.Contains(t, sets, "inspect")
+	assert.Contains(t, sets["build"]["notOffered"].(map[string]any)["deploy"], "mode discover", "members not offered, with the reason")
 	assert.Equal(t, map[string]any{"effect": "local", "class": "local"}, sets["inspect"]["toolEffects"].(map[string]any)["discover_tenant"])
 	require.Contains(t, sets, OtherToolset)
 	assert.Contains(t, sets[OtherToolset]["tools"], "doctor")
