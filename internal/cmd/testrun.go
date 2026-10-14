@@ -27,7 +27,7 @@ and the expected outcome (HTTP status, message status, response, error, custom
 headers, steps, duration, receiver stub calls). See docs/testing.md (Test runs)
 and docs/test-case.schema.json.`,
 	}
-	c.AddCommand(newTestListCommand(), newTestRunCommand(), newTestScriptsCommand())
+	c.AddCommand(newTestListCommand(), newTestRunCommand(), newTestScriptsCommand(), newTestXSLTCommand())
 	addTestToolingCommands(c)
 	return c
 }
@@ -189,6 +189,10 @@ func logCase(c testrun.CaseResult) {
 	id := c.Flow + "/" + c.Case
 	switch c.Status {
 	case testrun.StatusPassed:
+		if c.MessageGuid == "" {
+			log.Info().Msgf("✅ %s passed (%s)", id, formatMs(c.DurationMs))
+			break
+		}
 		log.Info().Msgf("✅ %s passed (%s, message %s)", id, formatMs(c.DurationMs), c.MessageGuid)
 	case testrun.StatusSkipped:
 		log.Info().Msgf("⏭ %s skipped: %s", id, c.SkipReason)

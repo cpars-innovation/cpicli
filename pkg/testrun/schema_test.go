@@ -225,3 +225,41 @@ func TestSchemaTitlesAndExamples(t *testing.T) {
 	}
 	check("", root["properties"].(map[string]any))
 }
+
+// The XSLT case schema lists exactly the YAML fields of XSLTCase and
+// XSLTExpect, each with a title and examples.
+func TestXSLTSchema(t *testing.T) {
+	data, err := os.ReadFile("../../docs/xslt-case.schema.json")
+	require.NoError(t, err)
+	var s map[string]any
+	require.NoError(t, json.Unmarshal(data, &s))
+	keys := func(m map[string]any) []string {
+		out := []string{}
+		for k := range m {
+			out = append(out, k)
+		}
+		sort.Strings(out)
+		return out
+	}
+	fields := func(t reflect.Type) []string {
+		out := []string{}
+		for name := range yamlFields(t) {
+			out = append(out, name)
+		}
+		sort.Strings(out)
+		return out
+	}
+	props := s["properties"].(map[string]any)
+	assert.Equal(t, fields(reflect.TypeOf(XSLTCase{})), keys(props))
+	exp := s["$defs"].(map[string]any)["expect"].(map[string]any)["properties"].(map[string]any)
+	assert.Equal(t, fields(reflect.TypeOf(XSLTExpect{})), keys(exp))
+	for _, m := range []map[string]any{props, exp} {
+		for k, v := range m {
+			p := v.(map[string]any)
+			assert.NotEmpty(t, p["title"], k)
+			if k != "expect" {
+				assert.NotEmpty(t, p["examples"], k)
+			}
+		}
+	}
+}

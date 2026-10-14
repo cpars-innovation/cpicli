@@ -193,6 +193,40 @@ The runner is `pkg/testrun` (`Load`, `Run`, `WriteJUnit`), see [go-api.md](go-ap
 - The case schema `docs/test-case.schema.json` has a `title` and `examples` for every field, for
   editors that build a form from it.
 
+## XSLT mappings in the Partner Directory
+
+XSLT mappings stored as Partner Directory binary parameters (used with a dynamic `pd:` resource)
+are tested offline with Saxon. A case is `.cpi/tests/pd/<PID>/<ID>/<case>.yaml` and tests the
+parameter `<PID>/<ID>`; its stylesheet is the file `pd-snapshot` wrote
+(`partner-directory/<PID>/Binary/<ID>.xsl`), or the case's `xslt`. Schema:
+[xslt-case.schema.json](xslt-case.schema.json).
+
+```yaml
+description: Maps an order with two items
+input: "<Order><No>4711</No><Item><Qty>2</Qty></Item><Item><Qty>3</Qty></Item></Order>"
+headers: {SAP_Sender: ERP_PRD}      # stylesheet parameters (xsl:param), as in Cloud Integration
+properties: {Mode: test}
+expect:
+  output: '<SalesOrder mode="test" sender="ERP_PRD"><Number>4711</Number><Items>5</Items></SalesOrder>'
+  output_xpath: {/SalesOrder/Items: "5"}
+```
+
+```bash
+cpictl test xslt --saxon-jar ~/lib/saxon-he-12.5.jar    # or CPICTL_SAXON_JAR, or --command saxon
+cpictl test xslt --flow 'SAP_ERP/*' --junit xslt.xml
+```
+
+- `output` (or `output_file`) is compared as XML: attribute order, whitespace between elements,
+  comments, the XML declaration and namespace prefixes do not count. Non-XML output is compared
+  as trimmed text.
+- `output_contains`, `output_not_contains`, `output_xpath` (the path subset of `response_xpath`),
+  and `error_contains` for a transformation that must fail (Saxon's error text).
+- Results are `testrun` results (`CaseResult` with `Flow` = `pd:<PID>/<ID>`, the output as
+  `Response` for failed cases), so JUnit and Studio's views treat them like flow cases. Exit code
+  5 when a case failed. Go: `testrun.LoadXSLT`, `testrun.RunXSLT`.
+- Saxon runs on this machine (Java required); nothing is sent to a tenant. Use the Saxon version
+  closest to your tenant's XSLT engine.
+
 ## Script collection tests
 
 `cpictl test scripts init` writes the Gradle build and the stand-ins of SAP's script API

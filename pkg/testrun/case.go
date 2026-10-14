@@ -254,8 +254,8 @@ func Load(dir string, filter Filter) ([]Case, error) {
 	var cases []Case
 	var problems []string
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || e.Name() == XSLTDir {
+			continue // pd: the XSLT cases (LoadXSLT)
 		}
 		flowDir := filepath.Join(dir, e.Name())
 		files, err := filepath.Glob(filepath.Join(flowDir, "*.yaml"))

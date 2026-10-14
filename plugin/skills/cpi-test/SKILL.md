@@ -129,6 +129,14 @@ expect:
 Cases with `stub_calls` run alone. Ask before `apply_config` on a shared tenant: the flow is
 redeployed twice.
 
+### XSLT mappings in the Partner Directory
+
+For an XSLT mapping stored as a Partner Directory binary (`<PID>/<ID>`), write cases as
+`.cpi/tests/pd/<PID>/<ID>/<case>.yaml` (`input`, `headers` / `properties` as `xsl:param`,
+`expect.output` / `output_xpath` / `error_contains`; docs/xslt-case.schema.json) and run them
+with `cpictl test xslt --saxon-jar <jar>` (Java and a Saxon-HE jar needed; ask the user for the
+jar path). Nothing goes to the tenant.
+
 ## Running
 
 First the static checks, once per test run, on the version that is deployed:

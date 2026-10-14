@@ -158,6 +158,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`test tools`](#test-tools) | Install the test harness and the receiver stub, or show their state |
 | [`test tools install`](#test-tools-install) | Upload (and deploy) the test harness and the receiver stub |
 | [`test tools status`](#test-tools-status) | Show whether the test harness and the receiver stub are installed and deployed |
+| [`test xslt`](#test-xslt) | Run the tests of XSLT mappings stored in the Partner Directory (offline, with Saxon) |
 | [`transport`](#transport) | Prepare a transport between tiers: dependencies, pre-checks against the target, copy artifact folders |
 | [`transport check`](#transport-check) | Check a transport against the target tenant (read only) |
 | [`transport copy`](#transport-copy) | Copy artifact folders into another content tree (local files) |
@@ -3664,6 +3665,48 @@ receiver stub, the base URL to give receivers of flows under test
 
 ```
   cpictl test tools status
+```
+
+## test xslt
+
+Run the tests of XSLT mappings stored in the Partner Directory (offline, with Saxon)
+
+```
+Run the XSLT cases under <dir>/pd/<PID>/<ID>/<case>.yaml: each transforms its input
+with the stylesheet of the Partner Directory binary parameter <PID>/<ID> (the file
+pd-snapshot wrote to <pd-dir>/<PID>/Binary/<ID>.xsl, or the case's xslt) and
+checks the output (output, output_contains, output_not_contains, output_xpath)
+or the expected error (error_contains). The case's headers and properties are
+passed as stylesheet parameters (xsl:param), as Cloud Integration's XSLT mapping
+does.
+
+The transformation runs with Saxon on this machine: --saxon-jar (java -jar
+<jar>, also CPICTL_SAXON_JAR) or --command. Nothing is sent to a tenant.
+Exit code 5 when a case failed.
+```
+
+**Usage:** `cpictl test xslt [flags]`
+
+**Flags:**
+
+```
+      --case strings       Only these cases (file name without .yaml; patterns allowed; repeatable)
+      --command string     XSLT processor command instead of --saxon-jar; Saxon's -s: -xsl: -o: and name=value arguments are appended
+      --dir string         Directory of the test cases (XSLT cases in <dir>/pd/<PID>/<ID>/<case>.yaml) (default ".cpi/tests")
+      --flow strings       Only these parameters (<PID>/<ID>, patterns allowed; repeatable)
+      --junit string       Write a JUnit XML report to this file
+      --parallel int       Cases run at the same time (default 1)
+      --pd-dir string      Partner Directory folder of pd-snapshot (the stylesheets) (default "partner-directory")
+      --saxon-jar string   Saxon-HE jar, run with java -jar (config: CPICTL_SAXON_JAR)
+      --tag strings        Only cases with one of these tags (repeatable)
+```
+
+**Examples:**
+
+```
+  cpictl test xslt --saxon-jar ~/lib/saxon-he-12.5.jar
+  cpictl test xslt --flow 'SAP_ERP/*' --tag smoke --junit xslt.xml
+  cpictl test xslt --command "saxon"
 ```
 
 ## transport

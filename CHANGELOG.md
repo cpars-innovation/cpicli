@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- XSLT mappings in the Partner Directory: `cpictl test xslt` (Go `testrun.LoadXSLT`,
+  `testrun.RunXSLT`) runs cases from `.cpi/tests/pd/<PID>/<ID>/<case>.yaml` with Saxon
+  (`--saxon-jar`, `CPICTL_SAXON_JAR` or `--command`): headers and properties as `xsl:param`,
+  expectations `output` (compared as XML), `output_contains`, `output_not_contains`,
+  `output_xpath`, `error_contains`. Results and JUnit like test runs. Schema
+  `docs/xslt-case.schema.json`. Checked with Saxon-HE 9.9
+  ([#12](https://github.com/cpars-innovation/cpicli/issues/12)).
+
 - Test runs: a failed case (or an error after the message was sent) carries the first 8 KB of
   the endpoint's answer (`CaseResult.Response`, `ResponseContentType`); the MCP server redacts
   it with `--redact-payloads` ([#15](https://github.com/cpars-innovation/cpicli/issues/15)).

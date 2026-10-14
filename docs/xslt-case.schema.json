@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cpars-innovation/cpicli/blob/main/docs/xslt-case.schema.json",
+  "title": "cpictl XSLT test case",
+  "description": "A test of an XSLT mapping stored in the Partner Directory: .cpi/tests/pd/<PID>/<ID>/<case>.yaml tests the binary parameter <PID>/<ID>, run with cpictl test xslt. See docs/testing.md (XSLT mappings).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "title": "Description",
+      "type": "string",
+      "description": "What the case checks.",
+      "examples": [
+        "Maps an order with two items"
+      ]
+    },
+    "tags": {
+      "title": "Tags",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Tags to select cases (--tag).",
+      "examples": [
+        [
+          "smoke"
+        ]
+      ]
+    },
+    "skip": {
+      "title": "Skip reason",
+      "type": "string",
+      "description": "Skip the case; the reason.",
+      "examples": [
+        "waiting for the new segment"
+      ]
+    },
+    "order": {
+      "title": "Order",
+      "type": "integer",
+      "description": "Sorts the cases of a parameter (lower first, then by file name).",
+      "examples": [
+        1
+      ]
+    },
+    "xslt": {
+      "title": "Stylesheet",
+      "type": "string",
+      "description": "Stylesheet file relative to the case file; default the Partner Directory file <pd-dir>/<PID>/Binary/<ID>.xsl (or .xslt) of pd-snapshot.",
+      "examples": [
+        "../../../../../mappings/OrderMap.xsl"
+      ]
+    },
+    "input": {
+      "title": "Input",
+      "type": "string",
+      "description": "Message body to transform.",
+      "examples": [
+        "<Order><No>4711</No></Order>"
+      ]
+    },
+    "input_file": {
+      "title": "Input file",
+      "type": "string",
+      "description": "File with the message body, relative to the case file.",
+      "examples": [
+        "order.xml"
+      ]
+    },
+    "headers": {
+      "title": "Headers",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Message headers, passed as stylesheet parameters (xsl:param).",
+      "examples": [
+        {
+          "SAP_Sender": "ERP_PRD"
+        }
+      ]
+    },
+    "properties": {
+      "title": "Properties",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Exchange properties, passed as stylesheet parameters (xsl:param). A name may not be both a header and a property.",
+      "examples": [
+        {
+          "Mode": "test"
+        }
+      ]
+    },
+    "expect": {
+      "title": "Expected outcome",
+      "$ref": "#/$defs/expect"
+    }
+  },
+  "$defs": {
+    "stringOrList": {
+      "description": "A string or a list of strings.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "expect": {
+      "type": "object",
+      "description": "The expected outcome; every expectation that is set must hold. With error_contains the transformation must fail; otherwise it must succeed.",
+      "additionalProperties": false,
+      "properties": {
+        "output": {
+          "title": "Output",
+          "type": "string",
+          "description": "Expected output: compared as XML (attribute order, whitespace between elements, comments and the XML declaration do not count), as trimmed text when it is not XML.",
+          "examples": [
+            "<SalesOrder><Number>4711</Number></SalesOrder>"
+          ]
+        },
+        "output_file": {
+          "title": "Output file",
+          "type": "string",
+          "description": "File with the expected output, relative to the case file.",
+          "examples": [
+            "expected.xml"
+          ]
+        },
+        "output_contains": {
+          "title": "Output contains",
+          "$ref": "#/$defs/stringOrList",
+          "description": "Texts the output contains.",
+          "examples": [
+            "<Number>4711</Number>"
+          ]
+        },
+        "output_not_contains": {
+          "title": "Output does not contain",
+          "$ref": "#/$defs/stringOrList",
+          "description": "Texts the output does not contain.",
+          "examples": [
+            "<Error>"
+          ]
+        },
+        "output_xpath": {
+          "title": "Output XPath",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Path (/a/b, //name, [@attr='v'], /@attr, /text()) -> expected text of the first match.",
+          "examples": [
+            {
+              "/SalesOrder/Number": "4711"
+            }
+          ]
+        },
+        "error_contains": {
+          "title": "Error contains",
+          "$ref": "#/$defs/stringOrList",
+          "description": "The transformation fails and its error contains these texts.",
+          "examples": [
+            "XTDE0640"
+          ]
+        }
+      }
+    }
+  }
+}
