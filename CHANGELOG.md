@@ -5,6 +5,17 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Script cases ([#13](https://github.com/cpars-innovation/cpicli/issues/13)): YAML cases that call one
+  script function with a message and check body, headers, properties (`null`: absent), return
+  value, exception, message log and duration, in the format shared with CPI Studio
+  (`docs/script-case.schema.json`): `.cpi/tests/<FlowId>/scripts/<script file>/<case>.yaml` and
+  `.cpi/tests/collections/<CollectionId>/<case>.yaml`. `cpictl test scripts cases` (MCP
+  `run_script_cases`; Go `testrun.LoadScriptCases`, `scripttest.RunCases`) runs them locally on the
+  stand-ins through the new Gradle task `cpictlScriptCases` of `test scripts init`'s `build.gradle`
+  (an older one needs `init --force`). `pd`, `value_mappings`, `secure` and `keystore` set what SAP's
+  services answer; they are local only, a later run on the tenant skips such cases.
+  `collections` is reserved below `.cpi/tests` (not a flow's test folder).
+
 - Script tests: the stand-ins `cpictl test scripts init` writes (`tests/stubs`) now cover SAP's script
   API as CPI Studio's library does: `Message` v1 and v2 (body conversion, attachments, SOAP
   headers), `Exchange`, the message log, `ITApiFactory` with `SecureStoreService`,

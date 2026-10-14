@@ -39,3 +39,11 @@ test {
 jacocoTestReport {
     reports { xml.required = true; html.required = true }
 }
+
+// cpictl test scripts cases: runs the script cases of .cpi/tests on the stand-ins
+// (cpictl writes the plan and reads the results; nothing is sent anywhere)
+tasks.register('cpictlScriptCases', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'cpictl.standin.CaseRunner'
+    args = [findProperty('cpictlPlan') ?: 'build/cpictl/script-cases.json', findProperty('cpictlResults') ?: 'build/cpictl/script-results.json']
+}

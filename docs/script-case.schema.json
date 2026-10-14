@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cpars-innovation/cpicli/blob/main/docs/script-case.schema.json",
+  "title": "cpictl script test case",
+  "description": "One test of a script function: .cpi/tests/<FlowId>/scripts/<script file>/<case>.yaml (a script step of a flow) or .cpi/tests/collections/<CollectionId>/<case>.yaml (a function of a script collection). The format is shared with CPI Studio. Unknown keys are errors.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "expect"
+  ],
+  "properties": {
+    "description": {
+      "title": "Description",
+      "description": "What the case shows.",
+      "type": "string",
+      "maxLength": 2000,
+      "examples": [
+        "Trims the order number"
+      ]
+    },
+    "tags": {
+      "title": "Tags",
+      "description": "Tags to select cases with --tag.",
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "string",
+        "maxLength": 64
+      },
+      "examples": [
+        [
+          "smoke"
+        ]
+      ]
+    },
+    "skip": {
+      "title": "Skip",
+      "description": "Reason to skip the case.",
+      "type": "string",
+      "maxLength": 500,
+      "examples": [
+        "waits for the new mapping"
+      ]
+    },
+    "call": {
+      "title": "Call",
+      "description": "The function to call.",
+      "$ref": "#/$defs/call",
+      "examples": [
+        {
+          "function": "setOrderHeader"
+        }
+      ]
+    },
+    "input": {
+      "title": "Input",
+      "description": "The message the function gets.",
+      "$ref": "#/$defs/input",
+      "examples": [
+        {
+          "body": "<Order><No> 4711 </No></Order>",
+          "headers": {
+            "OrderNo": " 4711 "
+          }
+        }
+      ]
+    },
+    "params": {
+      "title": "Params",
+      "description": "XSLT parameters besides headers and properties (mapping cases only; refused in script cases).",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 65536
+      },
+      "examples": [
+        {
+          "mode": "test"
+        }
+      ]
+    },
+    "pd": {
+      "title": "Partner Directory",
+      "description": "Partner Directory values the script reads: <pid>/<param> -> value or file:<path>. Local runs only; a run on the tenant skips the case.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 400
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 1048576
+      },
+      "examples": [
+        {
+          "PID1/Target": "ERP-DEV"
+        }
+      ]
+    },
+    "value_mappings": {
+      "title": "Value mappings",
+      "description": "ValueMappingApi answers: <srcAgency>|<srcId>|<value>|<tgtAgency>|<tgtId> -> value. Local runs only.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 1000
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 4000
+      },
+      "examples": [
+        {
+          "A|Order|x|B|Order": "y"
+        }
+      ]
+    },
+    "secure": {
+      "title": "Secure store",
+      "description": "Test-only credentials for SecureStoreService: alias -> {user, password} or {value}. Never real secrets. Local runs only.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/secure"
+      },
+      "examples": [
+        {
+          "erp-user": {
+            "user": "alice",
+            "password": "test-only"
+          }
+        }
+      ]
+    },
+    "keystore": {
+      "title": "Keystore",
+      "description": "Test key material for KeystoreService: alias -> PEM, or generate:rsa / generate:cert. Local runs only.",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 65536
+      },
+      "examples": [
+        {
+          "signing": "generate:cert"
+        }
+      ]
+    },
+    "expect": {
+      "title": "Expect",
+      "description": "At least one expectation.",
+      "$ref": "#/$defs/expect"
+    }
+  },
+  "$defs": {
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "function": {
+          "title": "Function",
+          "description": "Groovy or JavaScript function; collection cases call any public function.",
+          "type": "string",
+          "maxLength": 200,
+          "default": "processData",
+          "examples": [
+            "processData",
+            "setOrderHeader"
+          ]
+        },
+        "args": {
+          "title": "Arguments",
+          "description": "Arguments of a collection function call; without them the function gets the message.",
+          "type": "array",
+          "maxItems": 20,
+          "items": {},
+          "examples": [
+            [
+              "4711",
+              true
+            ]
+          ]
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "title": "Body",
+          "description": "Inline payload.",
+          "type": "string",
+          "maxLength": 1048576,
+          "examples": [
+            "<Order><No>4711</No></Order>"
+          ]
+        },
+        "body_file": {
+          "title": "Body file",
+          "description": "Payload file, relative to the case file.",
+          "type": "string",
+          "maxLength": 500,
+          "examples": [
+            "order.xml"
+          ]
+        },
+        "headers": {
+          "title": "Headers",
+          "description": "Message headers.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "examples": [
+            {
+              "OrderNo": "4711"
+            }
+          ]
+        },
+        "properties": {
+          "title": "Properties",
+          "description": "Exchange properties.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 65536
+          },
+          "examples": [
+            {
+              "Mode": "test"
+            }
+          ]
+        }
+      }
+    },
+    "secure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user": {
+          "title": "User",
+          "description": "Test user.",
+          "type": "string",
+          "maxLength": 200,
+          "examples": [
+            "alice"
+          ]
+        },
+        "password": {
+          "title": "Password",
+          "description": "Test password (never a real one).",
+          "type": "string",
+          "maxLength": 200,
+          "examples": [
+            "test-only"
+          ]
+        },
+        "value": {
+          "title": "Value",
+          "description": "A secure parameter or token instead of user and password.",
+          "type": "string",
+          "maxLength": 4000,
+          "examples": [
+            "test-token"
+          ]
+        }
+      }
+    },
+    "throws": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "title": "Class",
+          "description": "Exception class (simple or full name).",
+          "type": "string",
+          "maxLength": 300,
+          "examples": [
+            "IllegalStateException"
+          ]
+        },
+        "message_contains": {
+          "title": "Message contains",
+          "description": "Text the exception message contains.",
+          "type": "string",
+          "maxLength": 2000,
+          "examples": [
+            "OrderNo missing"
+          ]
+        }
+      }
+    },
+    "expect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "body_equals_file": {
+          "title": "Body equals file",
+          "description": "Expected body file, relative to the case; XML and JSON compare structurally.",
+          "type": "string",
+          "maxLength": 500,
+          "examples": [
+            "expected.xml"
+          ]
+        },
+        "body_contains": {
+          "title": "Body contains",
+          "description": "Texts the body contains.",
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "examples": [
+            [
+              "<No>4711</No>"
+            ]
+          ]
+        },
+        "body_not_contains": {
+          "title": "Body does not contain",
+          "description": "Texts the body must not contain.",
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "examples": [
+            [
+              "ERROR"
+            ]
+          ]
+        },
+        "body_xpath": {
+          "title": "Body XPath",
+          "description": "XPath -> expected value.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "examples": [
+            {
+              "/Order/No": "4711"
+            }
+          ]
+        },
+        "body_json": {
+          "title": "Body JSON",
+          "description": "JSON path -> expected value.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "additionalProperties": {},
+          "examples": [
+            {
+              "order.no": "4711"
+            }
+          ]
+        },
+        "headers": {
+          "title": "Headers",
+          "description": "Headers after the call; null: must be absent.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "examples": [
+            {
+              "OrderNo": "4711",
+              "Temp": null
+            }
+          ]
+        },
+        "properties": {
+          "title": "Properties",
+          "description": "Properties after the call; null: must be absent.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "examples": [
+            {
+              "Checked": "true"
+            }
+          ]
+        },
+        "returns": {
+          "title": "Returns",
+          "description": "Return value of a collection function.",
+          "examples": [
+            "4711"
+          ]
+        },
+        "throws": {
+          "title": "Throws",
+          "description": "The call fails with this exception.",
+          "$ref": "#/$defs/throws",
+          "examples": [
+            {
+              "message_contains": "OrderNo missing"
+            }
+          ]
+        },
+        "log": {
+          "title": "Message log",
+          "description": "Message log entries the script writes: custom header or property name -> value.",
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "examples": [
+            {
+              "OrderNo": "4711"
+            }
+          ]
+        },
+        "max_duration": {
+          "title": "Max duration",
+          "description": "Longest the call may take.",
+          "type": "string",
+          "pattern": "^\\d+(ms|s|m)$",
+          "examples": [
+            "500ms",
+            "2s"
+          ]
+        }
+      }
+    }
+  }
+}

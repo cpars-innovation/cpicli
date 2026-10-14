@@ -1,0 +1,2 @@
+call: {function: formatNo, args: [" 4711", 8]}
+expect: {returns: "00004711"}

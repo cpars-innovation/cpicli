@@ -8,8 +8,10 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/internal/str"
 	"github.com/cpars-innovation/cpicli/pkg/lint"
 	"github.com/cpars-innovation/cpicli/pkg/scripttest"
+	"github.com/cpars-innovation/cpicli/pkg/testrun"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -115,6 +117,88 @@ never upload them.`,
 	initCmd.Flags().String("project", ".", "Project root")
 	initCmd.Flags().Bool("force", false, "Replace existing files")
 	c.AddCommand(initCmd)
+	c.AddCommand(newTestScriptCasesCommand())
+	return c
+}
+
+func newTestScriptCasesCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "cases",
+		Short: "Run script cases (YAML) on the SAP script API stand-ins (offline)",
+		Long: `Run the script cases of <dir>: each calls one function of a script with a message
+and checks the outcome (body, headers, properties, return value, exception,
+message log). The format is shared with CPI Studio
+(docs/script-case.schema.json):
+
+  <dir>/<FlowId>/scripts/<script file>/<case>.yaml   a script step of a flow
+  <dir>/collections/<CollectionId>/<case>.yaml        a function of a script collection
+
+The scripts run on the stand-ins of 'cpictl test scripts init' through the
+Gradle task cpictlScriptCases of its build.gradle; the case's pd,
+value_mappings, secure and keystore are what SAP's services answer. Nothing is
+sent to a tenant. Exit code 5 when a case failed.`,
+		Example: `  cpictl test scripts cases
+  cpictl test scripts cases --flow Orders_In --case trims --junit scripts.xml
+  cpictl test scripts cases --flow 'Orders_*' --tag smoke`,
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		Annotations:  map[string]string{annotationOffline: "true"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f := testrun.Filter{Flows: nonEmpty(str.TrimSlice(config.GetStringSlice(cmd, "flow"))), Tags: nonEmpty(str.TrimSlice(config.GetStringSlice(cmd, "tag"))),
+				Cases: nonEmpty(str.TrimSlice(config.GetStringSlice(cmd, "case")))}
+			project := config.GetString(cmd, "project")
+			dir := config.GetString(cmd, "dir")
+			if dir == "" {
+				dir = filepath.Join(project, testrun.DefaultDir)
+			}
+			cases, err := testrun.LoadScriptCases(dir, f)
+			if err != nil {
+				return err
+			}
+			if len(cases) == 0 {
+				return output.Usagef("no script case matches (write them as %s/<FlowId>/scripts/<script>/<case>.yaml or %s/%s/<CollectionId>/<case>.yaml)",
+					filepath.ToSlash(dir), filepath.ToSlash(dir), testrun.ScriptCollectionsDir)
+			}
+			ctx := cmd.Context()
+			opts := scripttest.CaseOptions{Project: project, Content: config.GetString(cmd, "content"), Command: strings.Fields(config.GetString(cmd, "command"))}
+			if config.GetString(cmd, "output") != "json" {
+				opts.Output = os.Stderr // the build's progress; JSON output keeps stdout clean
+			}
+			res, err := scripttest.RunCases(ctx, cases, opts)
+			if err != nil {
+				return err
+			}
+			for _, cr := range res.Cases {
+				output.Emit(ctx, output.EventItem, cr)
+				logCase(cr)
+			}
+			output.SetResult(ctx, res)
+			logTestSummary(res)
+			if junit := config.GetString(cmd, "junit"); junit != "" {
+				f, err := os.Create(junit)
+				if err != nil {
+					return output.Usagef("--junit: %v", err)
+				}
+				werr := testrun.WriteJUnit(f, res)
+				if cerr := f.Close(); werr == nil {
+					werr = cerr
+				}
+				if werr != nil {
+					return werr
+				}
+				log.Info().Msgf("JUnit report written to %s", junit)
+			}
+			return res.Err()
+		},
+	}
+	c.Flags().String("project", ".", "Project root: the folder with .cpi and the Gradle build of 'test scripts init'")
+	c.Flags().String("dir", "", "Directory of the test cases (default <project>/"+testrun.DefaultDir+")")
+	c.Flags().String("content", "", "Content tree with the flows and script collections (default <project>/packages)")
+	c.Flags().StringSlice("flow", nil, "Only these flows, scripts (<FlowId>/<script>) or collections (patterns allowed; repeatable)")
+	c.Flags().StringSlice("case", nil, "Only these cases (file name without .yaml; patterns allowed; repeatable)")
+	c.Flags().StringSlice("tag", nil, "Only cases with one of these tags (repeatable)")
+	c.Flags().String("command", "", "Runner command (default ./gradlew -q cpictlScriptCases, or gradle without a wrapper); the plan and results files are appended as -P properties")
+	c.Flags().String("junit", "", "Write a JUnit XML report to this file")
 	return c
 }
 

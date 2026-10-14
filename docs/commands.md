@@ -151,6 +151,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`test list`](#test-list) | List the test cases (offline) |
 | [`test run`](#test-run) | Run test cases against the deployed flows and check the expectations |
 | [`test scripts`](#test-scripts) | Run the tests of script collection scripts and report them per function (offline) |
+| [`test scripts cases`](#test-scripts-cases) | Run script cases (YAML) on the SAP script API stand-ins (offline) |
 | [`test scripts init`](#test-scripts-init) | Write the Gradle build and the SAP script API stand-ins the script tests run with |
 | [`test stub`](#test-stub) | Configure the answers of the receiver stub per rule |
 | [`test stub clear`](#test-stub-clear) | Remove the stub's answer for a rule (it then answers 200 with {}) |
@@ -3522,6 +3523,48 @@ Nothing is sent to the tenant. Exit code 5 when a test failed.
   cpictl test scripts
   cpictl test scripts --no-run --output json
   cpictl test scripts --command "gradle test --offline"
+```
+
+## test scripts cases
+
+Run script cases (YAML) on the SAP script API stand-ins (offline)
+
+```
+Run the script cases of <dir>: each calls one function of a script with a message
+and checks the outcome (body, headers, properties, return value, exception,
+message log). The format is shared with CPI Studio
+(docs/script-case.schema.json):
+
+  <dir>/<FlowId>/scripts/<script file>/<case>.yaml   a script step of a flow
+  <dir>/collections/<CollectionId>/<case>.yaml        a function of a script collection
+
+The scripts run on the stand-ins of 'cpictl test scripts init' through the
+Gradle task cpictlScriptCases of its build.gradle; the case's pd,
+value_mappings, secure and keystore are what SAP's services answer. Nothing is
+sent to a tenant. Exit code 5 when a case failed.
+```
+
+**Usage:** `cpictl test scripts cases [flags]`
+
+**Flags:**
+
+```
+      --case strings     Only these cases (file name without .yaml; patterns allowed; repeatable)
+      --command string   Runner command (default ./gradlew -q cpictlScriptCases, or gradle without a wrapper); the plan and results files are appended as -P properties
+      --content string   Content tree with the flows and script collections (default <project>/packages)
+      --dir string       Directory of the test cases (default <project>/.cpi/tests)
+      --flow strings     Only these flows, scripts (<FlowId>/<script>) or collections (patterns allowed; repeatable)
+      --junit string     Write a JUnit XML report to this file
+      --project string   Project root: the folder with .cpi and the Gradle build of 'test scripts init' (default ".")
+      --tag strings      Only cases with one of these tags (repeatable)
+```
+
+**Examples:**
+
+```
+  cpictl test scripts cases
+  cpictl test scripts cases --flow Orders_In --case trims --junit scripts.xml
+  cpictl test scripts cases --flow 'Orders_*' --tag smoke
 ```
 
 ## test scripts init

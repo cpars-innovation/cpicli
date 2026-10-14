@@ -1,0 +1,4 @@
+description: fails on purpose (expects the untrimmed value)
+input: {headers: {OrderNo: " 4711 "}, properties: {PID: PID1}}
+expect:
+  headers: {OrderNo: " 4711 "}

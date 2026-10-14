@@ -1,0 +1,4 @@
+call: {function: wrongApi}
+input: {headers: {OrderNo: "1"}}
+expect:
+  throws: {class: MissingMethodException}

@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Bundle-SymbolicName: Orders_In
+Bundle-Version: 1.0.0
+SAP-BundleType: IntegrationFlow

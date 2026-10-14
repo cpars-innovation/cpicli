@@ -129,6 +129,17 @@ expect:
 Cases with `stub_calls` run alone. Ask before `apply_config` on a shared tenant: the flow is
 redeployed twice.
 
+### Script cases
+
+To test one script function without a tenant, write a script case:
+`.cpi/tests/<FlowId>/scripts/<script file>/<case>.yaml` (a flow's script step) or
+`.cpi/tests/collections/<CollectionId>/<case>.yaml` (a collection function; `call.function`,
+`call.args`). Give `input` (body, headers, properties), the service answers the script reads (`pd`,
+`value_mappings`, `secure`, `keystore`: test values only) and `expect` (body, headers and properties
+with `null` for absent, `returns`, `throws`, `log`). Run them with `run_script_cases` (needs the
+project set up with `cpictl test scripts init`). Format: docs/script-case.schema.json and
+docs/testing.md (Script cases). Cover the absent and empty header cases separately.
+
 ### XSLT mappings in the Partner Directory
 
 For an XSLT mapping stored as a Partner Directory binary (`<PID>/<ID>`), write cases as

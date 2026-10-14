@@ -1,0 +1,10 @@
+description: trims the order number and reads the target from the Partner Directory
+input:
+  headers: {OrderNo: " 4711 "}
+  properties: {PID: PID1}
+pd: {PID1/Target: ERP-DEV}
+expect:
+  headers: {OrderNo: "4711", Temp: null}
+  properties: {Target: ERP-DEV}
+  body_xpath: {/Order/No: "4711"}
+  log: {OrderNo: "4711"}

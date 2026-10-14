@@ -236,6 +236,54 @@ cpictl test xslt --flow 'SAP_ERP/*' --junit xslt.xml
   `XSLTOptions{Online: true, Exe, NewExe, Tier, AllowProduction, Keep}`. *(The flow passes a
   real tenant's Check; its run on a deployed tenant is still to be verified.)*
 
+## Script cases
+
+A script case calls one function of a script with a message and checks what comes out, without a
+tenant. The format is shared with CPI Studio
+([script-case.schema.json](script-case.schema.json)):
+
+```
+.cpi/tests/<FlowId>/scripts/<script file>/<case>.yaml   a script step of a flow
+.cpi/tests/collections/<CollectionId>/<case>.yaml        a function of a script collection
+```
+
+```yaml
+# .cpi/tests/Orders_In/scripts/Headers.groovy/trims.yaml
+description: trims the order number and reads the target from the Partner Directory
+input:
+  headers: {OrderNo: " 4711 "}
+  properties: {PID: PID1}
+pd: {PID1/Target: ERP-DEV}          # what PartnerDirectoryService answers (test values only)
+expect:
+  headers: {OrderNo: "4711", Temp: null}   # null: must be absent
+  properties: {Target: ERP-DEV}
+  body_xpath: {/Order/No: "4711"}
+  log: {OrderNo: "4711"}            # custom header properties the script logged
+```
+
+```yaml
+# .cpi/tests/collections/Orders_Scripts/pads.yaml
+call: {function: formatNo, args: [" 4711", 8]}   # with args the function gets them, not the message
+expect: {returns: "00004711"}
+```
+
+- `call.function` defaults to `processData`; a collection case finds the one script of the
+  collection that defines it.
+- `input`: `body` or `body_file`, `headers`, `properties`.
+- `pd` (`<pid>/<param>` -> value or `file:<path>`), `value_mappings`, `secure` and `keystore` set what
+  SAP's services answer. They are test values: never a real credential or key.
+- `expect`: `body_equals_file` (XML and JSON compared structurally), `body_contains`,
+  `body_not_contains`, `body_xpath`, `body_json`, `headers` and `properties` (`null`: absent; header
+  names are case-insensitive, property names are not), `returns`, `throws` (`class`,
+  `message_contains`), `log`, `max_duration`.
+
+Run them with `cpictl test scripts cases` (MCP `run_script_cases`). They run on the SAP script API
+stand-ins of `cpictl test scripts init`, through the Gradle task `cpictlScriptCases` of its
+`build.gradle` (a JDK 17+ and Gradle needed; an older `build.gradle` needs `init --force`). Version 2
+scripts (`package script.v2`) get the version 2 message, which has no `getHeader`. A case in error
+with `errorCategory` `unsupported` uses a part of SAP's API the stand-ins do not implement: test
+that part on the tenant. JavaScript scripts are not run locally.
+
 ## Script collection tests
 
 `cpictl test scripts init` writes the Gradle build and the stand-ins of SAP's script API into the

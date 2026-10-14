@@ -50,7 +50,7 @@ var toolEffects = map[string]Effect{
 	"list_alternative_partners": EffectRead, "list_authorized_users": EffectRead,
 
 	"download_artifact": EffectLocal, "discover_tenant": EffectLocal, "copy_iflow": EffectLocal, "bump_versions": EffectLocal, "lint_fix": EffectLocal, "layout_iflow": EffectLocal,
-	"idoc_template": EffectLocal,
+	"idoc_template": EffectLocal, "run_script_cases": EffectLocal,
 
 	"create_package": EffectTenant, "upload_artifact": EffectTenant, "upload_artifacts": EffectTenant, "set_parameters": EffectTenant,
 	"deploy": EffectTenant, "undeploy": EffectTenant, "pd_deploy": EffectTenant,
@@ -346,7 +346,7 @@ var Toolsets = map[string][]string{
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifact", "upload_artifacts", "validate_artifact", "check_guidelines",
 		"deploy", "get_runtime_status", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors", "list_credentials",
 		"list_locks", "list_components", "list_value_mappings", "get_value_mapping", "set_value_mapping", "loop_start", "loop_status", "loop_end"},
-	"test": {"list_tests", "run_tests", "send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
+	"test": {"list_tests", "run_tests", "run_script_cases", "send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
 		"get_message_attachment", "get_message_store_entry", "get_trace_tree", "set_log_level", "get_message_trace",
 		"get_trace_message", "get_runtime_status", "install_test_tools", "set_stub_response", "loop_start", "loop_status", "loop_end"},
 	"monitor": {"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps", "get_message_attachment",

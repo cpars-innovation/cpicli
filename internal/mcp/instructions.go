@@ -35,7 +35,9 @@ get_message_trace and get_trace_message -> fix the local files and repeat.`},
 	{[]string{"test"}, `Tests: write cases as .cpi/tests/<FlowId>/<case>.yaml (request + expect, see the cpi-test skill) and run
 them with run_tests (flow, case, tags; apply_config sets the flow's config.yaml for the run and restores it);
 list_tests shows them. A failed case has its failures (expected vs actual) and diagnostics (failing step,
-error, message path); send_test_message is for exploring a single message by hand.`},
+error, message path); send_test_message is for exploring a single message by hand.
+Script cases (.cpi/tests/<FlowId>/scripts/<script>/<case>.yaml, .cpi/tests/collections/<Id>/<case>.yaml)
+test one script function locally on the SAP API stand-ins: run_script_cases (no tenant needed).`},
 	{[]string{"test"}, `Flows without an HTTP sender: ProcessDirect via send_test_message process_direct_address (test
 harness flow); timer, SFTP and other polling flows: see the triggers in discover_tenant and use
 list_message_logs with since and wait_seconds after triggering them. send_test_message
