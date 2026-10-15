@@ -55,14 +55,14 @@ func TestRehearsalRefusals(t *testing.T) {
 	vm := `<vm version="2.0"><group id="g1"><entry><agency>A</agency><schema>S</schema><value></value></entry><entry><agency>B</agency><schema>T</schema><value/></entry></group></vm>`
 	status, msg := deployProblem("ValueMapping", "VM1", zipWith(t, map[string]string{"value_mapping.xml": vm}))
 	assert.Equal(t, 500, status)
-	assert.Equal(t, "Failed to deploy Value Mapping id: VM1", msg)
+	assert.Equal(t, `"Failed to deploy Value Mapping id: VM1"`, msg, "as a tenant answers (quoted)")
 	status, msg = deployProblem("ValueMapping", "VM1", zipWith(t, map[string]string{"value_mapping.xml": `<vm version="2.0"></vm>`}))
 	assert.Zero(t, status)
 	assert.Empty(t, msg, "an empty value mapping deploys")
 
 	status, msg = deployProblem("MessageMapping", "MM1", zipWith(t, map[string]string{"src/main/resources/mapping/MM1.mmap": "<xiObj><transformation/></xiObj>"}))
 	assert.Zero(t, status)
-	assert.Equal(t, "Target element is not assigned", msg)
+	assert.Contains(t, msg, "Generation and build failed for MM1 as validation of resource is failed\nSource element is not assigned\nTarget element is not assigned")
 	_, msg = deployProblem("MessageMapping", "MM1", zipWith(t, map[string]string{"src/main/resources/mapping/MM1.mmap": `<xiObj><transformation><brick path="/ns0:Out/No"/></transformation></xiObj>`}))
 	assert.Empty(t, msg)
 }

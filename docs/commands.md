@@ -3691,7 +3691,7 @@ tier is prod it is refused unless --allow-production.
       --deploy                Deploy the artifacts and wait for them
       --max-check-limit int   Deployment status checks per artifact (default 30)
       --only string           Install only one tool: harness, stub or xslt (default all)
-      --package string        Package of the test tooling (letters and digits only; created when missing) (default "CPICTLTesting")
+      --package string        Package of the test tooling (letters and digits only; created when missing; default: where installed tools already are, else CPICTLTesting)
       --role string           User role a runtime client needs to call the tools (default: keep the configured one, ESBMessaging.send on a first install)
 ```
 

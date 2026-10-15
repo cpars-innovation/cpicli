@@ -491,11 +491,13 @@ func deployProblem(typ, id string, zipData []byte) (status int, msg string) {
 		switch {
 		case typ == "ValueMapping" && strings.HasSuffix(f.Name, "value_mapping.xml"):
 			if reVMEntryValue.Match(zipFile(f)) {
-				return 500, "Failed to deploy Value Mapping id: " + id
+				// the tenant quotes the text inside the OData message value
+				return 500, `"Failed to deploy Value Mapping id: ` + id + `"`
 			}
 		case typ == "MessageMapping" && strings.HasSuffix(f.Name, ".mmap"):
 			if !bytes.Contains(zipFile(f), []byte("<brick")) {
-				return 0, "Target element is not assigned"
+				return 0, "The generation and build of the artifact were unsuccessful. Please address the issues outlined below and redeploy the artifact.\n" +
+					"Generation and build failed for " + id + " as validation of resource is failed\nSource element is not assigned\nTarget element is not assigned"
 			}
 		}
 	}

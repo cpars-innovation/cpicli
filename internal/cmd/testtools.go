@@ -89,7 +89,7 @@ tier is prod it is refused unless --allow-production.`,
 			return err
 		},
 	}
-	install.Flags().String("package", testtools.PackageID, "Package of the test tooling (letters and digits only; created when missing)")
+	install.Flags().String("package", "", "Package of the test tooling (letters and digits only; created when missing; default: where installed tools already are, else "+testtools.PackageID+")")
 	install.Flags().String("only", "", "Install only one tool: harness, stub or xslt (default all)")
 	install.Flags().Bool("deploy", false, "Deploy the artifacts and wait for them")
 	install.Flags().String("role", "", "User role a runtime client needs to call the tools (default: keep the configured one, "+testtools.DefaultRole+" on a first install)")

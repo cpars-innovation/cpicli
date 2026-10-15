@@ -323,7 +323,7 @@ func deployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Res
 	triggeredAt := time.Now()
 	r.TaskID, err = tenant.TriggerDeploy(a.Type, a.ID)
 	if err != nil {
-		return fail(r, err)
+		return fail(r, WithTenantText(err))
 	}
 	logger.Info().Str("taskId", r.TaskID).Msgf("Artifact %v deployment triggered", a.ID)
 
@@ -592,7 +592,15 @@ func errorInfoSuffix(ctx context.Context, tenant Tenant, id string, wait time.Du
 	if err != nil || msg == "" {
 		return ""
 	}
-	return ". Error message = " + msg
+	// the tenant's text has one issue per line ("... outlined below ...\n
+	// Source element is not assigned\nTarget element is not assigned")
+	var lines []string
+	for _, l := range strings.Split(msg, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return ". Error message = " + strings.Join(lines, " | ")
 }
 
 func undeployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Result {

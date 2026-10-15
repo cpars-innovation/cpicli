@@ -106,8 +106,13 @@ func UploadArtifact(exe *httpclnt.HTTPExecuter, req UploadRequest) (*UploadResul
 // answers an update of a locked artifact with a bare 400.
 func explainUploadError(exe *httpclnt.HTTPExecuter, artifactID string, err error) error {
 	code := httpclnt.StatusCode(err)
-	if code < 400 || code >= 500 || httpclnt.IsAuthError(err) {
+	if code < 400 || httpclnt.IsAuthError(err) {
 		return err
+	}
+	if code >= 500 {
+		// a refused upload is often a 500 with the reason in the body
+		// (invalid header field (line N), ...)
+		return WithTenantText(err)
 	}
 	var notes []string
 	var he *httpclnt.HTTPError
@@ -130,6 +135,27 @@ func explainUploadError(exe *httpclnt.HTTPExecuter, artifactID string, err error
 		return err
 	}
 	return fmt.Errorf("%w; %s", err, strings.Join(notes, "; "))
+}
+
+// ExplainUploadError is explainUploadError for callers outside ops (the
+// update artifact command).
+func ExplainUploadError(exe *httpclnt.HTTPExecuter, artifactID string, err error) error {
+	return explainUploadError(exe, artifactID, err)
+}
+
+// WithTenantText adds the tenant's error message to an HTTP error
+// ("... response code = 500; the tenant says: Failed to deploy Value
+// Mapping id: X"); other errors are returned as they are.
+func WithTenantText(err error) error {
+	var he *httpclnt.HTTPError
+	if !errors.As(err, &he) {
+		return err
+	}
+	msg := tenantErrorText(he.Body)
+	if msg == "" {
+		return err
+	}
+	return fmt.Errorf("%w; the tenant says: %s", err, msg)
 }
 
 // tenantErrorText is the message of an OData error body ({"error":{"message":

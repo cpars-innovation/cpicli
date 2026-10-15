@@ -5,6 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Verified on a second real tenant: `test tools install` without `--package` now really adopts the
+  package where tools already are (the flag defaulted to `CPICTLTesting`, which made the 0.18.0
+  fix refuse instead, [#21](https://github.com/cpars-innovation/cpicli/issues/21)).
+- A refused upload or deploy trigger (5xx) adds the tenant's reason to the error (`... response
+  code = 500; the tenant says: invalid header field (line 11)`, `"Failed to deploy Value Mapping id:
+  X"`), also for `update artifact`; runtime error information with several issues is one line
+  (`... | Source element is not assigned | Target element is not assigned`). The mock answers with
+  the texts the tenant returned ([#22](https://github.com/cpars-innovation/cpicli/issues/22)).
+
 ## 0.18.0
 
 - Message logs: a detail the key may not read (403/401 on message store entries, attachments,

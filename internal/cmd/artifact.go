@@ -8,6 +8,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/sync"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -143,6 +144,9 @@ func runUpdateArtifact(cmd *cobra.Command) error {
 	}
 
 	err = synchroniser.SingleArtifactToTenant(artifactId, artifactName, artifactType, packageId, artifactDir, workDir, parametersFile, scriptMap)
+	if err != nil && !sync.IsDraft(err) {
+		err = ops.ExplainUploadError(exe, artifactId, err)
+	}
 	if err != nil {
 		return err
 	}
