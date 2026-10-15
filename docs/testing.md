@@ -268,6 +268,11 @@ call: {function: formatNo, args: [" 4711", 8]}   # with args the function gets t
 expect: {returns: "00004711"}
 ```
 
+- Online, a failed transformation's error is the tenant's: it answers HTTP 500 naming only the
+  message, and cpictl reads the reason from the message log. The tenant's XSLT engine does not
+  report the text of `<xsl:message terminate="yes">`, only `Processing terminated by xsl:message
+  at line N`: an `error_contains` that names your message's text passes with Saxon locally, but not
+  online. Expect the common part, or keep such cases local (`--case`).
 - `call.function` defaults to `processData`; a collection case finds the one script of the
   collection that defines it.
 - `call.args`: the function gets these arguments instead of the message: a collection function, or

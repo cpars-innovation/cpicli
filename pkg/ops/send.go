@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	neturl "net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -241,6 +242,10 @@ func resolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url, kind string) (
 	return urls[0], nil
 }
 
+// reFailedMPLID finds the message ID in the answer of a failed message
+// ("An internal server error occured: The MPL ID for the failed message is : AGr...").
+var reFailedMPLID = regexp.MustCompile(`The MPL ID for the failed message is : ([A-Za-z0-9_-]+)`)
+
 // harnessRunsCall is the first harness version whose process runs on a
 // tenant (older models lacked the sequence flow references SAP's runtime
 // needs, so the harness answered without calling the address).
@@ -379,6 +384,12 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	}
 	sent.HTTPStatus = resp.StatusCode
 	sent.MessageGuid = resp.Header.Get("SAP_MessageProcessingLogID")
+	if sent.MessageGuid == "" && resp.StatusCode >= 300 {
+		// a failed message's answer has no ID headers, only this text
+		if mm := reFailedMPLID.FindSubmatch(body); mm != nil {
+			sent.MessageGuid = string(mm[1])
+		}
+	}
 	sent.CorrelationID = resp.Header.Get("SAP_MplCorrelationId")
 	sent.ResponseContentType = resp.Header.Get("Content-Type")
 	sent.ResponseHeaders = map[string]string{}

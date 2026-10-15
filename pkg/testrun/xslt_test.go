@@ -174,6 +174,8 @@ func TestSameOutput(t *testing.T) {
 // XSLT test flow (emulated by the mock with a fake transformer), the
 // uploads are removed afterwards.
 func TestRunXSLTOnline(t *testing.T) {
+	defer func(n int, d time.Duration) { xsltLogTries, xsltLogInterval = n, d }(xsltLogTries, xsltLogInterval)
+	xsltLogTries, xsltLogInterval = 3, time.Millisecond
 	tests, pd := xsltProject(t)
 	cases, err := LoadXSLT(tests, Filter{})
 	require.NoError(t, err)
@@ -207,7 +209,8 @@ func TestRunXSLTOnline(t *testing.T) {
 	assert.Equal(t, StatusPassed, by["fails"].Status, "%+v %s", by["fails"].Failures, by["fails"].Error)
 	assert.Equal(t, StatusFailed, by["wrong"].Status)
 	assert.Equal(t, StatusFailed, by["breaks"].Status)
-	assert.Contains(t, by["breaks"].Diagnostics.LastError, "XPTY0004")
+	assert.Contains(t, by["breaks"].Diagnostics.LastError, "XPTY0004", "from the message log: the tenant's 500 only names the message")
+	assert.NotEmpty(t, by["breaks"].MessageGuid, "the message ID from the 500's text")
 	assert.Equal(t, "<xsl:stylesheet/>", seenXSL, "the stylesheet from the Partner Directory folder")
 	assert.Empty(t, m.PDBinaries, "uploads removed")
 

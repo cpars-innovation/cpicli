@@ -22,6 +22,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
   `Artifact.EndpointHidden`).
 - Message log attachments are read from a real tenant: `PayloadSize` comes as a string there (`"33"`),
   which failed the attachment list with a warning.
+- `test xslt --online` verified on a tenant (the XSLT test flow had never run there before 1.1.0,
+  see above). A failed message's answer (HTTP 500) has no ID headers there, only `The MPL ID for the
+  failed message is : <ID>`: `send` and test runs take the message ID from that text, and online
+  XSLT cases read the error (Saxon's message) from the message log. The tenant's engine does not
+  report the text of `xsl:message terminate="yes"` (`Processing terminated by xsl:message at line
+  N`): see docs/testing.md. The mock answers the same way.
 - `credentials set-*` no longer logs the tenant's 404 as a warning when it creates a credential.
 
 - Verified on a second real tenant: `test tools install` without `--package` now really adopts the

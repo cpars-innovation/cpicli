@@ -405,9 +405,39 @@ func runOnline(ctx context.Context, c XSLTCase, xsl string, input []byte, o XSLT
 		body, _ = base64.StdEncoding.DecodeString(sent.Response.Base64)
 	}
 	if sent.HTTPStatus >= 300 {
-		return body, strings.TrimSpace(string(body)), true, sent.MessageGuid, nil
+		errText := strings.TrimSpace(string(body))
+		if logged := failedMessageError(ctx, o.Exe, sent.MessageGuid); logged != "" {
+			errText = strings.TrimSpace(errText + "\n" + logged)
+		}
+		return body, errText, true, sent.MessageGuid, nil
 	}
 	return body, "", false, sent.MessageGuid, nil
+}
+
+// How long a failed online case waits for its message log's error text.
+var (
+	xsltLogTries    = 10
+	xsltLogInterval = time.Second
+)
+
+// failedMessageError is the error text of a failed message's log. A tenant
+// answers a failed transformation with HTTP 500 and no body: the reason
+// (Saxon's message) is only in the log, written a moment later.
+func failedMessageError(ctx context.Context, exe *httpclnt.HTTPExecuter, guid string) string {
+	if guid == "" {
+		return ""
+	}
+	for i := 0; i < xsltLogTries; i++ {
+		if d, err := ops.GetMessageLog(exe, guid, 0); err == nil && d != nil && d.ErrorText != "" {
+			return strings.TrimSpace(d.ErrorText)
+		}
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-time.After(xsltLogInterval):
+		}
+	}
+	return ""
 }
 
 // upload stores the stylesheet as testtools.XSLTPID/<id> once per run.
