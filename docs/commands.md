@@ -1821,7 +1821,7 @@ removes content modifiers that do nothing). Review the diff, raise the versions
       --dry-run                With --fix: only list the changes
       --fail-on string         Exit with code 5 when a new finding has at least this severity: info, warning, error (config: lint.failOn)
       --fix                    Apply the fixes to the local files
-      --fix-rules strings      Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step; all: every fixable rule)
+      --fix-rules strings      Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step, missing-flow-reference; all: every fixable rule)
       --list-rules             List the rules
       --min-severity string    Do not report findings below this severity (default "info")
       --package strings        Only report these packages (names or patterns)

@@ -400,7 +400,14 @@ harness message's correlation ID; with `--wait` cpictl finds that flow's message
 correlation ID and `--artifact-id`, and reports its status.
 
 The harness ships with cpictl: install it once per development tenant with
-`cpictl test tools install --deploy` (MCP `install_test_tools`), see below.
+`cpictl test tools install --deploy` (MCP `install_test_tools`), see below. Harness versions
+before 1.2.0 (cpictl 0.18.0 and older) do not call the address on a tenant: their model lacked the
+sequence flow references SAP's runtime needs, so the harness answered with the body it got. A send
+that finds no message of the flow under test says so; reinstall the tools.
+
+A flow deployed a moment ago is `STARTED` before the tenant lists its endpoint (about a minute on
+the tenants we tried): `send` and test runs wait up to two minutes for the endpoint of a started
+flow instead of failing.
 
 ## Test tooling: harness and receiver stub
 

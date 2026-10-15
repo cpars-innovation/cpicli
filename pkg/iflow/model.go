@@ -27,6 +27,17 @@ type Model struct {
 	Collaboration *Element
 	// Order is the document order of the element IDs.
 	Order []string
+	// MissingRefs are the sequence flows an element does not list as
+	// incoming or outgoing (filled in from the flows). SAP's runtime builds
+	// the route from those references: without them the process does not
+	// run and the message completes unchanged.
+	MissingRefs []FlowRef
+}
+
+// FlowRef is a sequence flow reference of an element.
+type FlowRef struct {
+	Element, Flow string
+	Incoming      bool
 }
 
 // Element is one BPMN element with its ifl:property values.
@@ -219,9 +230,11 @@ func Parse(data []byte) (*Model, error) {
 	for _, fl := range m.Flows {
 		if el := m.Elements[fl.Source]; el != nil && !contains(el.Outgoing, fl.ID) {
 			el.Outgoing = append(el.Outgoing, fl.ID)
+			m.MissingRefs = append(m.MissingRefs, FlowRef{Element: el.ID, Flow: fl.ID})
 		}
 		if el := m.Elements[fl.Target]; el != nil && !contains(el.Incoming, fl.ID) {
 			el.Incoming = append(el.Incoming, fl.ID)
+			m.MissingRefs = append(m.MissingRefs, FlowRef{Element: el.ID, Flow: fl.ID, Incoming: true})
 		}
 	}
 	return m, nil

@@ -368,8 +368,9 @@ func (m *MessageLogs) Attachments(guid string) ([]MessageAttachment, error) {
 		Id          string `json:"Id"`
 		Name        string `json:"Name"`
 		ContentType string `json:"ContentType"`
-		PayloadSize int64  `json:"PayloadSize"`
-		TimeStamp   string `json:"TimeStamp"`
+		// a string on SAP's tenants ("33"), a number elsewhere
+		PayloadSize json.Number `json:"PayloadSize"`
+		TimeStamp   string      `json:"TimeStamp"`
 	}
 	if err := m.list(guid, "Attachments", &rows); err != nil {
 		return nil, err
@@ -377,7 +378,8 @@ func (m *MessageLogs) Attachments(guid string) ([]MessageAttachment, error) {
 	out := make([]MessageAttachment, 0, len(rows))
 	for _, r := range rows {
 		ts, _ := ParseODataTime(r.TimeStamp)
-		out = append(out, MessageAttachment{ID: r.Id, Name: r.Name, ContentType: r.ContentType, Size: r.PayloadSize, TimeStamp: ts})
+		size, _ := r.PayloadSize.Int64()
+		out = append(out, MessageAttachment{ID: r.Id, Name: r.Name, ContentType: r.ContentType, Size: size, TimeStamp: ts})
 	}
 	return out, nil
 }

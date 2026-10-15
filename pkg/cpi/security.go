@@ -178,11 +178,17 @@ func (s *Security) CredentialExists(kind, name string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	resp, err := readOnlyCall(fmt.Sprintf("/api/v1/%s(%s)", coll, keyLiteral(name)), "Get "+coll, s.exe)
+	urlPath := fmt.Sprintf("/api/v1/%s(%s)", coll, keyLiteral(name))
+	resp, err := s.exe.Exec(http.MethodGet, urlPath, http.NoBody, map[string]string{"Accept": "application/json"})
 	if err != nil {
-		if httpclnt.StatusCode(err) == http.StatusNotFound {
-			return false, nil
-		}
+		return false, err
+	}
+	if resp.StatusCode == http.StatusNotFound { // the expected answer for a new credential: no warning
+		_, _ = s.exe.ReadRespBody(resp)
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		_, err = s.exe.LogError(resp, "Get "+coll)
 		return false, err
 	}
 	_, _ = s.exe.ReadRespBody(resp)

@@ -161,3 +161,28 @@ func TestCreatePackage(t *testing.T) {
 	}
 	assert.Equal(t, 1, mock.Count("POST /api/v1/IntegrationPackages"), "nothing invalid reaches the tenant")
 }
+
+// A flow just deployed is STARTED before the tenant lists its endpoint: the
+// send waits for it; a flow that is not deployed fails at once.
+func TestSendWaitsForTheEndpointOfAStartedFlow(t *testing.T) {
+	defer func(w, p time.Duration) { endpointWait, endpointPoll = w, p }(endpointWait, endpointPoll)
+	endpointWait, endpointPoll = time.Second, time.Millisecond
+	mock, url, newExe := endpointMock(t, &cpitest.Inbound{Response: "ok", MessageGuid: "G1"})
+	mock.Artifacts["Orders"].Runtime = &cpitest.Runtime{Version: "1", Status: "STARTED"}
+	mock.Artifacts["Orders"].EndpointHidden = 2
+	var steps []string
+	sent, err := SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Orders", Body: []byte("x"),
+		Progress: func(p Progress) { steps = append(steps, p.Message) }})
+	require.NoError(t, err)
+	assert.Equal(t, url, sent.URL)
+	assert.Equal(t, []string{"Orders is started, waiting for the tenant to list its endpoint", "Orders is started, waiting for the tenant to list its endpoint"}, steps)
+
+	mock.Artifacts["Orders"].Runtime = nil
+	mock.Artifacts["Orders"].EndpointHidden = 1
+	steps = nil
+	_, err = SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{ArtifactID: "Orders", Body: []byte("x"),
+		Progress: func(p Progress) { steps = append(steps, p.Message) }})
+	assert.ErrorContains(t, err, "has no endpoint")
+	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
+	assert.Empty(t, steps, "not deployed: no wait")
+}

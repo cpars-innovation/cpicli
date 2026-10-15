@@ -43,6 +43,7 @@ cpictl lint --list-rules
 | | `inline-local-process` | info | a local process called once (not looping) that is a straight line of steps | |
 | robustness | `no-exception-subprocess` | warning | an integration process without exception subprocess | |
 | | `exception-subprocess-message-end` | warning | an exception subprocess ending in a Message End with nothing in it that raises the error again (a script, a called local process with an Error or Escalation End) or sets `CamelHttpResponseCode`: the message is marked completed and the error lost | |
+| | `missing-flow-reference` | error | elements of a process that do not list their sequence flows as `<bpmn2:incoming>`/`<bpmn2:outgoing>` (models written by hand or by a generator; SAP's editor always writes them): the tenant deploys the flow, but its runtime builds the route from these references, so a message completes without running a step and comes back unchanged | adds them |
 | | `unsupported-script-class` | warning | a Groovy or JavaScript script uses `Thread`, which an integration cell refuses at deploy ("There are unsupported classes [Thread] that are used in the script.") while the API reports the deploy task as successful; the Cloud Integration runtime accepts it | |
 | | `header-empty-vs-absent` | warning | a flow sets a header to an empty value (content modifier constant without value, `setHeader("X", "")`) and calls, through ProcessDirect, a flow that tests the header against null: an empty header is not null | |
 | | `swallowed-exception` | warning | an empty `catch` block | |
@@ -179,6 +180,7 @@ In GitHub Actions the new findings also go to the job summary.
 | `use-script-collection` | the script step references the existing collection that holds the same script; the local copy is deleted |
 | `unused-script` | the file is deleted |
 | `unconnected-step` | the step, its sequence flows and its diagram shapes are removed |
+| `missing-flow-reference` | the missing `incoming`/`outgoing` references are added where SAP's editor puts them (after `extensionElements`); nothing else changes |
 | `noop-content-modifier` | only with `--fix-rules noop-content-modifier` (or `all`): the step is removed and its neighbours connected |
 | `layout` | only with `--fix-rules layout` (or `all`): the diagram is laid out (`tidy`); models that lose steps through other fixes in the same run are laid out too |
 

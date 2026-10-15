@@ -18,6 +18,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/idoc"
 	"github.com/cpars-innovation/cpicli/pkg/testtools"
+	"github.com/cpars-innovation/cpicli/pkg/versioning"
 )
 
 // EndpointExecuterFunc returns an executer and request path for a runtime
@@ -228,7 +229,7 @@ func resolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url, kind string) (
 	case len(urls) == 0 && len(others) > 0:
 		return "", output.Usagef("integration flow %s has no %s endpoint (endpoints: %s)", artifactID, kind, strings.Join(others, ", "))
 	case len(urls) == 0:
-		return "", output.Usagef("integration flow %s has no endpoint: is it deployed and does it have an HTTP-based sender (HTTPS, SOAP, IDoc, OData, ...)?", artifactID)
+		return "", &noEndpointError{output.Usagef("integration flow %s has no endpoint: is it deployed and does it have an HTTP-based sender (HTTPS, SOAP, IDoc, OData, ...)?", artifactID)}
 	case url != "":
 		if slices.Contains(urls, url) || slices.ContainsFunc(urls, func(ep string) bool { return belowEndpoint(url, ep) }) {
 			return url, nil
@@ -238,6 +239,45 @@ func resolveEndpoint(exe *httpclnt.HTTPExecuter, artifactID, url, kind string) (
 		return "", output.Usagef("%s has %d endpoints, choose one with url: %s", artifactID, len(urls), strings.Join(urls, ", "))
 	}
 	return urls[0], nil
+}
+
+// harnessRunsCall is the first harness version whose process runs on a
+// tenant (older models lacked the sequence flow references SAP's runtime
+// needs, so the harness answered without calling the address).
+const harnessRunsCall = "1.2.0"
+
+// noEndpointError: the tenant lists no endpoint at all for the flow.
+type noEndpointError struct{ error }
+
+func (e *noEndpointError) Unwrap() error { return e.error }
+
+// How long a send waits for the endpoint of a started flow: the tenant
+// lists it about a minute after the deployment reports STARTED.
+var (
+	endpointWait = 2 * time.Minute
+	endpointPoll = 10 * time.Second
+)
+
+// awaitEndpoint is resolveEndpoint that, when a STARTED flow has no endpoint
+// yet (just deployed), asks again until endpointWait has passed.
+func awaitEndpoint(ctx context.Context, exe *httpclnt.HTTPExecuter, artifactID, url, kind string, prog *progress) (string, error) {
+	deadline := time.Now().Add(endpointWait)
+	for {
+		ep, err := resolveEndpoint(exe, artifactID, url, kind)
+		var none *noEndpointError
+		if !errors.As(err, &none) || time.Now().After(deadline) {
+			return ep, err
+		}
+		if _, status, serr := cpi.NewRuntime(exe).Get(artifactID); serr != nil || status != "STARTED" {
+			return ep, err
+		}
+		prog.report(0, "%s is started, waiting for the tenant to list its endpoint", artifactID)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(endpointPoll):
+		}
+	}
 }
 
 // SendTestMessage sends m to an endpoint of a deployed integration flow and
@@ -301,7 +341,8 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 		endpointArtifact = m.Harness
 		headers[HarnessAddressHeader] = m.ProcessDirectAddress
 	}
-	url, err := resolveEndpoint(exe, endpointArtifact, m.URL, kind)
+	prog := newProgress(m.Progress)
+	url, err := awaitEndpoint(ctx, exe, endpointArtifact, m.URL, kind, prog)
 	if err != nil && m.ProcessDirectAddress != "" && output.ExitCode(err) == exitcode.Usage {
 		return nil, output.Usagef("test harness %s is not deployed or has no endpoint (install it with 'cpictl test tools install --deploy', MCP install_test_tools): %v", m.Harness, err)
 	}
@@ -353,7 +394,6 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 		sent.HarnessMessageGuid, sent.MessageGuid = sent.MessageGuid, ""
 	}
 	if m.Wait > 0 && !authFailed {
-		prog := newProgress(m.Progress)
 		prog.report(0, "endpoint answered HTTP %d, waiting for the message processing log", resp.StatusCode)
 		if sent.Harness != "" {
 			sent.Log, err = waitForHarnessTarget(ctx, exe, sent, m.Wait, m.PollInterval, prog)
@@ -548,10 +588,15 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 	if errors.As(err, &timedOut) && s.HarnessMessageGuid != "" {
 		// the harness ran but the flow under test never did: say where it stopped
 		if h, herr := GetMessageLog(exe, s.HarnessMessageGuid, 0); herr == nil && h != nil && h.Status == "COMPLETED" {
-			return h, output.Failed(fmt.Errorf("the test harness completed (message %s) but %s has no message with its correlation ID %s: "+
-				"the harness did not reach ProcessDirect address %s. Check that %s is deployed and STARTED on the same runtime as the harness, "+
-				"and reinstall the test tools (cpictl test tools install) if the harness is older than this cpictl",
-				s.HarnessMessageGuid, s.ArtifactID, correlation, s.ProcessDirectAddress, s.ArtifactID))
+			msg := fmt.Sprintf("the test harness completed (message %s) but %s has no message with its correlation ID %s: the harness did not reach ProcessDirect address %s. ",
+				s.HarnessMessageGuid, s.ArtifactID, correlation, s.ProcessDirectAddress)
+			if v, _, verr := cpi.NewRuntime(exe).Get(s.Harness); verr == nil && v != "" && v != "NOT_DEPLOYED" && versioning.Compare(v, harnessRunsCall) < 0 {
+				msg += fmt.Sprintf("The deployed harness %s is version %s: harness versions before %s skip their process and return the body unchanged. "+
+					"Run cpictl test tools install --deploy", s.Harness, v, harnessRunsCall)
+			} else {
+				msg += fmt.Sprintf("Check that %s is deployed and STARTED on the same runtime as the harness", s.ArtifactID)
+			}
+			return h, output.Failed(errors.New(msg))
 		}
 	}
 	if err != nil {

@@ -95,6 +95,10 @@ type Artifact struct {
 	guidelineGets     int
 	// EndpointURL makes the deployed artifact appear in ServiceEndpoints.
 	EndpointURL string
+	// EndpointHidden is the number of ServiceEndpoints listings that still
+	// omit the endpoint: a real tenant lists it about a minute after the
+	// flow reports STARTED (set on deploy from Tenant.EndpointDelay).
+	EndpointHidden int
 	// Resources: name -> type and content; Zip is the $value download
 	// (and the content stored by create/update).
 	Resources map[string]Resource
@@ -333,6 +337,10 @@ type Tenant struct {
 	// EndpointBase is the base URL of runtime endpoints in ServiceEndpoints
 	// (default: the mock's URL), e.g. the name other containers reach it by.
 	EndpointBase string
+	// EndpointDelay is the number of ServiceEndpoints listings after a
+	// deploy that do not list the flow's endpoint yet (see
+	// Artifact.EndpointHidden).
+	EndpointDelay int
 	// Live makes the tenant behave like a running system instead of a
 	// scripted one: a deploy starts the designtime version (task SUCCESS), an
 	// undeploy removes it, uploads record who and when, messages sent to an
@@ -1186,7 +1194,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			rows := []map[string]any{}
 			for _, n := range sortedKeys(l.Attachments) {
 				rows = append(rows, map[string]any{"Id": "att-" + l.Guid + "-" + n, "Name": n, "ContentType": "text/plain",
-					"PayloadSize": len(l.Attachments[n]), "TimeStamp": odataDate(l.End)})
+					"PayloadSize": fmt.Sprint(len(l.Attachments[n])), "TimeStamp": odataDate(l.End)})
 			}
 			writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
 		case "/MessageStoreEntries":
@@ -1380,6 +1388,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		for _, id := range sortedKeys(m.Artifacts) {
 			a := m.Artifacts[id]
 			if a.EndpointURL == "" || (filter != "" && filter != "Name eq '"+id+"'") {
+				continue
+			}
+			if a.EndpointHidden > 0 {
+				a.EndpointHidden--
 				continue
 			}
 			rows = append(rows, map[string]any{"Name": id, "Id": id + "$endpointAddress=x", "Title": id, "Version": a.DesignVersion, "Protocol": endpointProtocol(a.EndpointURL),
@@ -1705,6 +1717,8 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 				a.Runtime.Status, a.ErrorInfo = "ERROR", problem
 			} else if conflict := m.registerEndpoints(id, a); conflict != "" {
 				a.Runtime.Status, a.ErrorInfo = "ERROR", conflict
+			} else {
+				a.EndpointHidden = m.EndpointDelay
 			}
 			if len(a.TaskStatuses) == 0 {
 				a.TaskStatuses = []string{"SUCCESS"}

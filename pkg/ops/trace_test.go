@@ -119,6 +119,16 @@ func TestSendThroughHarnessWithoutIDs(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "the test harness completed (message H1) but Billing has no message with its correlation ID C1")
 	assert.Contains(t, err.Error(), "did not reach ProcessDirect address /billing/in")
+	assert.Contains(t, err.Error(), "Check that Billing is deployed and STARTED", "no harness runtime known")
+
+	// a harness from before 1.2.0 skipped its process on a tenant: the cause
+	mock.Artifacts[DefaultHarnessID].Runtime = &cpitest.Runtime{Version: "1.1.0", Status: "STARTED"}
+	_, err = SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{
+		ArtifactID: "Billing", ProcessDirectAddress: "/billing/in", Body: []byte("x"), Wait: 50 * time.Millisecond, PollInterval: time.Millisecond,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "The deployed harness CPICTL_Test_Harness is version 1.1.0: harness versions before 1.2.0 skip their process")
+	assert.Contains(t, err.Error(), "cpictl test tools install --deploy")
 }
 
 func nameValue(n, v string) cpi.NameValue { return cpi.NameValue{Name: n, Value: v} }

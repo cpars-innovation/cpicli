@@ -20,13 +20,13 @@ import (
 func TestArtifacts(t *testing.T) {
 	arts := testtools.Artifacts()
 	require.Len(t, arts, 3)
-	assert.Equal(t, testtools.Artifact{ID: testtools.HarnessID, Tool: testtools.ToolHarness, Name: "cpictl test harness", Version: "1.1.0", RoleParameter: testtools.HarnessRoleParameter}, arts[0])
-	assert.Equal(t, testtools.Artifact{ID: testtools.StubID, Tool: testtools.ToolStub, Name: "cpictl receiver stub", Version: "1.2.0", RoleParameter: testtools.StubRoleParameter}, arts[1])
+	assert.Equal(t, testtools.Artifact{ID: testtools.HarnessID, Tool: testtools.ToolHarness, Name: "cpictl test harness", Version: "1.2.0", RoleParameter: testtools.HarnessRoleParameter}, arts[0])
+	assert.Equal(t, testtools.Artifact{ID: testtools.StubID, Tool: testtools.ToolStub, Name: "cpictl receiver stub", Version: "1.3.0", RoleParameter: testtools.StubRoleParameter}, arts[1])
 
 	only, err := testtools.Select("stub")
 	require.NoError(t, err)
 	assert.Equal(t, arts[1:2], only)
-	assert.Equal(t, testtools.Artifact{ID: testtools.XSLTID, Tool: testtools.ToolXSLT, Name: "cpictl XSLT test", Version: "1.0.0", RoleParameter: testtools.XSLTRoleParameter}, arts[2])
+	assert.Equal(t, testtools.Artifact{ID: testtools.XSLTID, Tool: testtools.ToolXSLT, Name: "cpictl XSLT test", Version: "1.1.0", RoleParameter: testtools.XSLTRoleParameter}, arts[2])
 	_, err = testtools.Select("both")
 	assert.Error(t, err)
 }

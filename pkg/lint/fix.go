@@ -21,6 +21,7 @@ const (
 	fixDeleteFile
 	fixRemoveElement
 	fixLayout
+	fixFlowRefs
 )
 
 // lintFix is what --fix does for a finding.
@@ -103,6 +104,7 @@ func Fix(ctx context.Context, o Options, fo FixOptions) (*FixResult, error) {
 		removes []Finding
 		deletes []Finding
 		layouts []Finding
+		refs    []Finding
 	}
 	edits := map[string]*artifactEdits{}
 	var order []string
@@ -129,6 +131,8 @@ func Fix(ctx context.Context, o Options, fo FixOptions) (*FixResult, error) {
 			e.deletes = append(e.deletes, f)
 		case fixLayout:
 			e.layouts = append(e.layouts, f)
+		case fixFlowRefs:
+			e.refs = append(e.refs, f)
 		}
 	}
 	sort.Strings(order)
@@ -170,9 +174,16 @@ func Fix(ctx context.Context, o Options, fo FixOptions) (*FixResult, error) {
 				relayout[f.fix.model] = true
 			}
 		}
-		laidOut, err := applyModelEdits(e.a, e.scripts, e.removes, relayout, lc.cfg.Layout, fo.DryRun)
+		addRefs := map[string]bool{}
+		for _, f := range e.refs {
+			addRefs[f.fix.model] = true
+		}
+		laidOut, err := applyModelEdits(e.a, e.scripts, e.removes, relayout, addRefs, lc.cfg.Layout, fo.DryRun)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", rel, err)
+		}
+		for _, f := range e.refs {
+			out.Changes = append(out.Changes, FixChange{Rule: f.Rule, Artifact: e.a.ID, Path: e.a.Rel, Action: "sequence flow references added: " + f.fix.model})
 		}
 		for _, file := range laidOut {
 			out.Changes = append(out.Changes, FixChange{Rule: "layout", Artifact: e.a.ID, Path: e.a.Rel, Action: "diagram laid out: " + file})
@@ -203,7 +214,7 @@ func Fix(ctx context.Context, o Options, fo FixOptions) (*FixResult, error) {
 				out.Changes = append(out.Changes, FixChange{Rule: f.Rule, Artifact: e.a.ID, Path: e.a.Rel, Action: "deleted " + file})
 			}
 		}
-		if len(e.scripts)+len(e.removes)+len(e.deletes)+len(laidOut) > 0 && !changed[rel] {
+		if len(e.scripts)+len(e.removes)+len(e.deletes)+len(e.refs)+len(laidOut) > 0 && !changed[rel] {
 			changed[rel] = true
 			out.Changed = append(out.Changed, rel)
 		}
@@ -288,7 +299,7 @@ func placeInCollection(collDir string, fx *lintFix, a *lintArtifact, written map
 // applyModelEdits rewrites script references to collections, removes
 // elements and lays out the models in relayout; it returns the models laid
 // out.
-func applyModelEdits(a *lintArtifact, scripts, removes []Finding, relayout map[string]bool, layout iflow.LayoutOptions, dryRun bool) ([]string, error) {
+func applyModelEdits(a *lintArtifact, scripts, removes []Finding, relayout, addRefs map[string]bool, layout iflow.LayoutOptions, dryRun bool) ([]string, error) {
 	byModel := map[string][]Finding{}
 	for _, f := range removes {
 		byModel[f.fix.model] = append(byModel[f.fix.model], f)
@@ -296,7 +307,7 @@ func applyModelEdits(a *lintArtifact, scripts, removes []Finding, relayout map[s
 	var laidOut []string
 	models := sortedModelFiles(a)
 	for _, file := range models {
-		if len(scripts) == 0 && len(byModel[file]) == 0 && !relayout[file] {
+		if len(scripts) == 0 && len(byModel[file]) == 0 && !relayout[file] && !addRefs[file] {
 			continue
 		}
 		p := filepath.Join(a.Dir, filepath.FromSlash(file))
@@ -314,6 +325,9 @@ func applyModelEdits(a *lintArtifact, scripts, removes []Finding, relayout map[s
 			if removeModelElement(doc, f.fix.element, f.fix.reconnect) {
 				touched = true
 			}
+		}
+		if addRefs[file] && iflow.AddFlowReferences(doc) {
+			touched = true
 		}
 		if !touched && !relayout[file] {
 			continue

@@ -94,7 +94,7 @@ removes content modifiers that do nothing). Review the diff, raise the versions
 	c.Flags().String("fail-on", "", "Exit with code 5 when a new finding has at least this severity: info, warning, error (config: lint.failOn)")
 	c.Flags().String("min-severity", "info", "Do not report findings below this severity")
 	c.Flags().Bool("fix", false, "Apply the fixes to the local files")
-	c.Flags().StringSlice("fix-rules", nil, "Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step; all: every fixable rule)")
+	c.Flags().StringSlice("fix-rules", nil, "Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step, missing-flow-reference; all: every fixable rule)")
 	c.Flags().Bool("dry-run", false, "With --fix: only list the changes")
 	c.Flags().String("deploy-config", "", "Deploy config for the deployment-copies and flow-without-deployment rules (default: orchestrator.deployConfig, then repository.deployConfig of the rules file)")
 	c.Flags().String("configure", "", "Configure file or folder for the configure-* rules (default: repository.configure of the rules file) (config: lint.configure)")

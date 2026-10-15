@@ -49,9 +49,9 @@ type RuleInfo struct {
 // fixableRules can be applied by lint --fix (fixByDefault: without --fix-rules).
 var fixableRules = map[string]bool{
 	"duplicate-script": true, "use-script-collection": true, "unused-script": true, "unconnected-step": true, "noop-content-modifier": true,
-	"layout": true,
+	"layout": true, "missing-flow-reference": true,
 }
-var fixByDefault = map[string]bool{"duplicate-script": true, "use-script-collection": true, "unused-script": true, "unconnected-step": true}
+var fixByDefault = map[string]bool{"duplicate-script": true, "use-script-collection": true, "unused-script": true, "unconnected-step": true, "missing-flow-reference": true}
 
 var lintRules = []lintRule{
 	// reuse
@@ -87,6 +87,7 @@ var lintRules = []lintRule{
 	{id: "collection-script-tests", group: GroupRobustness, severity: SevWarning, title: "A function of a script collection is not called by any test", artifact: ruleCollectionScriptTests},
 	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
 	{id: "idoc-no-idempotency", group: GroupRobustness, severity: SevInfo, title: "A flow receives IDocs without an Idempotent Process Call or JMS decoupling", artifact: ruleIDocNoIdempotency},
+	{id: "missing-flow-reference", group: GroupRobustness, severity: SevError, title: "Steps do not list their sequence flows (incoming/outgoing): the process deploys but does not run", artifact: ruleMissingFlowRefs},
 	{id: "unsupported-script-class", group: GroupRobustness, severity: SevWarning, title: "A script uses a class an integration cell refuses at deploy (Thread)", artifact: ruleUnsupportedScriptClass},
 	// performance and data protection
 	{id: "body-as-string", group: GroupPerformance, severity: SevInfo, title: "A script reads the whole body as a string", artifact: ruleBodyAsString},

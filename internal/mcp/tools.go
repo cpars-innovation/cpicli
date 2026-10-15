@@ -873,7 +873,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"dir":       str("Content tree relative to the server root (default: packages if it exists, else the root)"),
 				"packages":  strArray("Only these packages"),
 				"artifacts": strArray("Only these artifacts"),
-				"rules":     strArray(`Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step; ["all"]: every fixable rule)`),
+				"rules":     strArray(`Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step, missing-flow-reference; ["all"]: every fixable rule)`),
 				"dry_run":   boolean("Only list the changes"),
 			}),
 			Annotations: map[string]any{"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},

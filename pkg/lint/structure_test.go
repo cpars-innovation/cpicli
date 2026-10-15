@@ -3,6 +3,7 @@ package lint
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -121,4 +122,32 @@ func TestStructureRules(t *testing.T) {
 	assert.Contains(t, f[0].Message, "ORDERNO")
 	assert.Contains(t, f[0].Message, "orderNo")
 	has("duplicate-header-case", "Swallow", 0)
+}
+
+// A model without incoming/outgoing references deploys, but SAP's runtime
+// does not run its process; --fix adds the references by default.
+func TestMissingFlowReferences(t *testing.T) {
+	root := t.TempDir()
+	full := bpmn("", process("Process_1", "IntegrationProcess",
+		chain("m", "startEvent:S:", "callActivity:CM:header=OrderNo", "endEvent:E:MessageEndEvent")))
+	bare := regexp.MustCompile(`<bpmn2:(incoming|outgoing)>[^<]*</bpmn2:(incoming|outgoing)>`).ReplaceAllString(full, "")
+	for id, s := range map[string]string{"Full": full, "Bare": bare} {
+		tFlow{pkg: "P", id: id, files: map[string]string{"scenarioflows/integrationflow/" + id + ".iflw": s}}.write(t, root)
+	}
+	res, err := Run(context.Background(), Options{Dir: root})
+	require.NoError(t, err)
+	assert.Empty(t, findingsOf(res, "missing-flow-reference", "Full"))
+	got := findingsOf(res, "missing-flow-reference", "Bare")
+	require.Len(t, got, 1)
+	assert.Equal(t, SevError, got[0].Severity)
+	assert.Contains(t, got[0].Message, "3 elements without incoming/outgoing references to their sequence flows (4 missing)")
+	assert.Equal(t, []string{"S", "CM", "E"}, got[0].Related)
+
+	fixed, err := Fix(context.Background(), Options{Dir: root}, FixOptions{})
+	require.NoError(t, err)
+	require.Len(t, fixed.Changes, 1)
+	assert.Equal(t, "missing-flow-reference", fixed.Changes[0].Rule)
+	res, err = Run(context.Background(), Options{Dir: root})
+	require.NoError(t, err)
+	assert.Empty(t, findingsOf(res, "missing-flow-reference", "Bare"))
 }

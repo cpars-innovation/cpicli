@@ -3,6 +3,7 @@ package lint
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -260,6 +261,36 @@ func ruleDuplicateHeaderCase(lc *lintContext, a *lintArtifact) []Finding {
 		out = append(out, a.finding("duplicate-header-case", first.file, first.element, first.name, low,
 			"the header is written as "+strings.Join(where, ", ")+": header names are case-insensitive, so these are one header",
 			"use one spelling everywhere"))
+	}
+	return out
+}
+
+// ruleMissingFlowRefs: elements that do not list the sequence flows starting
+// or ending at them. SAP's runtime builds the route from these references,
+// so such a process deploys, but a message completes without running it.
+func ruleMissingFlowRefs(lc *lintContext, a *lintArtifact) []Finding {
+	var out []Finding
+	for _, file := range sortedModelFiles(a) {
+		m := a.Models[file]
+		if len(m.MissingRefs) == 0 {
+			continue
+		}
+		var related []string
+		for _, r := range m.MissingRefs {
+			if !slices.Contains(related, r.Element) {
+				related = append(related, r.Element)
+			}
+		}
+		f := a.finding("missing-flow-reference", file, related[0], m.Elements[related[0]].Name, file,
+			fmt.Sprintf("%d %s without incoming/outgoing references to their sequence flows (%d missing): the tenant deploys the flow, but a message completes without running its steps and comes back unchanged",
+				len(related), plural(len(related), "element", "elements"), len(m.MissingRefs)),
+			"lint --fix adds the references (default fix); models from SAP's editor always have them")
+		if len(related) > 10 {
+			related = related[:10]
+		}
+		f.Related = related
+		f.fix = &lintFix{kind: fixFlowRefs, model: file}
+		out = append(out, f)
 	}
 	return out
 }

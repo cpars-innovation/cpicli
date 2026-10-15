@@ -5,6 +5,25 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Test tools run on a tenant again (harness 1.2.0, stub 1.3.0, XSLT flow 1.1.0;
+  [#20](https://github.com/cpars-innovation/cpicli/issues/20)).** The flows cpictl shipped had no
+  `<bpmn2:incoming>`/`<bpmn2:outgoing>` references. A tenant deploys such a flow, but its runtime
+  builds the route from them: the process never ran, and the message completed with the body it
+  came in with. That is why the harness echoed the body without calling the ProcessDirect address,
+  which we had put down to two runtimes. Run `cpictl test tools install --deploy`. A send through an
+  older harness that finds no message of the flow under test now names that cause. The mock tenant's
+  demo content had the same defect and is fixed; the mock now runs no step of such a flow either.
+- New lint rule `missing-flow-reference` (error, fixed by default by `lint --fix`): elements that do
+  not list their sequence flows. Flows from SAP's editor always have them; generated or hand-written
+  models may not.
+- `send` and test runs wait up to two minutes for the endpoint of a flow that is `STARTED` but not
+  yet listed in `ServiceEndpoints`. On the tenant we tried, the endpoint appeared about 80 s after the
+  deploy reported success. The mock tenant can simulate this (`EndpointDelay`,
+  `Artifact.EndpointHidden`).
+- Message log attachments are read from a real tenant: `PayloadSize` comes as a string there (`"33"`),
+  which failed the attachment list with a warning.
+- `credentials set-*` no longer logs the tenant's 404 as a warning when it creates a credential.
+
 - Verified on a second real tenant: `test tools install` without `--package` now really adopts the
   package where tools already are (the flag defaulted to `CPICTLTesting`, which made the 0.18.0
   fix refuse instead, [#21](https://github.com/cpars-innovation/cpicli/issues/21)).

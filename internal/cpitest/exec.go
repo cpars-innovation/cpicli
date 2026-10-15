@@ -119,8 +119,15 @@ func (a *Artifact) info() *flowInfo {
 
 // mainPath returns the steps of the integration process in execution order:
 // from the start event along the single outgoing flows (the first branch at
-// a gateway); steps not reached that way follow in document order.
+// a gateway). Like SAP's runtime it follows only the outgoing references an
+// element declares: without them the process runs no step.
 func mainPath(m *iflow.Model) []*iflow.Element {
+	undeclared := map[string]bool{}
+	for _, r := range m.MissingRefs {
+		if !r.Incoming {
+			undeclared[r.Element+"/"+r.Flow] = true
+		}
+	}
 	var start *iflow.Element
 	for _, id := range m.Order {
 		el := m.Elements[id]
@@ -136,7 +143,7 @@ func mainPath(m *iflow.Model) []*iflow.Element {
 		if el.IsStep() {
 			out = append(out, el)
 		}
-		if len(el.Outgoing) == 0 {
+		if len(el.Outgoing) == 0 || undeclared[el.ID+"/"+el.Outgoing[0]] {
 			break
 		}
 		f := m.Flow(el.Outgoing[0])
