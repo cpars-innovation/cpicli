@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.19.0
+
 - **Test tools run on a tenant again (harness 1.2.0, stub 1.3.0, XSLT flow 1.1.0;
   [#20](https://github.com/cpars-innovation/cpicli/issues/20)).** The flows cpictl shipped had no
   `<bpmn2:incoming>`/`<bpmn2:outgoing>` references. A tenant deploys such a flow, but its runtime
