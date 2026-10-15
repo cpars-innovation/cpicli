@@ -77,6 +77,7 @@ unchanged; `response_contains`, `response_not_contains`, `error_contains`, `step
 | `response_xpath` | the first match of each path has this text (see below) |
 | `response_json` | the value at each dotted path (`a.b.0.c`: keys and array indexes) equals the expected one: numbers by value (`9.5` = `9.50`, `2` = `"2"`), objects and arrays as JSON |
 | `error_contains` | each text is in the error: the log's error text, the response of a failed call or the send error (negative cases) |
+| `response_headers` | the answer has these headers (names case-insensitive, values exact); `null`: the header must be absent |
 | `custom_headers` | the message log has these custom header properties with these values |
 | `steps_include` | each name is a step's activity name or model step ID (`.iflw` element ID) in the message's steps |
 | `max_duration` | the message took at most this long (log start to end; without a log, the HTTP call) |

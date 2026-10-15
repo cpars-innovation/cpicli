@@ -115,6 +115,19 @@ func TestDeploy_TaskFailure(t *testing.T) {
 	assert.Contains(t, results[0].Error, "boom")
 }
 
+// A first deploy on a fresh tenant: the task ends FAIL, but the runtime runs
+// the new version (#24): deployed, with a warning naming both.
+func TestDeploy_TaskFailureButRuntimeStarted(t *testing.T) {
+	results, _ := run(t, map[string]*cpitest.Artifact{
+		"A": {Type: "Integration", DesignVersion: "1", TaskStatuses: []string{"FAIL"}, ErrorInfo: "boom",
+			AfterDeploy: []*cpitest.Runtime{{Version: "1", Status: "STARTED", DeployedOn: t1}}},
+	}, []string{"A"}, fastOpts())
+	assert.Equal(t, StatusDeployed, results[0].Status)
+	require.Len(t, results[0].Warnings, 1)
+	assert.Contains(t, results[0].Warnings[0], "ended with status FAIL, but the runtime runs A 1 (STARTED)")
+	assert.Contains(t, results[0].Warnings[0], "boom")
+}
+
 func TestDeploy_RuntimeError(t *testing.T) {
 	results, _ := run(t, map[string]*cpitest.Artifact{
 		"A": {Type: "Integration", DesignVersion: "1", ErrorInfo: "invalid mapping",

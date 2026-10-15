@@ -338,6 +338,23 @@
             }
           ]
         },
+        "response_headers": {
+          "title": "Response headers",
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": "Headers expected in the answer: name (case-insensitive) -> exact value; null: the header must be absent.",
+          "examples": [
+            {
+              "X-Rehearsal": "v1",
+              "X-Debug": null
+            }
+          ]
+        },
         "error_contains": {
           "title": "Error contains",
           "$ref": "#/$defs/stringOrList",

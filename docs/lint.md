@@ -43,6 +43,7 @@ cpictl lint --list-rules
 | | `inline-local-process` | info | a local process called once (not looping) that is a straight line of steps | |
 | robustness | `no-exception-subprocess` | warning | an integration process without exception subprocess | |
 | | `exception-subprocess-message-end` | warning | an exception subprocess ending in a Message End with nothing in it that raises the error again (a script, a called local process with an Error or Escalation End) or sets `CamelHttpResponseCode`: the message is marked completed and the error lost | |
+| | `unsupported-script-class` | warning | a Groovy or JavaScript script uses `Thread`, which an integration cell refuses at deploy ("There are unsupported classes [Thread] that are used in the script.") while the API reports the deploy task as successful; the Cloud Integration runtime accepts it | |
 | | `header-empty-vs-absent` | warning | a flow sets a header to an empty value (content modifier constant without value, `setHeader("X", "")`) and calls, through ProcessDirect, a flow that tests the header against null: an empty header is not null | |
 | | `swallowed-exception` | warning | an empty `catch` block | |
 | | `collection-script-tests` | warning | a public function of a script collection that no test in `scriptTests.dir/<package>/<collection>/` calls ([script tests](#script-collection-tests)) | |

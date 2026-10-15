@@ -108,6 +108,9 @@ type Result struct {
 	// in draft on the tenant (Status SKIPPED).
 	Skipped string `json:"skipped,omitempty"`
 	Error   string `json:"error,omitempty"`
+	// Warnings are findings that did not fail the deployment, e.g. a build
+	// and deploy task that failed while the runtime runs the new version.
+	Warnings []string `json:"warnings,omitempty"`
 
 	// Err is the underlying error for FAILED/TIMEOUT results (not serialised).
 	Err error `json:"-"`
@@ -484,8 +487,21 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 					taskDone, taskConfirmed = true, true
 				case "FAIL", "FAILED", "ERROR":
 					report(check, "build and deploy task "+status)
+					info := errorInfoSuffix(ctx, tenant, a.ID, opts.Interval)
+					// a first deploy on a fresh tenant can end FAIL while the
+					// runtime runs the new version (#24): report both
+					if rt, rerr := tenant.RuntimeArtifact(a.ID); rerr == nil && rt != nil && rt.Status == "STARTED" && isFresh(rt, before, triggeredAt, skew, false) {
+						if rt.Version != "" {
+							r.Version = rt.Version
+						}
+						r.Status = StatusDeployed
+						r.Warnings = append(r.Warnings, fmt.Sprintf("the build and deploy task %v ended with status %s, but the runtime runs %v %s (STARTED)%s; deploy again if in doubt",
+							r.TaskID, status, a.ID, rt.Version, info))
+						logger.Warn().Msg(r.Warnings[len(r.Warnings)-1])
+						return r
+					}
 					return fail(r, fmt.Errorf("artifact %v build/deploy task %v ended with status %s%s",
-						a.ID, r.TaskID, status, errorInfoSuffix(ctx, tenant, a.ID, opts.Interval)))
+						a.ID, r.TaskID, status, info))
 				default:
 					report(check, "build and deploy task "+status)
 					continue
@@ -541,7 +557,8 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 	}
 	if runtimeStatus == "NOT_DEPLOYED" || runtimeStatus == "" {
 		// the deployment never reached the runtime: not a flow problem
-		err = fmt.Errorf("%w; it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments", err)
+		err = fmt.Errorf("%w; it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments. "+
+			"An integration cell can refuse a flow at deploy time without the API saying so (e.g. a script using a class it does not allow, such as Thread: lint unsupported-script-class)", err)
 	}
 	return timeout(r, err)
 }

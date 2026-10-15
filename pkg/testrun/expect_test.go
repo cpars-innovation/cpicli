@@ -71,17 +71,29 @@ func TestExpectations(t *testing.T) {
 		"response_json wrong":          {Expect{ResponseJSON: map[string]any{"order.no": "4712", "order.paid": false}}, sentWith(200, jsonResp, nil), []string{"response_json[order.no]", "response_json[order.paid]"}},
 		"response_json missing":        {Expect{ResponseJSON: map[string]any{"order.items.7.qty": 1, "order.no.x": 1}}, sentWith(200, jsonResp, nil), []string{"response_json[order.items.7.qty]", "response_json[order.no.x]"}},
 		"response_json not json":       {Expect{ResponseJSON: map[string]any{"a": 1}}, sentWith(200, xmlResp, nil), []string{"response_json[a]"}},
-		"error_contains":               {Expect{HTTPStatus: 500, ErrorContains: StringList{"field Customer"}}, sentWith(500, "", failedLog), nil},
-		"error_contains in response":   {Expect{HTTPStatus: 500, ErrorContains: StringList{"Read timed out"}}, sentWith(500, "java.net.SocketTimeoutException: Read timed out", nil), nil},
-		"error_contains no error":      {Expect{ErrorContains: StringList{"field Customer"}}, sentWith(200, "", okLog), []string{"error_contains"}},
-		"custom_headers":               {Expect{CustomHeaders: map[string]string{"OrderNo": "4711"}}, sentWith(200, "", okLog), nil},
-		"custom_headers wrong":         {Expect{CustomHeaders: map[string]string{"OrderNo": "1", "Partner": "ACME"}}, sentWith(200, "", okLog), []string{"custom_headers[OrderNo]", "custom_headers[Partner]"}},
-		"steps_include":                {Expect{StepsInclude: StringList{"Map Order", "EndEvent_1"}}, func() *observation { o := sentWith(200, "", okLog); o.steps = steps; return o }(), nil},
-		"steps_include missing":        {Expect{StepsInclude: StringList{"Call ERP"}}, func() *observation { o := sentWith(200, "", okLog); o.steps = steps; return o }(), []string{"steps_include"}},
-		"steps_include unreadable":     {Expect{StepsInclude: StringList{"x"}}, func() *observation { o := sentWith(200, "", okLog); o.stepsErr = errors.New("404"); return o }(), []string{"steps_include"}},
-		"max_duration of the message":  {Expect{MaxDuration: Duration(3 * time.Second)}, sentWith(200, "", okLog), nil},
-		"max_duration exceeded":        {Expect{MaxDuration: Duration(time.Second)}, sentWith(200, "", okLog), []string{"max_duration"}},
-		"max_duration of the call":     {Expect{MaxDuration: Duration(50 * time.Millisecond)}, sentWith(200, "", nil), []string{"max_duration"}},
+		"response_headers": {Expect{ResponseHeaders: map[string]*string{"x-rehearsal": strPtr("v1"), "X-Debug": nil}},
+			func() *observation {
+				o := sentWith(200, "", nil)
+				o.sent.ResponseHeaders = map[string]string{"X-Rehearsal": "v1"}
+				return o
+			}(), nil},
+		"response_headers wrong": {Expect{ResponseHeaders: map[string]*string{"X-Rehearsal": strPtr("v2"), "X-Missing": strPtr("1"), "X-Debug": nil}},
+			func() *observation {
+				o := sentWith(200, "", nil)
+				o.sent.ResponseHeaders = map[string]string{"X-Rehearsal": "v1", "X-Debug": "on"}
+				return o
+			}(), []string{"response_headers[X-Debug]", "response_headers[X-Missing]", "response_headers[X-Rehearsal]"}},
+		"error_contains":              {Expect{HTTPStatus: 500, ErrorContains: StringList{"field Customer"}}, sentWith(500, "", failedLog), nil},
+		"error_contains in response":  {Expect{HTTPStatus: 500, ErrorContains: StringList{"Read timed out"}}, sentWith(500, "java.net.SocketTimeoutException: Read timed out", nil), nil},
+		"error_contains no error":     {Expect{ErrorContains: StringList{"field Customer"}}, sentWith(200, "", okLog), []string{"error_contains"}},
+		"custom_headers":              {Expect{CustomHeaders: map[string]string{"OrderNo": "4711"}}, sentWith(200, "", okLog), nil},
+		"custom_headers wrong":        {Expect{CustomHeaders: map[string]string{"OrderNo": "1", "Partner": "ACME"}}, sentWith(200, "", okLog), []string{"custom_headers[OrderNo]", "custom_headers[Partner]"}},
+		"steps_include":               {Expect{StepsInclude: StringList{"Map Order", "EndEvent_1"}}, func() *observation { o := sentWith(200, "", okLog); o.steps = steps; return o }(), nil},
+		"steps_include missing":       {Expect{StepsInclude: StringList{"Call ERP"}}, func() *observation { o := sentWith(200, "", okLog); o.steps = steps; return o }(), []string{"steps_include"}},
+		"steps_include unreadable":    {Expect{StepsInclude: StringList{"x"}}, func() *observation { o := sentWith(200, "", okLog); o.stepsErr = errors.New("404"); return o }(), []string{"steps_include"}},
+		"max_duration of the message": {Expect{MaxDuration: Duration(3 * time.Second)}, sentWith(200, "", okLog), nil},
+		"max_duration exceeded":       {Expect{MaxDuration: Duration(time.Second)}, sentWith(200, "", okLog), []string{"max_duration"}},
+		"max_duration of the call":    {Expect{MaxDuration: Duration(50 * time.Millisecond)}, sentWith(200, "", nil), []string{"max_duration"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := expectations(check(tc.e, tc.o))
@@ -134,3 +146,5 @@ func TestXPathAndJSONPath(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, `{"a":1}`, scalar(got))
 }
+
+func strPtr(s string) *string { return &s }

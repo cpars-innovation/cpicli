@@ -5,6 +5,31 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Message logs: a detail the key may not read (403/401 on message store entries, attachments,
+  custom headers, adapter attributes or the error text) is a warning, no longer a failure of the
+  whole read. `send --wait` and test runs work with a key without `esbmessagestorage.read`
+  ([#19](https://github.com/cpars-innovation/cpicli/issues/19)).
+- `send --process-direct`: when the harness answers without message IDs, its own log is found by
+  time; when the flow under test then never logs, the error says that the harness completed but
+  did not reach the ProcessDirect address, and what to check
+  ([#20](https://github.com/cpars-innovation/cpicli/issues/20)).
+- `test tools install` decides the package before uploading anything: tools already installed
+  elsewhere make the others join them (a note says so), a different `--package` or tools spread over
+  several packages are refused up front, so a failed install leaves the tenant as it was
+  ([#21](https://github.com/cpars-innovation/cpicli/issues/21)).
+- Mock tenant refuses what real tenants refused: a manifest header without a space after the colon
+  (upload 500 `invalid header field (line N)`), a value mapping with an empty value (deploy 500), a
+  message mapping without an assigned target (deploy ERROR `Target element is not assigned`)
+  ([#22](https://github.com/cpars-innovation/cpicli/issues/22)).
+- Test cases: `expect.response_headers` (name case-insensitive, value exact, `null`: absent);
+  `SentMessage.ResponseHeaders` holds the answer's headers without cookies
+  ([#23](https://github.com/cpars-innovation/cpicli/issues/23)).
+- Deploy: a build and deploy task that ends `FAIL` while the runtime runs the new version `STARTED`
+  is reported as deployed with a warning naming both (`DeployResult.Warnings`); a deployment that
+  never reaches the runtime mentions integration cell refusals. Lint `unsupported-script-class`:
+  scripts using `Thread`, which an integration cell refuses at deploy
+  ([#24](https://github.com/cpars-innovation/cpicli/issues/24)).
+
 - Script cases ([#13](https://github.com/cpars-innovation/cpicli/issues/13)): YAML cases that call one
   script function with a message and check body, headers, properties (`null`: absent), return
   value, exception, message log and duration, in the format shared with CPI Studio

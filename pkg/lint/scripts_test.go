@@ -180,3 +180,15 @@ func TestIgnoreVendorsConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"SAP"}, cfg.IgnoreVendors)
 }
+
+func TestUnsupportedScriptClass(t *testing.T) {
+	a := &lintArtifact{Scripts: map[string][]byte{
+		"src/main/resources/script/stub.groovy": []byte("def ms = 100\nThread.sleep(ms)\n"),
+		"src/main/resources/script/ok.groovy":   []byte("// ThreadLocal and a Thread in a comment line\ndef threads = 1\nmessage.setHeader('ThreadId', '1')\n"),
+		"src/main/resources/script/new.groovy":  []byte("def t = new Thread({ -> })\n"),
+	}}
+	f := ruleUnsupportedScriptClass(nil, a)
+	require.Len(t, f, 2, "%v", f)
+	assert.Contains(t, f[0].Message, "new.groovy line 1")
+	assert.Contains(t, f[1].Message, "stub.groovy line 2")
+}

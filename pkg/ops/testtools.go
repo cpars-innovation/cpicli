@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
@@ -51,6 +52,47 @@ type TestToolResult struct {
 type TestToolsInstallResult struct {
 	Package   *PackageResult   `json:"package"`
 	Artifacts []TestToolResult `json:"artifacts"`
+	// Notes say how the package was chosen.
+	Notes []string `json:"notes,omitempty"`
+}
+
+// testToolsPackage decides the package before anything is uploaded (#21):
+// the tools must end up in one package. Tools already on the tenant fix
+// it: without --package their package is adopted; a --package that differs,
+// or tools spread over several packages, is refused, so a failed install
+// leaves the tenant as it was.
+func testToolsPackage(exe *httpclnt.HTTPExecuter, requested string) (pkgID string, adopted bool, err error) {
+	where := map[string][]string{} // package -> tools there
+	for _, a := range testtools.Artifacts() {
+		info, exists, err := cpi.GetDesigntimeInfo(exe, "Integration", a.ID, "active")
+		if err != nil {
+			return "", false, err
+		}
+		if exists && info != nil && info.PackageID != "" {
+			where[info.PackageID] = append(where[info.PackageID], a.ID)
+		}
+	}
+	var pkgs []string
+	for p := range where {
+		pkgs = append(pkgs, p)
+	}
+	sort.Strings(pkgs)
+	describe := func() string {
+		var parts []string
+		for _, p := range pkgs {
+			parts = append(parts, strings.Join(where[p], ", ")+" in "+p)
+		}
+		return strings.Join(parts, "; ")
+	}
+	switch {
+	case len(pkgs) > 1:
+		return "", false, output.Usagef("the test tools are spread over several packages (%s): delete the ones outside the package you want, then install again", describe())
+	case len(pkgs) == 1 && requested != "" && requested != pkgs[0]:
+		return "", false, output.Usagef("the test tools already installed are in package %s (%s), not %s: install with --package %s, or delete them first", pkgs[0], describe(), requested, pkgs[0])
+	case len(pkgs) == 1 && requested == "":
+		return pkgs[0], pkgs[0] != testtools.PackageID, nil
+	}
+	return cmp.Or(requested, testtools.PackageID), false, nil
 }
 
 // InstallTestTools uploads the embedded test tooling (test harness and
@@ -67,13 +109,19 @@ func InstallTestTools(ctx context.Context, exe *httpclnt.HTTPExecuter, opts Test
 	if opts.Role != "" && !reRole.MatchString(opts.Role) {
 		return nil, output.Usagef("invalid role %q (letters, digits, '.', '_', '-')", opts.Role)
 	}
-	pkgID := cmp.Or(opts.PackageID, testtools.PackageID)
+	pkgID, adopted, err := testToolsPackage(exe, opts.PackageID)
+	if err != nil {
+		return nil, err
+	}
 	pkg, err := CreatePackage(exe, PackageRequest{ID: pkgID, Name: testtools.PackageName, ShortText: testtools.PackageShortText,
 		Description: "Test harness (" + testtools.HarnessID + ") and receiver stub (" + testtools.StubID + ") installed by cpictl test tools install. Development tenants only; do not transport."})
 	if err != nil {
 		return nil, err
 	}
 	res := &TestToolsInstallResult{Package: pkg}
+	if adopted {
+		res.Notes = append(res.Notes, fmt.Sprintf("the tools already installed are in package %s: installed there", pkgID))
+	}
 	failed := 0
 	var deploy []Artifact
 	for _, a := range arts {

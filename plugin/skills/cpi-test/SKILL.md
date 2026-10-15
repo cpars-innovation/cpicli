@@ -96,6 +96,7 @@ expect:
   response_xpath: { /Order/Status: OK }          # /a/b, //name, [@attr='v'], /@attr
   response_json: { order.status: OK, order.items.0.qty: 2 }
   error_contains: []                # negative cases: text expected in the error
+  response_headers: { X-Order-Status: accepted }   # headers of the answer (null: must be absent)
   custom_headers: { OrderId: "4711" }   # custom header properties expected in the message log
   steps_include: [Map Order]        # step names or model step IDs the message passed
   max_duration: 10s

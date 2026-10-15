@@ -234,14 +234,20 @@ func GetMessageLog(exe *httpclnt.HTTPExecuter, guid string, maxErrorBytes int) (
 		CustomHeaderProperties: []cpi.NameValue{}, AdapterAttributes: []cpi.NameValue{},
 		Attachments: []cpi.MessageAttachment{}, MessageStoreEntries: []cpi.MessageStoreEntry{}}
 
+	// a detail the key may not read (403, 401) is a warning: the log itself
+	// was readable (#19)
 	optional := func(what string, err error) error {
-		if err == nil {
-			return nil
+		switch {
+		case err == nil:
+		case httpclnt.IsAuthError(err):
+			hint := "the service key lacks the role to read it"
+			if what == "message store entries" {
+				hint = "the service key lacks esbmessagestorage.read"
+			}
+			d.Warnings = append(d.Warnings, fmt.Sprintf("%s: forbidden (HTTP %d), %s", what, httpclnt.StatusCode(err), hint))
+		default:
+			d.Warnings = append(d.Warnings, fmt.Sprintf("%s: %v", what, err))
 		}
-		if httpclnt.IsAuthError(err) {
-			return err
-		}
-		d.Warnings = append(d.Warnings, fmt.Sprintf("%s: %v", what, err))
 		return nil
 	}
 	if slices.Contains(errorMessageStatuses, l.Status) {

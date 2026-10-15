@@ -103,6 +103,9 @@ type Expect struct {
 	ResponseXPath map[string]string `yaml:"response_xpath,omitempty" json:"responseXpath,omitempty"`
 	// ResponseJSON maps a dotted path (a.b.0.c) to the expected value.
 	ResponseJSON map[string]any `yaml:"response_json,omitempty" json:"responseJson,omitempty"`
+	// ResponseHeaders are headers expected in the answer (names
+	// case-insensitive, values exact); null: the header must be absent.
+	ResponseHeaders map[string]*string `yaml:"response_headers,omitempty" json:"responseHeaders,omitempty"`
 	// ErrorContains are texts expected in the error: the message log's
 	// error text, or the response of a failed call.
 	ErrorContains StringList `yaml:"error_contains,omitempty" json:"errorContains,omitempty"`

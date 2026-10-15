@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	neturl "net/url"
@@ -130,7 +131,10 @@ type SentMessage struct {
 	MessageGuid         string    `json:"messageGuid,omitempty"`
 	CorrelationID       string    `json:"correlationId,omitempty"`
 	ResponseContentType string    `json:"responseContentType,omitempty"`
-	Response            Content   `json:"response"`
+	// ResponseHeaders are the headers of the answer (cookies left out),
+	// several values joined with ", ".
+	ResponseHeaders map[string]string `json:"responseHeaders,omitempty"`
+	Response        Content           `json:"response"`
 	// Log is the processing log of the message (only with Wait).
 	Log *MessageLogDetail `json:"log,omitempty"`
 	// IDocs are the control records of the IDocs sent (TestMessage.IDoc).
@@ -336,6 +340,12 @@ func SendTestMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe End
 	sent.MessageGuid = resp.Header.Get("SAP_MessageProcessingLogID")
 	sent.CorrelationID = resp.Header.Get("SAP_MplCorrelationId")
 	sent.ResponseContentType = resp.Header.Get("Content-Type")
+	sent.ResponseHeaders = map[string]string{}
+	for k, v := range resp.Header {
+		if !strings.EqualFold(k, "Set-Cookie") {
+			sent.ResponseHeaders[k] = strings.Join(v, ", ")
+		}
+	}
 	sent.Response = NewContent(body, m.MaxBytes)
 
 	authFailed := resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden
@@ -499,8 +509,28 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 			return nil, err
 		}
 	}
+	// no IDs in the harness's answer (#20): find the harness's own log of
+	// this send by time
+	for correlation == "" && s.Harness != "" {
+		list, err := QueryMessageLogs(exe, MessageLogQuery{ArtifactID: s.Harness, Since: s.SentAt.Add(-2 * time.Second), Top: 1})
+		if err != nil && !isTransient(err) {
+			return nil, err
+		}
+		if err == nil && len(list.Logs) > 0 && list.Logs[0].CorrelationID != "" {
+			s.HarnessMessageGuid, correlation = list.Logs[0].MessageGuid, list.Logs[0].CorrelationID
+			break
+		}
+		if time.Now().Add(interval).After(deadline) {
+			break
+		}
+		prog.report(0, "the harness answered without message IDs: looking for its log (poll %d)", prog.steps()+1)
+		if err := sleep(ctx, interval); err != nil {
+			return nil, err
+		}
+	}
 	if correlation == "" {
-		return nil, output.Failed(fmt.Errorf("the harness returned no message GUID or correlation ID, cannot find the message of %s", s.ArtifactID))
+		return nil, output.Failed(fmt.Errorf("the harness returned no message GUID or correlation ID and has no log since %s, cannot find the message of %s",
+			s.SentAt.Format(time.RFC3339), s.ArtifactID))
 	}
 	s.CorrelationID = correlation
 	// the harness failed because no flow consumes the address: the flow
@@ -514,6 +544,16 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 	}
 	q := MessageLogQuery{ArtifactID: s.ArtifactID, CorrelationID: correlation, Top: 1}
 	list, err := waitForMessageLogs(ctx, exe, q, time.Until(deadline), interval, prog)
+	var timedOut *TimeoutError
+	if errors.As(err, &timedOut) && s.HarnessMessageGuid != "" {
+		// the harness ran but the flow under test never did: say where it stopped
+		if h, herr := GetMessageLog(exe, s.HarnessMessageGuid, 0); herr == nil && h != nil && h.Status == "COMPLETED" {
+			return h, output.Failed(fmt.Errorf("the test harness completed (message %s) but %s has no message with its correlation ID %s: "+
+				"the harness did not reach ProcessDirect address %s. Check that %s is deployed and STARTED on the same runtime as the harness, "+
+				"and reinstall the test tools (cpictl test tools install) if the harness is older than this cpictl",
+				s.HarnessMessageGuid, s.ArtifactID, correlation, s.ProcessDirectAddress, s.ArtifactID))
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

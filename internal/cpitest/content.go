@@ -423,6 +423,12 @@ func uploadProblem(zipData []byte) string {
 		return ""
 	}
 	for _, f := range zr.File {
+		if f.Name == "META-INF/MANIFEST.MF" {
+			if msg := manifestProblem(zipFile(f)); msg != "" {
+				return msg
+			}
+			continue
+		}
 		if !strings.HasSuffix(f.Name, "parameters.propdef") {
 			continue
 		}
@@ -439,6 +445,61 @@ func uploadProblem(zipData []byte) string {
 		}
 	}
 	return ""
+}
+
+// manifestProblem is how a tenant refuses a manifest at upload: a header
+// whose name is not followed by ": " (e.g. "Import-Service:" without the
+// space) is "invalid header field (line N)" (#22).
+func manifestProblem(mf []byte) string {
+	for i, line := range strings.Split(strings.ReplaceAll(string(mf), "\r\n", "\n"), "\n") {
+		if line == "" || line[0] == ' ' {
+			continue // end of a section, or a continuation
+		}
+		name, rest, ok := strings.Cut(line, ":")
+		if !ok || name == "" || !strings.HasPrefix(rest, " ") {
+			return fmt.Sprintf("invalid header field (line %d)", i+1)
+		}
+	}
+	return ""
+}
+
+// zipFile reads a file of an archive (nil on errors).
+func zipFile(f *zip.File) []byte {
+	rc, err := f.Open()
+	if err != nil {
+		return nil
+	}
+	defer rc.Close()
+	data, _ := io.ReadAll(io.LimitReader(rc, 4<<20))
+	return data
+}
+
+var (
+	reVMEntryValue = regexp.MustCompile(`(?s)<entry>.*?<value>\s*</value>.*?</entry>|(?s)<entry>.*?<value\s*/>.*?</entry>`)
+)
+
+// deployProblem is how a tenant refuses an artifact at deploy (#22): a
+// value mapping with an empty value fails the deploy request (status 500);
+// a message mapping without an assigned target element deploys into
+// ERROR. status 0: the runtime ends in ERROR with msg.
+func deployProblem(typ, id string, zipData []byte) (status int, msg string) {
+	zr, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return 0, ""
+	}
+	for _, f := range zr.File {
+		switch {
+		case typ == "ValueMapping" && strings.HasSuffix(f.Name, "value_mapping.xml"):
+			if reVMEntryValue.Match(zipFile(f)) {
+				return 500, "Failed to deploy Value Mapping id: " + id
+			}
+		case typ == "MessageMapping" && strings.HasSuffix(f.Name, ".mmap"):
+			if !bytes.Contains(zipFile(f), []byte("<brick")) {
+				return 0, "Target element is not assigned"
+			}
+		}
+	}
+	return 0, ""
 }
 
 // tenantSerialised returns an uploaded archive as a tenant stores it: the

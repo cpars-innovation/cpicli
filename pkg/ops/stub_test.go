@@ -243,19 +243,30 @@ func TestStubCalls(t *testing.T) {
 func TestInstallTestToolsOtherPackage(t *testing.T) {
 	m := liveMock(t)
 	exe := m.Executer()
-	_, err := InstallTestTools(context.Background(), exe, TestToolsOptions{PackageID: "ZZSandbox", Only: testtools.ToolHarness})
+	// the situation of #21: one tool in another package, nothing else
+	_, err := InstallTestTools(context.Background(), exe, TestToolsOptions{PackageID: "ZZSandbox", Only: testtools.ToolStub})
 	require.NoError(t, err)
 
-	res, err := InstallTestTools(context.Background(), exe, TestToolsOptions{Only: testtools.ToolHarness})
-	require.Error(t, err)
-	require.Len(t, res.Artifacts, 1)
-	assert.Contains(t, res.Artifacts[0].Error, "CPICTL_Test_Harness already exists in package ZZSandbox, not in CPICTLTesting")
+	// a different --package is refused before anything is uploaded
+	_, err = InstallTestTools(context.Background(), exe, TestToolsOptions{PackageID: "CPICTLTesting"})
+	assert.ErrorContains(t, err, "the test tools already installed are in package ZZSandbox (CPICTL_Test_Stub in ZZSandbox), not CPICTLTesting")
+	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
+	assert.Nil(t, m.Artifacts[testtools.HarnessID], "nothing uploaded")
 
-	// installing again where it is: unchanged, no version conflict
-	res, err = InstallTestTools(context.Background(), exe, TestToolsOptions{PackageID: "ZZSandbox", Only: testtools.ToolHarness, Deploy: true, DeployOptions: fastDeploy})
+	// without --package the tools join the one already there
+	res, err := InstallTestTools(context.Background(), exe, TestToolsOptions{Deploy: true, DeployOptions: fastDeploy})
 	require.NoError(t, err)
-	assert.Equal(t, "UNCHANGED", res.Artifacts[0].Upload.Action)
-	assert.Equal(t, StatusDeployed, res.Artifacts[0].Deploy.Status)
+	assert.Equal(t, "ZZSandbox", res.Package.ID)
+	assert.Contains(t, res.Notes, "the tools already installed are in package ZZSandbox: installed there")
+	for _, a := range res.Artifacts {
+		assert.Equal(t, "ZZSandbox", m.Artifacts[a.ID].Package, a.ID)
+		assert.Equal(t, StatusDeployed, a.Deploy.Status, a.ID)
+	}
+
+	// spread over two packages: refused, whatever --package says
+	m.Artifacts[testtools.XSLTID].Package = "Other"
+	_, err = InstallTestTools(context.Background(), exe, TestToolsOptions{})
+	assert.ErrorContains(t, err, "spread over several packages")
 }
 
 // Conditional answers ("when") and delays: the first matching entry answers,

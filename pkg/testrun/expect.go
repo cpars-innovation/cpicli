@@ -137,6 +137,28 @@ func check(e Expect, o *observation) []Failure {
 			add(exp, scalar(want), scalar(got), "%s is %s, expected %s", p, scalar(got), scalar(want))
 		}
 	}
+	for _, name := range sortedKeys(e.ResponseHeaders) {
+		want := e.ResponseHeaders[name]
+		var got string
+		present := false
+		if o.sent != nil {
+			for k, v := range o.sent.ResponseHeaders {
+				if strings.EqualFold(k, name) {
+					got, present = v, true
+				}
+			}
+		}
+		exp := "response_headers[" + name + "]"
+		switch {
+		case want == nil && present:
+			add(exp, "absent", got, "the response has header %s", name)
+		case want == nil:
+		case !present:
+			add(exp, *want, "absent", "the response has no header %s", name)
+		case got != *want:
+			add(exp, *want, got, "header %s is %q, expected %q", name, got, *want)
+		}
+	}
 	if len(e.ErrorContains) > 0 {
 		text := o.errorText()
 		for _, s := range e.ErrorContains {

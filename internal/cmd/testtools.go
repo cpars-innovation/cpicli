@@ -72,6 +72,9 @@ tier is prod it is refused unless --allow-production.`,
 			if res != nil {
 				output.SetResult(cmd.Context(), res)
 				log.Info().Msgf("Package %s: %s", res.Package.ID, res.Package.Action)
+				for _, n := range res.Notes {
+					log.Info().Msg(n)
+				}
 				for _, a := range res.Artifacts {
 					switch {
 					case a.Error != "":

@@ -1692,9 +1692,16 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			if version == "Active" && a.Runtime != nil { // a draft deploys as its last version
 				version = a.Runtime.Version
 			}
+			status, problem := deployProblem(a.Type, id, a.Zip)
+			if status != 0 {
+				odataError(w, status, "Internal Server Error", problem)
+				return
+			}
 			a.Runtime, a.undeployed = &Runtime{Version: version, Status: "STARTED", DeployedOn: time.Now()}, false
 			a.ErrorInfo = ""
-			if conflict := m.registerEndpoints(id, a); conflict != "" {
+			if problem != "" {
+				a.Runtime.Status, a.ErrorInfo = "ERROR", problem
+			} else if conflict := m.registerEndpoints(id, a); conflict != "" {
 				a.Runtime.Status, a.ErrorInfo = "ERROR", conflict
 			}
 			if len(a.TaskStatuses) == 0 {

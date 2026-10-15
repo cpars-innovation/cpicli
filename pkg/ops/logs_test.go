@@ -114,6 +114,15 @@ func TestMessageLogDetailsAndContent(t *testing.T) {
 	require.Len(t, d.MessageStoreEntries, 1)
 	assert.Empty(t, d.Warnings)
 
+	// a key without esbmessagestorage.read: the log is still read (#19)
+	m.AddFault("/api/v1/MessageProcessingLogs('g1')/MessageStoreEntries", 403, 1, "")
+	d, err = GetMessageLog(m.Executer(), "g1", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "FAILED", d.Status)
+	assert.Empty(t, d.MessageStoreEntries)
+	require.Len(t, d.Warnings, 1)
+	assert.Contains(t, d.Warnings[0], "message store entries: forbidden (HTTP 403), the service key lacks esbmessagestorage.read")
+
 	att, err := GetMessageAttachment(m.Executer(), d.Attachments[0].ID, 0)
 	require.NoError(t, err)
 	assert.Equal(t, "<order/>", att.Text)

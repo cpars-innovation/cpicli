@@ -222,3 +222,12 @@ func (m *Tenant) importState(s mockState) {
 	m.MessageLogSteps = [][]MessageLog{s.MessageLogs}
 	m.FilterMessageLogs, m.Live = true, true
 }
+
+// AddFault answers the next count requests whose path starts with
+// pathPrefix with status (count -1: until the faults are cleared), as POST
+// /_mock/faults does; message is sent as the tenant's OData error body.
+func (m *Tenant) AddFault(pathPrefix string, status, count int, message string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.faults = append(m.faults, fault{PathPrefix: pathPrefix, Status: status, Count: count, Message: message})
+}

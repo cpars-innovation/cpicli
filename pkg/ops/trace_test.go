@@ -94,6 +94,33 @@ func TestSendThroughHarness(t *testing.T) {
 	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
 }
 
+// The harness answers without message IDs (#20): its own log is found by
+// time; when the flow under test never logs, the error says that the harness
+// did not reach the address.
+func TestSendThroughHarnessWithoutIDs(t *testing.T) {
+	mock, _, newExe := endpointMock(t, &cpitest.Inbound{})
+	mock.FilterMessageLogs = true // filter by artifact, correlation ID and time like a tenant
+	mock.Artifacts[DefaultHarnessID] = mock.Artifacts["Orders"]
+	delete(mock.Artifacts, "Orders")
+	now := time.Now()
+	harness := cpitest.MessageLog{Guid: "H1", Artifact: DefaultHarnessID, Status: "COMPLETED", CorrelationID: "C1", Start: now, End: now}
+	mock.MessageLogSteps = [][]cpitest.MessageLog{{harness, {Guid: "T1", Artifact: "Billing", Status: "COMPLETED", CorrelationID: "C1", Start: now, End: now}}}
+	sent, err := SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{
+		ArtifactID: "Billing", ProcessDirectAddress: "/billing/in", Body: []byte("x"), Wait: time.Second, PollInterval: time.Millisecond,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "H1", sent.HarnessMessageGuid, "found by time")
+	assert.Equal(t, "T1", sent.MessageGuid)
+
+	mock.MessageLogSteps = [][]cpitest.MessageLog{{harness}}
+	_, err = SendTestMessage(context.Background(), mock.Executer(), newExe, TestMessage{
+		ArtifactID: "Billing", ProcessDirectAddress: "/billing/in", Body: []byte("x"), Wait: 50 * time.Millisecond, PollInterval: time.Millisecond,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "the test harness completed (message H1) but Billing has no message with its correlation ID C1")
+	assert.Contains(t, err.Error(), "did not reach ProcessDirect address /billing/in")
+}
+
 func nameValue(n, v string) cpi.NameValue { return cpi.NameValue{Name: n, Value: v} }
 
 func TestTraceMissingRole(t *testing.T) {

@@ -87,6 +87,7 @@ var lintRules = []lintRule{
 	{id: "collection-script-tests", group: GroupRobustness, severity: SevWarning, title: "A function of a script collection is not called by any test", artifact: ruleCollectionScriptTests},
 	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
 	{id: "idoc-no-idempotency", group: GroupRobustness, severity: SevInfo, title: "A flow receives IDocs without an Idempotent Process Call or JMS decoupling", artifact: ruleIDocNoIdempotency},
+	{id: "unsupported-script-class", group: GroupRobustness, severity: SevWarning, title: "A script uses a class an integration cell refuses at deploy (Thread)", artifact: ruleUnsupportedScriptClass},
 	// performance and data protection
 	{id: "body-as-string", group: GroupPerformance, severity: SevInfo, title: "A script reads the whole body as a string", artifact: ruleBodyAsString},
 	{id: "payload-attachment", group: GroupPerformance, severity: SevWarning, title: "A script logs the payload as an attachment", artifact: rulePayloadAttachment},
@@ -970,6 +971,17 @@ func ruleLoggingInLoop(lc *lintContext, a *lintArtifact) []Finding {
 func rulePrintln(lc *lintContext, a *lintArtifact) []Finding {
 	return scriptFindings(a, "println", rePrintln, "prints to standard output, which nobody reads on the tenant",
 		"remove it, or use the message processing log")
+}
+
+// reUnsupportedClass finds classes an integration cell refuses in scripts
+// ("There are unsupported classes [Thread] that are used in the script.",
+// seen at deploy, #24). Only classes seen refused are listed.
+var reUnsupportedClass = regexp.MustCompile(`\b(?:java\.lang\.)?Thread\s*[.(]|\bnew\s+(?:java\.lang\.)?Thread\b`)
+
+func ruleUnsupportedScriptClass(lc *lintContext, a *lintArtifact) []Finding {
+	return scriptFindings(a, "unsupported-script-class", reUnsupportedClass,
+		"uses Thread, which an integration cell refuses at deploy (\"There are unsupported classes [Thread] that are used in the script.\"; the API still reports the deploy task as successful)",
+		"avoid Thread (no sleeping or own threads in a script); the Cloud Integration runtime accepts it, so this only matters for flows that run on an integration cell")
 }
 
 // --- configuration -----------------------------------------------------------

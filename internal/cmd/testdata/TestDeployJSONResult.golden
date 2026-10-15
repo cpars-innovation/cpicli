@@ -3,7 +3,7 @@
   "ok": false,
   "exitCode": 7,
   "errorCategory": "partial",
-  "error": "2 of 3 artifact(s) failed - B: FAILED (designtime artifact B does not exist); C: TIMEOUT (deployment status of C remained unfinished after 2 checks (task status \"DEPLOYING\", runtime status \"\"); it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments)",
+  "error": "2 of 3 artifact(s) failed - B: FAILED (designtime artifact B does not exist); C: TIMEOUT (deployment status of C remained unfinished after 2 checks (task status \"DEPLOYING\", runtime status \"\"); it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments. An integration cell can refuse a flow at deploy time without the API saying so (e.g. a script using a class it does not allow, such as Thread: lint unsupported-script-class))",
   "schemaVersion": 1,
   "durationMs": 0,
   "result": {
@@ -29,7 +29,7 @@
         "status": "TIMEOUT",
         "version": "2.0.0",
         "designtimeVersion": "2.0.0",
-        "error": "deployment status of C remained unfinished after 2 checks (task status \"DEPLOYING\", runtime status \"\"); it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments"
+        "error": "deployment status of C remained unfinished after 2 checks (task status \"DEPLOYING\", runtime status \"\"); it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments. An integration cell can refuse a flow at deploy time without the API saying so (e.g. a script using a class it does not allow, such as Thread: lint unsupported-script-class)"
       }
     ]
   }

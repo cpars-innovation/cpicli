@@ -314,6 +314,11 @@ executed: the payload passes through unchanged.
 - **Integration connections** are derived from the running flows: per flow and external receiver
   (not ProcessDirect or JMS) the first sender adapter to the receiver's host. How a tenant names
   sender hosts is not known yet, so treat the sender side as an approximation.
+- **Uploads and deploys a real tenant refuses** (seen on trial tenants): a `MANIFEST.MF` header
+  without a space after the colon (`Import-Service:`) fails the upload with 500 `invalid header
+  field (line N)`; a value mapping with an empty `<value>` fails the deploy request with 500
+  `Failed to deploy Value Mapping id: <id>`; a message mapping without an assigned target element
+  (no `<brick>` in the `.mmap`) deploys into `ERROR` with `Target element is not assigned`.
 - **Check** (`validate`) runs a structural check of the flow and answers like a tenant:
   `Check execution result: Passed`, or `Failed` followed by the findings as SAP's JSON array
   (`severity`, `message`, `sourceObject`, `resourcePath`, `resourceName`). It reports required
