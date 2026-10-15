@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.18.0
+
 - Message logs: a detail the key may not read (403/401 on message store entries, attachments,
   custom headers, adapter attributes or the error text) is a warning, no longer a failure of the
   whole read. `send --wait` and test runs work with a key without `esbmessagestorage.read`
