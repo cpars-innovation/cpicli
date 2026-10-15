@@ -70,23 +70,33 @@ func deleteArtifact(ctx context.Context, exe *httpclnt.HTTPExecuter, id, typ str
 	return res, nil
 }
 
+// probeOrder is the order types are tried in: a tenant's
+// MessageMappingDesigntimeArtifacts(Id=...) answers for an artifact of any
+// type (seen on a real tenant), the other types' endpoints only for their
+// own, so MessageMapping comes last.
+var probeOrder = []string{"Integration", "ScriptCollection", "ValueMapping", "MessageMapping"}
+
 // resolveArtifactType checks that the designtime artifact exists; without a
 // type it finds the type the artifact has.
 func resolveArtifactType(exe *httpclnt.HTTPExecuter, id, typ string) (string, error) {
-	types := cpi.ArtifactTypes
-	if typ != "" {
-		if !cpi.IsValidArtifactType(typ) {
-			return "", output.Usagef("invalid artifact type %q (valid: %s)", typ, strings.Join(cpi.ArtifactTypes, ", "))
-		}
-		types = []string{typ}
+	if typ != "" && !cpi.IsValidArtifactType(typ) {
+		return "", output.Usagef("invalid artifact type %q (valid: %s)", typ, strings.Join(cpi.ArtifactTypes, ", "))
 	}
-	for _, t := range types {
+	for _, t := range probeOrder {
+		if typ != "" && t != typ && typ != "MessageMapping" {
+			continue // a strict type answers only for itself
+		}
 		_, exists, err := cpi.GetDesigntimeInfo(exe, t, id, "active")
 		if err != nil {
 			return "", err
 		}
-		if exists {
+		switch {
+		case !exists:
+		case typ == "" || t == typ:
 			return t, nil
+		default:
+			// asked for a message mapping, but it is another type
+			return "", output.Usagef("%s is of type %s, not %s", id, t, typ)
 		}
 	}
 	if typ != "" {

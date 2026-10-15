@@ -1657,7 +1657,9 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && reDesign.MatchString(path):
 		mm := reDesign.FindStringSubmatch(path)
 		a := m.Artifacts[mm[2]]
-		if a == nil || a.DesignVersion == "" || a.Type != mm[1] {
+		// like a tenant, MessageMappingDesigntimeArtifacts(Id=...) answers
+		// for an artifact of any type; the other types only for their own
+		if a == nil || a.DesignVersion == "" || (a.Type != mm[1] && mm[1] != "MessageMapping") {
 			notFound(w)
 			return
 		}

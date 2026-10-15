@@ -123,3 +123,21 @@ func TestDeployAllTypes(t *testing.T) {
 	results = Deploy(context.Background(), NewTenant(mock.Executer()), []Artifact{{ID: "V", Type: "Integration"}}, fastOpts())
 	assert.Error(t, Err(results))
 }
+
+// A tenant's MessageMappingDesigntimeArtifacts(Id=...) answers for any
+// artifact: the type of a value mapping must not be guessed as message
+// mapping, and a flow asked for as a message mapping is refused.
+func TestDeleteResolvesTypeLikeATenant(t *testing.T) {
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{
+		"VM1":  {Type: "ValueMapping", DesignVersion: "1.0.0", Package: "P"},
+		"Flow": {Type: "Integration", DesignVersion: "1.0.0", Package: "P"},
+	})
+	res, err := DeleteArtifact(context.Background(), mock.Executer(), DeleteRequest{ArtifactID: "VM1"})
+	require.NoError(t, err)
+	assert.Equal(t, "ValueMapping", res.Type)
+	assert.True(t, res.Deleted)
+
+	_, err = DeleteArtifact(context.Background(), mock.Executer(), DeleteRequest{ArtifactID: "Flow", Type: "MessageMapping"})
+	assert.ErrorContains(t, err, "Flow is of type Integration, not MessageMapping")
+	assert.NotNil(t, mock.Artifacts["Flow"], "not deleted")
+}

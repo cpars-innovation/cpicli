@@ -13,6 +13,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
   X"`), also for `update artifact`; runtime error information with several issues is one line
   (`... | Source element is not assigned | Target element is not assigned`). The mock answers with
   the texts the tenant returned ([#22](https://github.com/cpars-innovation/cpicli/issues/22)).
+- `delete artifact` without `--type` (MCP `delete_artifact` without `artifact_type`) no longer takes
+  a value mapping for a message mapping: a tenant's `MessageMappingDesigntimeArtifacts(Id=…)`
+  answers for an artifact of any type, so that type is tried last; asking for a message mapping
+  that is another type is refused. The mock answers the same way.
 
 ## 0.18.0
 
