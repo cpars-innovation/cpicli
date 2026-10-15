@@ -68,8 +68,11 @@ type ScriptCase struct {
 type ScriptCall struct {
 	// Function defaults to processData.
 	Function string `yaml:"function" json:"function,omitempty"`
-	// Args are the arguments of a collection function; without them the
-	// function gets the message.
+	// Args are the arguments of the function (a collection function, or a
+	// custom function of a flow's message mapping); without them the
+	// function gets the message. MappingContext and Output parameters are
+	// supplied by the runner; with Output, the returned value is the list of
+	// values the function added.
 	Args []any `yaml:"args" json:"args,omitempty"`
 }
 
@@ -265,8 +268,6 @@ func (c *ScriptCase) validate() error {
 		len(e.BodyJSON) == 0 && e.Headers == nil && e.Properties == nil && !e.HasReturns && e.Throws == nil &&
 		len(e.Log) == 0 && e.MaxDuration == "":
 		return fmt.Errorf("expect: at least one expectation")
-	case c.Kind == ScriptKindFlow && len(c.Call.Args) > 0:
-		return fmt.Errorf("call.args: only collection functions take arguments; a flow script gets the message")
 	}
 	if e.MaxDuration != "" {
 		if d, err := time.ParseDuration(e.MaxDuration); err != nil || d <= 0 || strings.ContainsAny(e.MaxDuration, ".hun") {

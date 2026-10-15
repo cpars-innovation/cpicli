@@ -269,6 +269,17 @@ expect: {returns: "00004711"}
 
 - `call.function` defaults to `processData`; a collection case finds the one script of the
   collection that defines it.
+- `call.args`: the function gets these arguments instead of the message: a collection function, or
+  a custom function of a flow's message mapping (a script of the flow such as `udf.groovy`).
+  `MappingContext` and `Output` parameters are supplied by the runner (the context reads the case's
+  headers and properties); with `Output`, `returns` is the list of values the function added, with
+  `__SUPPRESS__` and `__CONTEXT_CHANGE__` for `addSuppress` and `addContextChange`:
+
+  ```yaml
+  # .cpi/tests/Orders_In/scripts/udf.groovy/upper-all.yaml
+  call: {function: upperAll, args: [["a", "", "b"]]}   # void upperAll(String[] v, Output out, MappingContext ctx)
+  expect: {returns: ["A", "__SUPPRESS__", "B"]}
+  ```
 - `input`: `body` or `body_file`, `headers`, `properties`.
 - `pd` (`<pid>/<param>` -> value or `file:<path>`), `value_mappings`, `secure` and `keystore` set what
   SAP's services answer. They are test values: never a real credential or key.

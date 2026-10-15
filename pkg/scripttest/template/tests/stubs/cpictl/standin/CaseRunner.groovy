@@ -35,16 +35,46 @@ class CaseRunner {
             (c.headers ?: [:]).each { k, v -> msg.setHeader(k, v) }
             (c.properties ?: [:]).each { k, v -> msg.setProperty(k, v) }
             def result
-            try {
-                result = c.hasArgs ? script.invokeMethod(c.function, (c.args ?: []) as Object[]) : script.invokeMethod(c.function, msg)
-            } catch (MissingMethodException e) {
-                if (e.method == c.function && e.type == script.getClass()) {
-                    out.error = "the script has no function ${c.function} taking ${c.hasArgs ? (c.args?.size() ?: 0) + ' argument(s)' : 'the message'}".toString()
+            Services.Queue queue = null
+            if (c.hasArgs) {
+                // custom functions of message mappings also take a MappingContext and an
+                // Output (the result queue of an all-values function): the runner supplies them
+                def m = mappingFunction(script, c.function, (c.args ?: []).size())
+                if (m == null) {
+                    out.error = "the script has no function ${c.function} taking ${c.args?.size() ?: 0} argument(s) (plus MappingContext / Output)".toString()
                     return out
                 }
-                throw e
+                def given = (c.args ?: []).iterator()
+                def values = m.parameterTypes.collect { type ->
+                    if (com.sap.it.api.mapping.MappingContext.isAssignableFrom(type)) {
+                        return new Services.Mapping(msg.getHeaders(), msg.getProperties())
+                    }
+                    if (com.sap.it.api.mapping.Output.isAssignableFrom(type)) {
+                        queue = new Services.Queue()
+                        return queue
+                    }
+                    org.codehaus.groovy.runtime.typehandling.DefaultTypeTransformation.castToType(given.next(), type)
+                }
+                try {
+                    result = m.invoke(script, values as Object[])
+                } catch (java.lang.reflect.InvocationTargetException e) {
+                    throw e.cause
+                }
+            } else {
+                try {
+                    result = script.invokeMethod(c.function, msg)
+                } catch (MissingMethodException e) {
+                    if (e.method == c.function && e.type == script.getClass()) {
+                        out.error = "the script has no function ${c.function} taking the message".toString()
+                        return out
+                    }
+                    throw e
+                }
             }
-            if (c.hasArgs) {
+            if (queue != null) {
+                out.returns = plain(queue.values())
+                out.hasReturns = true
+            } else if (c.hasArgs) {
                 out.returns = plain(result)
                 out.hasReturns = true
             } else if (result != null && !(result instanceof com.sap.gateway.ip.core.customdev.util.Message) && !(result instanceof com.sap.it.script.v2.api.Message)) {
@@ -66,6 +96,18 @@ class CaseRunner {
             CaseContext.clear()
         }
         return out
+    }
+
+    /**
+     * The function to call with args: its parameters other than MappingContext and Output are
+     * the arguments, in order.
+     */
+    static java.lang.reflect.Method mappingFunction(Script script, String name, int args) {
+        script.getClass().methods.find { m ->
+            m.name == name && m.parameterTypes.count { t ->
+                !com.sap.it.api.mapping.MappingContext.isAssignableFrom(t) && !com.sap.it.api.mapping.Output.isAssignableFrom(t)
+            } == args
+        }
     }
 
     /** A JSON-able copy of a return value (maps, lists, scalars; other objects as text). */

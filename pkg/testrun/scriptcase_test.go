@@ -69,7 +69,6 @@ func TestLoadScriptCasesRefusesInvalid(t *testing.T) {
 		"unknown in expect": "expect: {returns: 1, output: x}\n",
 		"body twice":        "input: {body: x, body_file: y.xml}\nexpect: {body_contains: [x]}\n",
 		"params":            "params: {a: b}\nexpect: {body_contains: [x]}\n",
-		"args in flow":      "call: {args: [1]}\nexpect: {body_contains: [x]}\n",
 		"duration":          "expect: {max_duration: 1.5s}\n",
 		"secure":            "secure: {a: {user: u, value: v}}\nexpect: {body_contains: [x]}\n",
 		"keystore":          "keystore: {a: something}\nexpect: {body_contains: [x]}\n",

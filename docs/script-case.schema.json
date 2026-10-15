@@ -181,7 +181,7 @@
         },
         "args": {
           "title": "Arguments",
-          "description": "Arguments of a collection function call; without them the function gets the message.",
+          "description": "Arguments of the function: a collection function, or a custom function of a flow's message mapping. Without them the function gets the message. MappingContext and Output parameters are supplied by the runner; with Output, returns is the list of values the function added (__SUPPRESS__ and __CONTEXT_CHANGE__ mark addSuppress and addContextChange).",
           "type": "array",
           "maxItems": 20,
           "items": {},

@@ -1,0 +1,4 @@
+description: a mapping function with a MappingContext (supplied by the runner)
+call: {function: formatDate, args: ["15.10.2026"]}
+input: {headers: {DateSep: "/"}}
+expect: {returns: "2026/10/15"}

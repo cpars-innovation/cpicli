@@ -25,6 +25,16 @@ func TestParseODataTime(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2026, ts.Year())
 
+	// without a zone (a trial runtime's DeployedOn, #18): UTC
+	ts, err = ParseODataTime("2026-10-15T12:54:54.223")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 10, 15, 12, 54, 54, 223_000_000, time.UTC), ts)
+	ts, err = ParseODataTime("2026-10-15T12:54:54")
+	require.NoError(t, err)
+	assert.Equal(t, time.Date(2026, 10, 15, 12, 54, 54, 0, time.UTC), ts)
+
+	_, err = ParseODataTime("2026-10-15")
+	assert.Error(t, err, "a date alone is not a timestamp")
 	_, err = ParseODataTime("yesterday")
 	assert.Error(t, err)
 }

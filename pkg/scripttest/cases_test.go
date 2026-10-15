@@ -23,7 +23,7 @@ func casesProject(t *testing.T) (string, []testrun.ScriptCase) {
 	copyTree(t, "testdata/cases", dir)
 	cases, err := testrun.LoadScriptCases(filepath.Join(dir, ".cpi", "tests"), testrun.Filter{})
 	require.NoError(t, err)
-	require.Len(t, cases, 5)
+	require.Len(t, cases, 7)
 	return dir, cases
 }
 
@@ -39,15 +39,17 @@ func TestRunCasesPlanAndResults(t *testing.T) {
 	fake := `plan=""; res=""; for a in "$@"; do case "$a" in -PcpictlPlan=*) plan="${a#-PcpictlPlan=}";; -PcpictlResults=*) res="${a#-PcpictlResults=}";; esac; done
 cp "$plan" "$(dirname "$res")/seen-plan.json"
 cat > "$res" <<'EOF'
-{"cases":[{"id":"c3","returns":"00004711","hasReturns":true,"durationMs":3},
- {"id":"c4","throws":{"class":"groovy.lang.MissingMethodException","message":"No signature of method: getHeader"},"durationMs":1},
+{"cases":[{"id":"c5","returns":"00004711","hasReturns":true,"durationMs":3},
+ {"id":"c3","returns":"2026/10/15","hasReturns":true,"durationMs":1},
+ {"id":"c4","returns":["A","__SUPPRESS__","B"],"hasReturns":true,"durationMs":1},
+ {"id":"c6","throws":{"class":"groovy.lang.MissingMethodException","message":"No signature of method: getHeader"},"durationMs":1},
  {"id":"c0","throws":{"class":"java.lang.IllegalStateException","message":"OrderNo missing"},"durationMs":2},
  {"id":"c1","body":"<Order><No>4711</No></Order>","headers":{"OrderNo":"4711","Temp":null},"properties":{"PID":"PID1","Target":"ERP-DEV"},"log":{"customHeaders":{"OrderNo":["4711"]},"properties":{}},"durationMs":5},
  {"id":"c2","body":null,"headers":{"OrderNo":"4711"},"properties":{},"durationMs":1}]}
 EOF`
 	res, err := RunCases(context.Background(), cases, CaseOptions{Project: dir, Command: []string{"sh", "-c", fake, "sh"}})
 	require.NoError(t, err)
-	assert.Equal(t, 4, res.Passed, "%+v", res.Cases)
+	assert.Equal(t, 6, res.Passed, "%+v", res.Cases)
 	assert.Equal(t, 1, res.Failed)
 	byName := map[string]testrun.CaseResult{}
 	for _, c := range res.Cases {
@@ -65,7 +67,7 @@ EOF`
 	for _, p := range plan.Cases {
 		byFn[p.ID] = p
 	}
-	pads := byFn["c3"]
+	pads := byFn["c5"]
 	assert.Equal(t, "formatNo", pads.Function)
 	assert.True(t, pads.HasArgs)
 	assert.Equal(t, 2, pads.Version, "package script.v2")
@@ -74,6 +76,8 @@ EOF`
 	assert.Equal(t, 1, trims.Version)
 	assert.Equal(t, "ERP-DEV", trims.PD["PID1/Target"])
 	assert.False(t, trims.HasArgs)
+	assert.True(t, byFn["c3"].HasArgs, "a flow script's mapping function takes arguments")
+	assert.Equal(t, "udf.groovy", filepath.Base(byFn["c3"].Script))
 }
 
 func TestRunCasesRefusesAnOldBuild(t *testing.T) {
@@ -111,7 +115,7 @@ func TestRunCasesGradle(t *testing.T) {
 	for _, c := range res.Cases {
 		t.Logf("%s %s: %s %s %+v", c.Flow, c.Case, c.Status, c.Error, c.Failures)
 	}
-	assert.Equal(t, 4, res.Passed)
+	assert.Equal(t, 6, res.Passed)
 	assert.Equal(t, 1, res.Failed, "wrong.yaml fails on purpose")
 	assert.Zero(t, res.Errors)
 }

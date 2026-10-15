@@ -14,7 +14,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
   stand-ins through the new Gradle task `cpictlScriptCases` of `test scripts init`'s `build.gradle`
   (an older one needs `init --force`). `pd`, `value_mappings`, `secure` and `keystore` set what SAP's
   services answer; they are local only, a later run on the tenant skips such cases.
-  `collections` is reserved below `.cpi/tests` (not a flow's test folder).
+  `collections` is reserved below `.cpi/tests` (not a flow's test folder). `call.args` also works
+  for a flow's scripts (custom functions of message mappings): `MappingContext` and `Output`
+  parameters are supplied by the runner, and with `Output` `returns` is the list of added values.
+- A runtime `DeployedOn` without a time zone (`2026-10-15T12:54:54.223`, seen on a trial tenant) is
+  read as UTC instead of being ignored with a warning on every status check
+  ([#18](https://github.com/cpars-innovation/cpicli/issues/18)).
 
 - Script tests: the stand-ins `cpictl test scripts init` writes (`tests/stubs`) now cover SAP's script
   API as CPI Studio's library does: `Message` v1 and v2 (body conversion, attachments, SOAP
