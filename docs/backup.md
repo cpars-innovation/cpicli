@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: curl -sSL "https://github.com/cpars-innovation/cpicli/releases/download/v${V}/cpictl_v${V}_linux_amd64.tar.gz" | tar xz cpictl
+      - run: curl -sSL "https://github.com/cpars-innovation/cpicli/releases/download/v${V}/cpictl_v${V}_linux_amd64.tar.gz" | tar xz --strip-components=1 "cpictl_v${V}_linux_amd64/cpictl"
         env: {V: "0.22.0"}   # pin the cpictl version
       - name: Backup
         env:
