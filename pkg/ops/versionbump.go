@@ -188,6 +188,16 @@ func gitChanged(ctx context.Context, root, commit, dir string) (bool, error) {
 	return strings.TrimSpace(untracked) != "", nil
 }
 
+// CheckGitRef refuses a Git revision that git would read as an option
+// (--output=..., --remote=...) or that holds control characters: refs come
+// from tool arguments.
+func CheckGitRef(ref string) error {
+	if ref == "" || strings.HasPrefix(ref, "-") || strings.ContainsFunc(ref, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return output.Usagef("invalid Git revision %q", ref)
+	}
+	return nil
+}
+
 func Git(ctx context.Context, dir string, args ...string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)

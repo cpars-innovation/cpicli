@@ -557,3 +557,15 @@ func TestCompareTool(t *testing.T) {
 	require.False(t, res.IsError, res.Content[0].Text)
 	assert.Contains(t, res.Content[0].Text, `"model":{"elements":[{"id":"CallActivity_1","type":"callActivity","kind":"callActivity","name":"tenant","change":"changed","renamed":["local","tenant"]}]}`)
 }
+
+// One over-long line is refused with a parse error; the session goes on.
+func TestServeRefusesOversizedRequest(t *testing.T) {
+	defer func(n int) { MaxRequestBytes = n }(MaxRequestBytes)
+	MaxRequestBytes = 64
+	in := strings.Repeat("x", 200) + "\n" + `{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"
+	var out bytes.Buffer
+	s := NewServer("t", "1", "", nil)
+	require.NoError(t, s.Serve(context.Background(), strings.NewReader(in), &out))
+	assert.Contains(t, out.String(), "request larger than 64 bytes")
+	assert.Contains(t, out.String(), `"id":1`, "the next request is still answered")
+}

@@ -127,53 +127,103 @@ func UnzipSource(source, destination string) (err error) {
 		return errors.Wrap(err, 0)
 	}
 
-	// 3. Iterate over zip files inside the archive and unzip each of them
+	// 3. Iterate over zip files inside the archive and unzip each of them;
+	// a symlinked destination is resolved first, so the prefix checks below
+	// compare real paths
+	if err = os.MkdirAll(destination, os.ModePerm); err != nil {
+		return errors.Wrap(err, 0)
+	}
+	if destination, err = filepath.EvalSymlinks(destination); err != nil {
+		return errors.Wrap(err, 0)
+	}
+	if len(reader.File) > MaxZipEntries {
+		return errors.Wrap(fmt.Errorf("archive has %d entries, more than %d", len(reader.File), MaxZipEntries), 0)
+	}
+	var total int64
 	for _, f := range reader.File {
-		err = unzipFile(f, destination)
+		var n int64
+		n, err = unzipFile(f, destination, MaxZipBytes-total)
 		if err != nil {
 			return
 		}
+		total += n
 	}
 	return
 }
 
-func unzipFile(f *zip.File, destination string) (err error) {
+// Limits for unzipping an artifact: a hostile archive cannot fill the disk
+// (zip bomb) or create more files than any CPI artifact has.
+var (
+	MaxZipBytes   int64 = 1 << 30 // 1 GiB uncompressed in total
+	MaxZipEntries       = 100000
+)
+
+func unzipFile(f *zip.File, destination string, budget int64) (written int64, err error) {
 	// 4. Check if file paths are not vulnerable to Zip Slip
 	filePath := filepath.Join(destination, f.Name)
 	if !strings.HasPrefix(filePath, filepath.Clean(destination)+string(os.PathSeparator)) {
-		return errors.Wrap(fmt.Errorf("invalid file path: %s", filePath), 0)
+		return 0, errors.Wrap(fmt.Errorf("invalid file path: %s", filePath), 0)
+	}
+	if f.Mode()&os.ModeSymlink != 0 || !f.Mode().IsRegular() && !f.FileInfo().IsDir() {
+		return 0, errors.Wrap(fmt.Errorf("refusing %s: not a regular file or directory", f.Name), 0)
 	}
 
 	// 5. Create directory tree
 	if f.FileInfo().IsDir() {
-		if err = os.MkdirAll(filePath, os.ModePerm); err != nil {
-			return errors.Wrap(err, 0)
+		if err = os.MkdirAll(filePath, 0o755); err != nil {
+			return 0, errors.Wrap(err, 0)
 		}
-		return
+		return 0, inside(destination, filePath)
 	}
 
-	if err = os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
-		return errors.Wrap(err, 0)
+	if err = os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return 0, errors.Wrap(err, 0)
+	}
+	// an existing directory inside destination may be a symlink pointing out
+	if err = inside(destination, filepath.Dir(filePath)); err != nil {
+		return 0, err
 	}
 
-	// 6. Create a destination file for unzipped content
-	destinationFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	// 6. Create a destination file for unzipped content; permissions are not
+	// taken from the archive (no setuid, no world-writable files)
+	mode := os.FileMode(0o644)
+	if f.Mode()&0o111 != 0 {
+		mode = 0o755
+	}
+	destinationFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscallNoFollow, mode)
 	if err != nil {
-		return errors.Wrap(err, 0)
+		return 0, errors.Wrap(err, 0)
 	}
 	defer destinationFile.Close()
 
-	// 7. Unzip the content of a file and copy it to the destination file
+	// 7. Unzip the content of a file and copy it to the destination file,
+	// at most budget bytes
 	zippedFile, err := f.Open()
 	if err != nil {
-		return errors.Wrap(err, 0)
+		return 0, errors.Wrap(err, 0)
 	}
 	defer zippedFile.Close()
 
-	if _, err = io.Copy(destinationFile, zippedFile); err != nil {
+	written, err = io.Copy(destinationFile, io.LimitReader(zippedFile, budget+1))
+	if err != nil {
+		return written, errors.Wrap(err, 0)
+	}
+	if written > budget {
+		return written, errors.Wrap(fmt.Errorf("archive larger than %d bytes uncompressed", MaxZipBytes), 0)
+	}
+	return written, nil
+}
+
+// inside reports an error unless path, with symlinks resolved, lies in root.
+func inside(root, path string) error {
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
 		return errors.Wrap(err, 0)
 	}
-	return
+	if real != root && !strings.HasPrefix(real, root+string(os.PathSeparator)) {
+		return errors.Wrap(fmt.Errorf("invalid file path: %s leaves the destination", path), 0)
+	}
+	return nil
 }
 
 func Exists(filePath string) bool {

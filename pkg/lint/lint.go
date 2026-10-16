@@ -554,6 +554,9 @@ func changedArtifactDirs(ctx context.Context, dir, since string) (map[string]boo
 	if r, err := filepath.EvalSymlinks(root); err == nil {
 		root = r
 	}
+	if err := ops.CheckGitRef(since); err != nil {
+		return nil, err
+	}
 	diff, err := ops.Git(ctx, root, "diff", "--name-only", since, "--")
 	if err != nil {
 		return nil, err

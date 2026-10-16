@@ -461,6 +461,9 @@ func downloadTenantTree(ctx context.Context, exe *httpclnt.HTTPExecuter, dir str
 // GitTree extracts ref (and only subPath, if given) of the Git repository
 // at repo into dest, as `git archive` produces it.
 func GitTree(ctx context.Context, repo, ref, subPath, dest string) error {
+	if err := CheckGitRef(ref); err != nil {
+		return err
+	}
 	args := []string{"-C", repo, "archive", "--format=tar", ref}
 	if subPath != "" {
 		args = append(args, "--", subPath)

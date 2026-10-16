@@ -108,7 +108,10 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	go func() {
 		defer close(lines)
 		for {
-			line, err := reader.ReadBytes('\n')
+			line, tooLong, err := readLine(reader, MaxRequestBytes)
+			if tooLong {
+				line = tooLongMarker
+			}
 			if len(bytes.TrimSpace(line)) > 0 {
 				select {
 				case lines <- line:
@@ -138,7 +141,36 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 					return nil
 				}
 			}
+			if bytes.Equal(line, tooLongMarker) {
+				s.write(response{JSONRPC: "2.0", ID: json.RawMessage("null"), Error: &rpcError{Code: codeParseError,
+					Message: fmt.Sprintf("request larger than %d bytes", MaxRequestBytes)}})
+				continue
+			}
 			s.dispatch(ctx, line, &wg)
+		}
+	}
+}
+
+// MaxRequestBytes caps one JSON-RPC message: a longer line is discarded and
+// answered with a parse error instead of growing memory without bound.
+var MaxRequestBytes = 16 << 20
+
+var tooLongMarker = []byte("\x00too-long")
+
+// readLine reads one line of at most max bytes; a longer line is consumed up
+// to its newline and reported as tooLong.
+func readLine(r *bufio.Reader, max int) (line []byte, tooLong bool, err error) {
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if !tooLong {
+			if len(line)+len(chunk) > max {
+				tooLong, line = true, nil
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if !errors.Is(err, bufio.ErrBufferFull) {
+			return line, tooLong, err
 		}
 	}
 }

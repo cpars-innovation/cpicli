@@ -3,6 +3,7 @@ package httpclnt
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -97,7 +98,7 @@ func NewWithOptions(o Options) *HTTPExecuter {
 	e := &HTTPExecuter{host: o.Host, scheme: o.Scheme, port: o.Port, showLogs: o.ShowLogs, csrf: &csrf{}}
 	base := o.HTTPClient
 	if base == nil {
-		base = &http.Client{Timeout: DefaultTimeout}
+		base = &http.Client{Timeout: DefaultTimeout, Transport: secureTransport}
 	}
 	if o.OAuthHost != "" {
 		if e.showLogs {
@@ -255,9 +256,24 @@ func (e *HTTPExecuter) ExecGetRequest(path string, headers map[string]string) (r
 
 func (e *HTTPExecuter) ReadRespBody(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
-
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
+	if err == nil && int64(len(body)) > MaxResponseBytes {
+		return nil, fmt.Errorf("response larger than %d bytes", MaxResponseBytes)
+	}
+	return body, err
 }
+
+// MaxResponseBytes caps a response read into memory (artifact downloads,
+// payloads): a misbehaving endpoint cannot exhaust memory.
+var MaxResponseBytes int64 = 1 << 30
+
+// secureTransport is the default transport with TLS 1.2 as the minimum; it
+// keeps the proxy settings of the environment.
+var secureTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	return t
+}()
 
 // HTTPError is returned for tenant responses with an unexpected status code.
 // Its message is kept identical to the historic plain error string because
@@ -295,7 +311,7 @@ func (e *HTTPExecuter) LogError(resp *http.Response, callType string) (resBody [
 	}
 
 	if len(resBody) != 0 && e.showLogs {
-		log.Warn().Msgf("Response body = %s", resBody)
+		log.Warn().Msgf("Response body = %s", Redact(string(resBody)))
 	}
 
 	return resBody, &HTTPError{CallType: callType, StatusCode: resp.StatusCode, Body: resBody}

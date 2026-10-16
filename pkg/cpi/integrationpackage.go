@@ -95,7 +95,7 @@ func (ip *IntegrationPackage) GetPackagesList() ([]string, error) {
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	var packageIds []string
@@ -124,7 +124,7 @@ func (ip *IntegrationPackage) GetPackagesData() ([]*PackageSingleData, error) {
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	var packages []*PackageSingleData
@@ -154,7 +154,7 @@ func (ip *IntegrationPackage) Get(id string) (packageData *PackageSingleData, re
 	}
 	err = json.Unmarshal(respBody, &packageData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, false, false, errors.Wrap(err, 0)
 	}
 	if packageData.Root.Mode == "READ_ONLY" {
@@ -180,7 +180,7 @@ func (ip *IntegrationPackage) GetArtifactsData(id string, artifactType string) (
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	var details []*ArtifactDetails
@@ -300,7 +300,7 @@ func GetPackageDetails(file string) (*PackageSingleData, error) {
 	}
 	err = json.Unmarshal(fileContent, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling file as JSON. Response body = %s", fileContent)
+		log.Error().Msgf("Error unmarshalling file as JSON. Response body = %s", httpclnt.Redact(string(fileContent)))
 		return nil, errors.Wrap(err, 0)
 	}
 	return jsonData, nil

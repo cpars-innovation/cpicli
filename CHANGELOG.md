@@ -5,6 +5,23 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+Security hardening (from a security review of the codebase):
+- **IDs are escaped in every SAP API URL.** Package, artifact, runtime, Partner Directory, configuration and API
+  Management keys were put into URLs as they came. An ID like `X')/IntegrationPackages('Y` changed which entity the
+  tenant addressed. Ordinary IDs (letters, digits, `_.-`) produce the same URLs as before.
+- **Git revisions from tool arguments are checked.** A revision starting with `-` is refused before git runs
+  (`git diff --output=FILE` would have written a file; `lint --changed-since`, `compare`/`transport_check` `git:`).
+- **Unzip is limited and safe by construction:** at most 1 GiB uncompressed and 100,000 entries; permissions are no
+  longer taken from the archive (no setuid, no world-writable files); symlink entries are refused; a symlinked
+  directory inside the destination cannot redirect files outside it.
+- **The MCP server refuses requests larger than 16 MiB** with a parse error and keeps the session running, instead
+  of growing memory without bound.
+- **A config file every user may write is refused**, because it decides which hosts the credentials go to
+  (`chmod o-w`). Group-writable files are still accepted.
+- **HTTP:** TLS 1.2 minimum; responses are capped at 1 GiB in memory; logged tenant error bodies have passwords,
+  client secrets, tokens, `Authorization` headers and private keys replaced by `***`.
+- **CI:** `govulncheck`; GitHub Actions are pinned by commit SHA.
+
 ## 0.20.0
 
 - **Integration cells ([#24](https://github.com/cpars-innovation/cpicli/issues/24)).** A flow bound

@@ -35,7 +35,7 @@ jobs:
     permissions:
       contents: write # create the tag and the release
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0 # all tags, for the version computation
 
@@ -62,7 +62,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Releasing ${version}" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
 

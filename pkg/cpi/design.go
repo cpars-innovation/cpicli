@@ -259,7 +259,7 @@ func getData(id string, version string, artifactType string, exe *httpclnt.HTTPE
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, false, errors.Wrap(err, 0)
 	}
 	return jsonData, true, nil

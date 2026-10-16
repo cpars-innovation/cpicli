@@ -102,3 +102,14 @@ func TestBumpVersionsChanged(t *testing.T) {
 	_, err = BumpVersions(context.Background(), BumpOptions{Dir: t.TempDir(), Changed: true})
 	assert.ErrorContains(t, err, "Git repository")
 }
+
+// Revisions come from tool arguments: one that git reads as an option
+// (git diff --output=FILE writes a file) is refused before git runs.
+func TestCheckGitRef(t *testing.T) {
+	for _, ok := range []string{"HEAD", "main", "v1.2.0", "origin/main~3", "abc123"} {
+		assert.NoError(t, CheckGitRef(ok), ok)
+	}
+	for _, bad := range []string{"", "--output=/tmp/x", "-p", "--remote=x", "main\nx"} {
+		assert.Error(t, CheckGitRef(bad), bad)
+	}
+}

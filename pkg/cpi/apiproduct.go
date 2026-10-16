@@ -162,7 +162,7 @@ func (a *APIProduct) Download(name string, targetRootDir string) error {
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return errors.Wrap(err, 0)
 	}
 
@@ -208,7 +208,7 @@ func (a *APIProduct) Upload(sourceFile string, workDir string) error {
 	}
 	err = json.Unmarshal(fileContent, &createData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling file as JSON. Response body = %s", fileContent)
+		log.Error().Msgf("Error unmarshalling file as JSON. Response body = %s", httpclnt.Redact(string(fileContent)))
 		return errors.Wrap(err, 0)
 	}
 
@@ -299,7 +299,7 @@ func (a *APIProduct) List() ([]*APIProductMetadata, error) {
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	var details []*APIProductMetadata
@@ -352,7 +352,7 @@ func (a *APIResource) GetByName(apiName string) ([]*APIResourceMetadata, error) 
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	var details []*APIResourceMetadata

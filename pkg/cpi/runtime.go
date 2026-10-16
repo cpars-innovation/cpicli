@@ -131,7 +131,7 @@ func (r *Runtime) GetArtifact(id string) (*RuntimeArtifact, error) {
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	deployedOn, err := ParseODataTime(jsonData.Root.DeployedOn)
@@ -165,7 +165,7 @@ func (r *Runtime) GetBuildAndDeployStatus(taskId string) (string, error) {
 	}
 	var jsonData buildAndDeployStatusData
 	if err = json.Unmarshal(respBody, &jsonData); err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return "", errors.Wrap(err, 0)
 	}
 	return jsonData.Root.Status, nil
@@ -189,7 +189,7 @@ func (r *Runtime) GetErrorInfo(id string) (string, error) {
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return "", errors.Wrap(err, 0)
 	}
 	if jsonData == nil || len(jsonData.Parameter) == 0 {

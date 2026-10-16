@@ -46,7 +46,7 @@ func (c *Configuration) Get(id string, version string) (*ParametersData, error) 
 	}
 	err = json.Unmarshal(respBody, &jsonData)
 	if err != nil {
-		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", respBody)
+		log.Error().Msgf("Error unmarshalling response as JSON. Response body = %s", httpclnt.Redact(string(respBody)))
 		return nil, errors.Wrap(err, 0)
 	}
 	return jsonData, nil

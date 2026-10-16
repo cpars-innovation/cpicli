@@ -528,6 +528,21 @@ func envKey(key string) string {
 	return envPrefix + "_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_"))
 }
 
+// configPermissionError refuses a config file that every user may write: it
+// decides which hosts credentials are sent to (Unix permissions; not checked
+// on Windows). Group-writable files are accepted (user-private groups).
+func configPermissionError(files []configFile) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	for _, f := range files {
+		if info, err := os.Stat(f.path); err == nil && info.Mode().Perm()&0o002 != 0 {
+			return output.Usagef("%s can be changed by every user, so it could redirect your credentials; run: chmod o-w %s", f.path, f.path)
+		}
+	}
+	return nil
+}
+
 // configPermissionWarning warns when a config file holds secrets but can be
 // read by other users (Unix permissions; not checked on Windows).
 func configPermissionWarning(files []configFile) string {
@@ -590,6 +605,9 @@ func initializeConfig(cmd *cobra.Command) error {
 	}
 	if profile != "" && cmd.Annotations[annotationOffline] != "true" {
 		log.Info().Msgf("Profile %s (%s)", profile, viper.GetString("tmn-host"))
+	}
+	if err := configPermissionError(files); err != nil {
+		return err
 	}
 	if w := configPermissionWarning(files); w != "" {
 		log.Warn().Msg(w)
