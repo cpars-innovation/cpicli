@@ -17,7 +17,10 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: go.mod
+          # the latest patch release: go.mod's "go 1.26.0" would install an old
+          # standard library with known vulnerabilities (govulncheck)
+          go-version: '1.26'
+          check-latest: true
 
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
