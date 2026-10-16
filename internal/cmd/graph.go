@@ -164,6 +164,9 @@ func logEdges(edges []ops.GraphEdge) {
 		if e.Via != "" {
 			via = "  (via " + e.Via + ")"
 		}
+		if e.Version != "" {
+			via += "  version " + e.Version
+		}
 		log.Info().Msgf("%s -%s-> %s%s", e.From, e.Type, e.To, via)
 	}
 }
