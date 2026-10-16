@@ -94,6 +94,7 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewLogsCommand())
 	rootCmd.AddCommand(NewValidateCommand())
 	rootCmd.AddCommand(NewScriptDocCommand())
+	rootCmd.AddCommand(NewBackupCommand())
 	rootCmd.AddCommand(NewGuidelinesCommand())
 	rootCmd.AddCommand(NewEndpointsCommand())
 	rootCmd.AddCommand(NewResourcesCommand())

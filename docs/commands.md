@@ -14,6 +14,10 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`access-policies list`](#access-policies-list) | List access policies with their artifact references |
 | [`artifacts`](#artifacts) | List designtime artifacts of a package |
 | [`audit-log`](#audit-log) | Show the tenant's audit log (who changed what, newest first) |
+| [`backup`](#backup) | Back up a tenant into one archive, compare backups, verify them |
+| [`backup create`](#backup-create) | Write a backup of the tenant into one archive |
+| [`backup diff`](#backup-diff) | Compare two backups, or a backup with the tenant |
+| [`backup verify`](#backup-verify) | Check a backup archive: checksums, artifact zips, completeness |
 | [`compare`](#compare) | Compare two tiers, Git refs or content trees per artifact (content, version, parameters, files) |
 | [`components`](#components) | Component catalogue: the adapter and step versions the tenant offers |
 | [`components import`](#components-import) | Build the catalogue from the Web UI's editor metadata |
@@ -339,6 +343,106 @@ log; without it the tenant answers 403 and the result says missing_role
   cpictl audit-log --since 24h
   cpictl audit-log --since 7d --user dev@example.com --object Orders
 ```
+
+## backup
+
+Back up a tenant into one archive, compare backups, verify them
+
+```
+Disaster recovery for a Cloud Integration tenant (docs/backup.md).
+
+backup create writes one archive (.tar.gz) with every package and its artifacts
+(zip as downloaded), externalised parameters, the Partner Directory, what is
+deployed, credentials (metadata, plus credentials.yml with one environment
+variable per secret: the tenant never returns secrets), the keystore (metadata
+and certificates; private keys never leave the tenant), number ranges, access
+policies and the names of variables, data stores and JMS queues. manifest.json
+lists every file with its checksum, index.json what a comparison needs.
+
+backup diff compares two backups, or a backup with the tenant (metadata only,
+quick). backup verify checks an archive's checksums and artifact zips.
+
+Uploading to S3 or Azure Blob Storage and rotation are done by the pipeline and
+the storage's lifecycle rules (docs/backup.md has examples).
+```
+
+## backup create
+
+Write a backup of the tenant into one archive
+
+```
+Writes cpi-backup_<tenant>_<UTC time>.tar.gz into --dir (or the file --output).
+With --schedule-folders the archive goes into daily/, weekly/ (Sundays) or
+monthly/ (the 1st) below --dir, so storage lifecycle rules can keep each for a
+different time.
+
+Exit code 0 when everything was backed up; 7 when an area or artifact could not
+be read (the archive is written, the manifest lists the warnings); other codes
+when no archive could be written.
+```
+
+**Usage:** `cpictl backup create [flags]`
+
+**Flags:**
+
+```
+      --cells                Also record what is deployed on integration cells
+      --dir string           Folder for the archive (default ".")
+      --output-file string   Archive file (instead of a generated name in --dir)
+      --packages strings     Only these packages (patterns with *)
+      --parallel int         Artifacts downloaded at a time (default 8)
+      --schedule-folders     Write into daily/, weekly/ (Sundays) or monthly/ (1st of the month) below --dir
+```
+
+**Examples:**
+
+```
+  cpictl backup create --dir ./backups
+  cpictl backup create --dir ./backups --schedule-folders --cells
+  cpictl backup create --output nightly.tar.gz --packages 'SD_*,FI_*'
+```
+
+## backup diff
+
+Compare two backups, or a backup with the tenant
+
+```
+Compares the index of two backups (artifacts by content checksum), or of a
+backup with the tenant as it is now (one archive: artifacts by version and
+change time, nothing is downloaded). Lists what was added, removed or changed:
+packages, artifacts, deployments, credentials, keystore entries, Partner
+Directory parameters, number ranges, variables, data stores, JMS queues.
+```
+
+**Usage:** `cpictl backup diff <archive> [<archive>] [flags]`
+
+**Flags:**
+
+```
+      --cells            Against the tenant: also integration cells
+      --fail-on-change   Exit with code 5 when something changed
+```
+
+**Examples:**
+
+```
+  cpictl backup diff backups/monday.tar.gz backups/tuesday.tar.gz
+  cpictl backup diff backups/last.tar.gz                # against the tenant
+  cpictl backup diff backups/last.tar.gz --fail-on-change
+```
+
+## backup verify
+
+Check a backup archive: checksums, artifact zips, completeness
+
+```
+Reads the whole archive and checks that every file has the checksum listed in
+manifest.json, that nothing is missing or extra, that every artifact zip is
+readable and names its artifact, and that the backup was complete when it was
+written. Offline. Exit code 5 when a problem is found.
+```
+
+**Usage:** `cpictl backup verify <archive>`
 
 ## compare
 

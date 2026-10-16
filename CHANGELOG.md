@@ -5,6 +5,23 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Backups for disaster recovery: `cpictl backup create | verify | diff` ([docs/backup.md](docs/backup.md)).**
+  One archive per run holds:
+  - every package and artifact (zip), the externalised parameters and the Partner Directory;
+  - what is deployed (`--cells` for integration cells), number ranges and access policies;
+  - credentials as metadata, with `credentials.yml` naming one environment variable per secret
+    (secrets are not readable from the tenant);
+  - keystore metadata and certificates (key pairs are marked "regenerate");
+  - the names of variables, data stores and JMS queues.
+
+  `manifest.json` has a checksum per file, `index.json` the data for quick comparisons.
+  - `--schedule-folders` writes into `daily/`, `weekly/` and `monthly/` for storage lifecycle rules.
+  - `backup verify` checks checksums and artifact zips. `backup diff` compares two backups, or a
+    backup with the tenant (metadata only).
+  - Exit code 7 when something could not be read.
+  - docs/backup.md has GitHub Actions to S3 and Azure DevOps to Blob Storage examples, lifecycle
+    rules and immutability.
+
 - **Deployments are watched from one runtime list, with one timeout ([docs/deployments.md](docs/deployments.md)).**
   deploy, configure, orchestrator and `deploy --pending` read the runtime list once per interval for
   all deployments in progress (before: one request per artifact and check).
