@@ -205,6 +205,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 	ctx = output.WithResultHolder(ctx)
 	ctx = output.WithEvents(ctx)
 	cmd, err := rootCmd.ExecuteContextC(ctx)
+	err = withScopeRefusal(err)
 	if cmd != nil {
 		if f := cmd.Flags().Lookup("output"); f != nil && f.Changed {
 			format = outputFormat(cmd)

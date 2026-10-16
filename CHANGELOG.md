@@ -16,6 +16,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
     scope and its SHA-256.
   - Go: `pkg/scope`, the same matcher for CPI Studio.
   - Without a scope nothing changes.
+  - Before release, a security review of the guard found six ways around it (harness calls to any ProcessDirect
+    flow, a `$batch` form the check did not parse, writes to filtered list URLs, sibling endpoint paths, tooling
+    names matched by prefix, `$expand` carrying hidden entities). All are closed and tested; configure and
+    orchestrated commands whose items were refused by the scope now also end with exit code 9.
 
 Security hardening (from a security review of the codebase):
 - **IDs are escaped in every SAP API URL.** Package, artifact, runtime, Partner Directory, configuration and API

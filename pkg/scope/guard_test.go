@@ -73,14 +73,76 @@ func TestGuardRefusesHostileIDsAndUnknownPaths(t *testing.T) {
 	refused(t, g.Before(req("GET", "/api/v1/IntegrationDesigntimeArtifacts", ""))) // no tenant-wide artifact list
 }
 
+// batchReq builds a $batch request as cpictl writes it: one changeset with
+// the given request lines.
+func batchReq(lines ...string) *httpclnt.GuardRequest {
+	var b strings.Builder
+	b.WriteString("--batch_1\r\nContent-Type: multipart/mixed; boundary=cs_1\r\n\r\n")
+	for _, l := range lines {
+		b.WriteString("--cs_1\r\nContent-Type: application/http\r\nContent-Transfer-Encoding: binary\r\n\r\n")
+		b.WriteString(l + "\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}\r\n")
+	}
+	b.WriteString("--cs_1--\r\n\r\n--batch_1--\r\n")
+	r := req("POST", "/api/v1/$batch", b.String())
+	r.Header = map[string]string{"Content-Type": "multipart/mixed; boundary=batch_1"}
+	return r
+}
+
 func TestGuardChecksEveryBatchOperation(t *testing.T) {
 	g := testGuard(t, sdRW)
-	batch := func(id string) string {
-		return "--b\r\nContent-Type: application/http\r\n\r\nPUT IntegrationDesigntimeArtifacts(Id='" + id + "',Version='active')/$links/Configurations('P') HTTP/1.1\r\n\r\n{}\r\n--b--"
+	op := func(id string) string {
+		return "PUT /api/v1/IntegrationDesigntimeArtifacts(Id='" + id + "',Version='active')/$links/Configurations('P') HTTP/1.1"
 	}
-	assert.NoError(t, g.Before(req("POST", "/api/v1/$batch", batch("SD_A"))))
-	r := refused(t, g.Before(req("POST", "/api/v1/$batch", batch("SD_A")+"\n"+batch("FI_B"))))
+	assert.NoError(t, g.Before(batchReq(op("SD_A"))))
+	r := refused(t, g.Before(batchReq(op("SD_A"), op("FI_B"))))
 	assert.Contains(t, r.Error(), "FI_B")
+	// anything the guard cannot parse exactly refuses the whole batch (#2)
+	for _, line := range []string{
+		"DELETE /api/v1/IntegrationPackages('FI_Billing') HTTP/1.0",
+		"delete /api/v1/IntegrationPackages('FI_Billing') HTTP/1.1",
+		"DELETE  /api/v1/IntegrationPackages('FI_Billing')  HTTP/1.1",
+	} {
+		refused(t, g.Before(batchReq(op("SD_A"), line)))
+	}
+	noType := batchReq(op("SD_A"))
+	noType.Header = nil
+	refused(t, g.Before(noType))
+	refused(t, g.Before(batchReq("GET /api/v1/IntegrationPackages('SD_Orders')?$expand=IntegrationDesigntimeArtifacts HTTP/1.1")))
+}
+
+// Lists the guard filters are read-only (#3); expansions that could carry
+// excluded entities are refused (#6).
+func TestGuardListsAreReadOnly(t *testing.T) {
+	g := testGuard(t, sdRW)
+	for _, r := range []*httpclnt.GuardRequest{
+		req("POST", "/api/v1/IntegrationRuntimeArtifacts", "{}"),
+		req("DELETE", "/api/v1/MessageProcessingLogs", ""),
+		req("POST", "/api/v1/ServiceEndpoints", "{}"),
+		req("DELETE", "/api/v1/IntegrationPackages", ""),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts", "{}"),
+	} {
+		refused(t, g.Before(r))
+	}
+	// creating through a package's artifact collection: the package decides
+	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts", `{"Id":"SD_New"}`)))
+	refused(t, g.Before(req("POST", "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts", `{"Id":"SD_New","PackageId":"FI_Billing"}`)))
+	refused(t, g.Before(req("POST", "/api/v1/IntegrationPackages('FI_Billing')/IntegrationDesigntimeArtifacts", `{"Id":"X"}`)))
+	refused(t, g.Before(req("GET", "/api/v1/IntegrationPackages?$expand=IntegrationDesigntimeArtifacts", "")))
+	refused(t, g.Before(req("GET", "/api/v1/IntegrationPackages('SD_Orders')?$expand=IntegrationDesigntimeArtifacts", "")))
+	assert.NoError(t, g.Before(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", "")))
+}
+
+// Tooling partners: readable and their parameters writable with "test",
+// never deleted, and only the real tooling IDs (#5).
+func TestGuardToolingPartners(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/BinaryParameters(Pid='CPICTL_Test',Id='SD.Map')", "")), "stylesheet under test")
+	assert.NoError(t, g.Before(req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_Stub","Id":"rule"}`)), "stub answer")
+	refused(t, g.Before(req("DELETE", "/api/v1/Partners('CPICTL_Test')", "")))
+	refused(t, g.Before(req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_TestX","Id":"x"}`)))
+	refused(t, g.Before(req("PUT", "/api/v1/StringParameters(Pid='CPICTL_Testing_Prod',Id='x')", "")))
+	assert.False(t, toolingFlow("CPICTL_TestingProd"), "flows need the CPICTL_Test_ prefix")
+	assert.True(t, toolingFlow("CPICTL_Test_Harness"))
 }
 
 func TestGuardFiltersLists(t *testing.T) {
@@ -127,34 +189,40 @@ func TestGuardRuntimeEndpointsNeedASeenEntryPoint(t *testing.T) {
 	refused(t, g.Before(send))
 	// the tenant lists entry points without the default port the executer writes
 	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd/orders"}]}},
-		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt:443/http/fi/post"}]}}]}}`
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/fi/post"}]}}]}}`
 	r := req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", "")
 	out, err := g.After(r, 200, nil, []byte(eps))
 	require.NoError(t, err)
 	assert.NotContains(t, string(out), "FI_B")
 	assert.NoError(t, g.Before(send))
+	assert.NoError(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd/orders/sub?x=1"}))
 	refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/fi/post"}))
+	// a sibling that merely starts with an allowed entry point (#4)
+	refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd/orders_fi"}))
 	// without the test action no message is sent at all
 	g3 := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read"]}`)
 	refused(t, g3.Before(send))
 }
 
-// Child IDs (attachments, runs, traces) are accepted only when they came with
-// an allowed answer; content needs "download", except the test tooling's own
-// recordings, which come with "test".
-func TestGuardMessageChildren(t *testing.T) {
+// The test harness reaches any ProcessDirect address: under a scope only
+// addresses of flows in the scope (#1).
+func TestGuardHarnessTargets(t *testing.T) {
 	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
-	logs := `{"d":{"results":[{"MessageGuid":"G_SD","IntegrationArtifact":{"Id":"SD_A","PackageId":"SD_Orders"}},
-		{"MessageGuid":"G_STUB","IntegrationArtifact":{"Id":"CPICTL_Test_Stub","PackageId":"Tools"}}]}}`
-	_, err := g.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
-	require.NoError(t, err)
-	for guid, att := range map[string]string{"G_SD": "ATT_SD", "G_STUB": "ATT_STUB"} {
-		r := req("GET", "/api/v1/MessageProcessingLogs('"+guid+"')/Attachments", "")
-		require.NoError(t, g.Before(r))
-		_, err = g.After(r, 200, nil, []byte(`{"d":{"results":[{"Id":"`+att+`"}]}}`))
-		require.NoError(t, err)
+	g.ProcessDirectAddresses = func(_ context.Context, id string) ([]string, error) {
+		return map[string][]string{"SD_A": {"/sd/in"}}[id], nil
 	}
-	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_STUB')/$value", "")), "tooling recording with test")
-	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_SD')/$value", ""))) // content needs download
-	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('NEVER_SEEN')/$value", "")))
+	eps := `{"d":{"results":[{"Name":"CPICTL_Test_Harness","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test"}]}}]}}`
+	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
+	require.NoError(t, err)
+	call := func(addr string) *httpclnt.GuardRequest {
+		return &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/cpictl/test",
+			Header: map[string]string{"CpictlTargetAddress": addr}}
+	}
+	assert.NoError(t, g.Before(call("/sd/in")))
+	r := refused(t, g.Before(call("/fi/billing/in")))
+	assert.Contains(t, r.Error(), "ProcessDirect addresses of flows in the scope")
+	refused(t, g.Before(call("")))
+	g.ProcessDirectAddresses = nil
+	g.pdFlows = nil
+	refused(t, g.Before(call("/sd/in")))
 }

@@ -1,9 +1,15 @@
 package scope
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -14,6 +20,7 @@ import (
 
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
 
 // Refusal is the error for an operation outside the scope (exit code 9,
@@ -35,10 +42,15 @@ func (r *Refusal) Error() string {
 // ExitCode implements output.ExitCoder.
 func (r *Refusal) ExitCode() int { return exitcode.Scope }
 
-// ToolingPrefix marks cpictl's own test tooling (harness, receiver stub, XSLT
-// test flow): a scope that grants "test" may read and call it wherever it is
-// installed, but never change it.
-const ToolingPrefix = "CPICTL_Test"
+// ToolingPrefix marks cpictl's own test tooling flows (harness, receiver
+// stub, XSLT test flow): a scope that grants "test" may read and call them
+// wherever they are installed, but never change them. Their Partner Directory
+// partners (stub answers, stylesheets under test) may be written with "test".
+const ToolingPrefix = testtools.IDPrefix
+
+func toolingFlow(id string) bool { return strings.HasPrefix(id, ToolingPrefix) }
+
+func toolingPartner(pid string) bool { return pid == testtools.XSLTPID || pid == testtools.StubPID }
 
 // Guard enforces a scope on every tenant request of the process (see
 // httpclnt.SetGuard): writes outside the scope are refused before they are
@@ -54,14 +66,20 @@ type Guard struct {
 	// Refresh is the minimum time between two rebuilds of the artifact map
 	// on an unknown artifact (default 30 s).
 	Refresh time.Duration
+	// ProcessDirectAddresses returns the ProcessDirect sender addresses of
+	// a flow (ops.ProcessDirectAddresses). Without it, calls through the
+	// test harness are refused: the harness reaches any address.
+	ProcessDirectAddresses func(ctx context.Context, artifactID string) ([]string, error)
 
 	mu        sync.Mutex
 	artifacts map[string]string // artifact ID -> package (allowed packages only)
 	builtAt   time.Time
 	messages  map[string]string // message GUID -> flow, for messages seen in allowed answers
 	children  map[string]string // IDs of runs, steps, traces, attachments, store entries -> flow of their message
-	endpoints []string          // entry point URLs of allowed flows
-	tenant    string            // scheme://host:port of the tenant API
+	endpoints map[string]string // entry point URL -> flow, for allowed flows
+	pdFlows   map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
+	pdBuiltAt time.Time
+	tenant    string // scheme://host:port of the tenant API
 }
 
 type internalKey struct{}
@@ -87,6 +105,10 @@ type decision struct {
 type need struct {
 	res    Resource
 	action string
+	// toolingWrite: a write the test tooling's own partners may take with
+	// "test" (stub answers, stylesheets under test); not set for deletes of
+	// whole partners
+	toolingWrite bool
 }
 
 func (g *Guard) refuse(r *Refusal) error {
@@ -141,7 +163,7 @@ func (g *Guard) check(ctx context.Context, n need) error {
 		if !ValidID(res.ID) {
 			return g.refuse(&Refusal{Resource: Resource{Kind: res.Kind, ID: res.ID}, Action: n.action})
 		}
-		if strings.HasPrefix(res.ID, ToolingPrefix) && (n.action == ActionRead || n.action == ActionTest) && g.Scope.Grants(ActionTest) {
+		if toolingFlow(res.ID) && (n.action == ActionRead || n.action == ActionTest) && g.Scope.Grants(ActionTest) {
 			return nil
 		}
 		if res.Package == "" {
@@ -153,7 +175,7 @@ func (g *Guard) check(ctx context.Context, n need) error {
 		}
 	case KindPackage, KindPartner:
 		if !ValidID(res.ID) || !g.Scope.Allows(res, n.action) {
-			if res.Kind == KindPartner && strings.HasPrefix(res.ID, ToolingPrefix) && g.Scope.Grants(ActionTest) {
+			if res.Kind == KindPartner && toolingPartner(res.ID) && g.Scope.Grants(ActionTest) && (n.action == ActionRead || n.toolingWrite) {
 				return nil
 			}
 			return g.refuse(&Refusal{Resource: res, Action: n.action})
@@ -315,7 +337,6 @@ var (
 	reChild    = regexp.MustCompile(`^(MessageProcessingLogAttachments|MessageStoreEntries|MessageProcessingLogRuns|MessageProcessingLogRunSteps|TraceMessages)\(` + `([^)]*)` + `\)(/.*)?$`)
 	rePDParam  = regexp.MustCompile(`^(String|Binary)Parameters\(Pid=` + reKey + `,Id=` + reKey + `\)(/.*)?$`)
 	rePartner  = regexp.MustCompile(`^Partners\(` + reKey + `\)(/.*)?$`)
-	reBatchOp  = regexp.MustCompile(`(?m)^(GET|POST|PUT|PATCH|MERGE|DELETE) (\S+) HTTP/1\.1\r?$`)
 )
 
 // key decodes an OData key literal taken from an escaped path.
@@ -375,29 +396,58 @@ func (g *Guard) classify(r *httpclnt.GuardRequest) (decision, error) {
 	return g.classifyEndpoint(r)
 }
 
+// expandAllowed lists the $expand values a request may carry, by collection:
+// an expansion can return related entities the scope does not grant (the
+// artifacts of a package past the artifact patterns).
+var expandAllowed = map[string][]string{
+	"ServiceEndpoints":                           {"EntryPoints"},
+	"MessageProcessingLogCustomHeaderProperties": {"Log"},
+}
+
 func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (decision, error) {
 	p = strings.TrimPrefix(p, "/")
+	first, _, _ := strings.Cut(p, "(")
+	first, _, _ = strings.Cut(first, "/")
+	if exp := q.Get("$expand"); exp != "" {
+		_, tenantWide := tenantAreas[first]
+		ok := tenantWide || slices.Contains(expandAllowed[p], exp) ||
+			(strings.Contains(p, "/RunSteps") && exp == "RunStepProperties") ||
+			(strings.Contains(p, "/DesignGuidelineExecutionResults(") && exp == "DesignGuidelines")
+		if !ok {
+			return decision{}, g.refuse(&Refusal{Reason: "$expand=" + exp + " on " + first + " is not available under a scope"})
+		}
+	}
+	d, err := g.classifyAPIPath(r, p, q)
+	if err == nil && d.filter != nil && write(r.Method) {
+		// a list the guard filters is read-only: no create, update or delete
+		// through it unless modelled explicitly
+		return decision{}, g.refuse(&Refusal{Reason: r.Method + " on " + first + " is not available under a scope"})
+	}
+	return d, err
+}
+
+func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values) (decision, error) {
 	m := r.Method
 	art := func(id, action string) decision {
-		return decision{need: []need{{Resource{Kind: KindArtifact, ID: id}, action}}}
+		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: id}, action: action}}}
 	}
 	switch {
 	case p == "" || p == "$metadata":
 		return decision{allow: true}, nil
 
 	case p == "$batch":
+		ops, err := batchOperations(r.Header, r.Body)
+		if err != nil {
+			return decision{}, g.refuse(&Refusal{Reason: "$batch: " + err.Error()})
+		}
 		var needs []need
-		for _, op := range reBatchOp.FindAllStringSubmatch(string(r.Body), -1) {
-			path := op[2]
-			if !strings.HasPrefix(path, "/") {
-				path = apiPrefix + path
-			}
-			d, err := g.classify(&httpclnt.GuardRequest{Ctx: r.Ctx, Method: op[1], Base: r.Base, Path: path})
+		for _, op := range ops {
+			d, err := g.classify(&httpclnt.GuardRequest{Ctx: r.Ctx, Method: op.method, Base: r.Base, Path: op.path, Body: op.body})
 			if err != nil {
 				return decision{}, err
 			}
-			if d.filter != nil {
-				return decision{}, g.refuse(&Refusal{Reason: "list reads in a $batch are not available under a scope"})
+			if d.filter != nil || d.record != nil {
+				return decision{}, g.refuse(&Refusal{Reason: "list and message reads in a $batch are not available under a scope"})
 			}
 			needs = append(needs, d.need...)
 		}
@@ -405,7 +455,7 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 
 	case p == "IntegrationPackages":
 		if m == http.MethodPost {
-			return decision{need: []need{{Resource{Kind: KindPackage, ID: bodyField(r.Body, "Id")}, ActionUpload}}}, nil
+			return decision{need: []need{{res: Resource{Kind: KindPackage, ID: bodyField(r.Body, "Id")}, action: ActionUpload}}}, nil
 		}
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
 			return filterResults(b, func(e map[string]any) bool { return g.Scope.SeesPackage(str(e, "Id")) })
@@ -416,7 +466,18 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 		pkg := key(mm[1])
 		res := Resource{Kind: KindPackage, ID: pkg}
 		if mm[2] != "" { // artifacts of the package
-			return decision{need: []need{{res, ActionRead}}, filter: func(g *Guard, b []byte) ([]byte, error) {
+			if write(m) {
+				// creating through the navigation: the artifact lands in this
+				// package, whatever the body says
+				if m != http.MethodPost {
+					return decision{}, g.refuse(&Refusal{Reason: m + " on the artifacts of a package is not available under a scope"})
+				}
+				if bp := bodyField(r.Body, "PackageId"); bp != "" && bp != pkg {
+					return decision{}, g.refuse(&Refusal{Reason: "the artifact's package does not match the request"})
+				}
+				return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: bodyField(r.Body, "Id"), Package: pkg}, action: ActionUpload}}}, nil
+			}
+			return decision{need: []need{{res: res, action: ActionRead}}, filter: func(g *Guard, b []byte) ([]byte, error) {
 				return filterResults(b, func(e map[string]any) bool {
 					return g.Scope.Allows(Resource{Kind: KindArtifact, ID: str(e, "Id"), Package: pkg}, ActionRead)
 				})
@@ -424,17 +485,17 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 		}
 		switch m {
 		case http.MethodDelete:
-			return decision{need: []need{{res, ActionDelete}}}, nil
+			return decision{need: []need{{res: res, action: ActionDelete}}}, nil
 		case http.MethodGet, http.MethodHead:
-			return decision{need: []need{{res, ActionRead}}}, nil
+			return decision{need: []need{{res: res, action: ActionRead}}}, nil
 		}
-		return decision{need: []need{{res, ActionUpload}}}, nil
+		return decision{need: []need{{res: res, action: ActionUpload}}}, nil
 
 	case slices.Contains([]string{"IntegrationDesigntimeArtifacts", "ValueMappingDesigntimeArtifacts", "MessageMappingDesigntimeArtifacts", "ScriptCollectionDesigntimeArtifacts"}, p):
 		if m != http.MethodPost {
 			return decision{}, g.refuse(&Refusal{Reason: "listing all artifacts of the tenant is not available under a scope"})
 		}
-		return decision{need: []need{{Resource{Kind: KindArtifact, ID: bodyField(r.Body, "Id"), Package: bodyField(r.Body, "PackageId")}, ActionUpload}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: bodyField(r.Body, "Id"), Package: bodyField(r.Body, "PackageId")}, action: ActionUpload}}}, nil
 
 	case reArtifact.MatchString(p):
 		mm := reArtifact.FindStringSubmatch(p)
@@ -484,14 +545,14 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 		mm := reMessage.FindStringSubmatch(p)
 		guid := key(mm[1])
 		// the message and its lists; contents are read through their own IDs (download)
-		return decision{need: []need{{Resource{Kind: "message", ID: guid}, ActionRead}}, record: (*Guard).recordChildren}, nil
+		return decision{need: []need{{res: Resource{Kind: "message", ID: guid}, action: ActionRead}}, record: (*Guard).recordChildren}, nil
 	case reChild.MatchString(p):
 		mm := reChild.FindStringSubmatch(p)
 		action := ActionRead
 		if strings.Contains(mm[3], "$value") || mm[1] == "TraceMessages" {
 			action = ActionDownload
 		}
-		return decision{need: []need{{Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action}}, record: (*Guard).recordChildren}, nil
+		return decision{need: []need{{res: Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action: action}}, record: (*Guard).recordChildren}, nil
 	case p == "MessageProcessingLogCustomHeaderProperties":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
 			return filterResults(b, func(e map[string]any) bool {
@@ -502,7 +563,8 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 
 	case p == "StringParameters" || p == "BinaryParameters" || p == "Partners" || p == "AlternativePartners" || p == "AuthorizedUsers":
 		if write(m) {
-			return decision{need: []need{{Resource{Kind: KindPartner, ID: bodyField(r.Body, "Pid")}, ActionPDWrite}}}, nil
+			param := p == "StringParameters" || p == "BinaryParameters"
+			return decision{need: []need{{res: Resource{Kind: KindPartner, ID: bodyField(r.Body, "Pid")}, action: ActionPDWrite, toolingWrite: param && m == http.MethodPost}}}, nil
 		}
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
 			return filterResults(b, func(e map[string]any) bool { return g.allowsPartner(str(e, "Pid"), ActionRead) })
@@ -513,14 +575,14 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 		if write(m) {
 			action = ActionPDWrite
 		}
-		return decision{need: []need{{Resource{Kind: KindPartner, ID: key(mm[2])}, action}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: key(mm[2])}, action: action, toolingWrite: true}}}, nil
 	case rePartner.MatchString(p):
 		mm := rePartner.FindStringSubmatch(p)
 		action := ActionRead
 		if write(m) {
 			action = ActionPDWrite
 		}
-		return decision{need: []need{{Resource{Kind: KindPartner, ID: key(mm[1])}, action}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: key(mm[1])}, action: action}}}, nil
 	case strings.HasPrefix(p, "AlternativePartners(") || strings.HasPrefix(p, "AuthorizedUsers("):
 		// keys without the partner ID: changes need the entry's partner
 		if !write(m) {
@@ -529,7 +591,7 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 			}}, nil
 		}
 		pid := g.lookupField(r.Ctx, apiPrefix+p, "Pid")
-		return decision{need: []need{{Resource{Kind: KindPartner, ID: pid}, ActionPDWrite}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: pid}, action: ActionPDWrite}}}, nil
 	}
 
 	first, _, _ := strings.Cut(p, "(")
@@ -539,7 +601,7 @@ func (g *Guard) classifyAPI(r *httpclnt.GuardRequest, p string, q url.Values) (d
 		if write(r.Method) {
 			action = "write"
 		}
-		return decision{need: []need{{Resource{Kind: KindTenant, ID: area}, action}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindTenant, ID: area}, action: action}}}, nil
 	}
 	return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("%s %s is not available under a scope", r.Method, "/api/v1/"+p)})
 }
@@ -552,26 +614,94 @@ func (g *Guard) classifyOperations(r *httpclnt.GuardRequest, cmd string) (decisi
 	case "com.sap.it.op.tmn.commands.dashboard.webui.IntegrationComponentsListCommand":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) { return g.filterComponents(r.Ctx, b), nil }}, nil
 	case "com.sap.it.op.tmn.commands.dashboard.webui.IntegrationComponentSetMplLogLevelCommand":
-		return decision{need: []need{{Resource{Kind: KindArtifact, ID: bodyField(r.Body, "artifactSymbolicName")}, ActionLogLevel}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: bodyField(r.Body, "artifactSymbolicName")}, action: ActionLogLevel}}}, nil
 	}
 	return decision{}, g.refuse(&Refusal{Reason: "/Operations/" + name + " is not available under a scope"})
 }
 
 // classifyEndpoint decides a request to a flow's runtime endpoint: allowed
-// below an entry point the guard has seen for an allowed flow, with "test".
+// at or below an entry point the guard has seen for an allowed flow, with
+// "test". A call through the test harness must name a ProcessDirect address
+// of an allowed flow.
 func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 	if !g.Scope.Grants(ActionTest) {
 		return decision{}, g.refuse(&Refusal{Reason: "sending messages needs the test action"})
 	}
-	target := withoutDefaultPort(r.Base) + r.Path
+	target, _, _ := strings.Cut(withoutDefaultPort(r.Base)+r.Path, "?")
 	g.mu.Lock()
-	defer g.mu.Unlock()
-	for _, ep := range g.endpoints {
-		if strings.HasPrefix(target, withoutDefaultPort(strings.TrimSuffix(ep, "*"))) {
-			return decision{allow: true}, nil
+	flow, found := "", false
+	for ep, f := range g.endpoints {
+		if endpointCovers(withoutDefaultPort(ep), target) {
+			flow, found = f, true
+			break
 		}
 	}
-	return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + r.Base + strings.SplitN(r.Path, "?", 2)[0] + " is not an entry point of a flow in the scope"})
+	g.mu.Unlock()
+	if !found {
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " is not an entry point of a flow in the scope"})
+	}
+	if flow == testtools.HarnessID {
+		addr := ""
+		for k, v := range r.Header {
+			if strings.EqualFold(k, testtools.HarnessAddressHeader) {
+				addr = v
+			}
+		}
+		to := g.processDirectFlow(r.Ctx, addr)
+		if to == "" {
+			return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call ProcessDirect addresses of flows in the scope (%q is not one)", addr)})
+		}
+		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: to}, action: ActionTest}}}, nil
+	}
+	return decision{allow: true}, nil
+}
+
+// endpointCovers reports whether target is the entry point ep or below it
+// ("/..."); an entry point ending in "*" covers everything after its prefix.
+func endpointCovers(ep, target string) bool {
+	if prefix, ok := strings.CutSuffix(ep, "*"); ok {
+		return strings.HasPrefix(target, prefix)
+	}
+	ep = strings.TrimSuffix(ep, "/")
+	return target == ep || strings.HasPrefix(target, ep+"/")
+}
+
+// processDirectFlow returns the allowed flow whose ProcessDirect sender
+// listens on addr, or "".
+func (g *Guard) processDirectFlow(ctx context.Context, addr string) string {
+	if addr == "" || g.ProcessDirectAddresses == nil {
+		return ""
+	}
+	g.mu.Lock()
+	flow := g.pdFlows[addr]
+	fresh := g.pdFlows != nil && time.Since(g.pdBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
+	g.mu.Unlock()
+	if flow != "" || fresh {
+		return flow // known, or rebuilt a moment ago: no new downloads
+	}
+	// (re)build from the allowed flows, with the guard's own lookups
+	ictx := internal(ctx)
+	g.packageOf(ictx, "") // make sure the artifact map exists
+	g.mu.Lock()
+	ids := make([]string, 0, len(g.artifacts))
+	for id := range g.artifacts {
+		ids = append(ids, id)
+	}
+	g.mu.Unlock()
+	m := map[string]string{}
+	for _, id := range ids {
+		addrs, err := g.ProcessDirectAddresses(ictx, id)
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			m[a] = id
+		}
+	}
+	g.mu.Lock()
+	g.pdFlows, g.pdBuiltAt = m, time.Now()
+	g.mu.Unlock()
+	return m[addr]
 }
 
 // withoutDefaultPort drops :443 from https and :80 from http URLs: the
@@ -619,11 +749,11 @@ func (g *Guard) lookupField(ctx context.Context, path, field string) string {
 }
 
 func (g *Guard) allowsArtifact(ctx context.Context, id, action string) bool {
-	return g.check(ctx, need{Resource{Kind: KindArtifact, ID: id}, action}) == nil
+	return g.check(ctx, need{res: Resource{Kind: KindArtifact, ID: id}, action: action}) == nil
 }
 
 func (g *Guard) allowsPartner(pid, action string) bool {
-	if strings.HasPrefix(pid, ToolingPrefix) && g.Scope.Grants(ActionTest) {
+	if toolingPartner(pid) && action == ActionRead && g.Scope.Grants(ActionTest) {
 		return true
 	}
 	return ValidID(pid) && g.Scope.Allows(Resource{Kind: KindPartner, ID: pid}, action)
@@ -635,7 +765,7 @@ func (g *Guard) allowsLog(e map[string]any) bool {
 	if id == "" {
 		return false
 	}
-	if strings.HasPrefix(id, ToolingPrefix) && g.Scope.Grants(ActionTest) {
+	if toolingFlow(id) && g.Scope.Grants(ActionTest) {
 		return true
 	}
 	return g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: pkg}, ActionRead)
@@ -686,13 +816,16 @@ func (g *Guard) recordChildren(r *httpclnt.GuardRequest, body []byte) {
 func (g *Guard) recordEndpoints(_ *httpclnt.GuardRequest, body []byte) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.endpoints == nil {
+		g.endpoints = map[string]string{}
+	}
 	for _, e := range results(body) {
 		eps, _ := e["EntryPoints"].(map[string]any)
 		list, _ := eps["results"].([]any)
 		for _, x := range list {
 			if m, ok := x.(map[string]any); ok {
-				if u := str(m, "Url"); u != "" && !slices.Contains(g.endpoints, u) {
-					g.endpoints = append(g.endpoints, u)
+				if u := str(m, "Url"); u != "" {
+					g.endpoints[u] = str(e, "Name")
 				}
 			}
 		}
@@ -759,10 +892,81 @@ func init() {
 			return false
 		}
 		// the test tooling's own recordings (stub requests) come with "test"
-		tooling := strings.HasPrefix(flow, ToolingPrefix) && g.Scope.Grants(ActionTest)
+		tooling := toolingFlow(flow) && g.Scope.Grants(ActionTest)
 		return g.Scope.Grants(n.action) || tooling
 	}
 }
 
 // checkKind decides the kinds the scope itself does not know.
 var checkKind = map[string]func(g *Guard, ctx context.Context, n need) bool{}
+
+type batchOp struct {
+	method, path string
+	body         []byte
+}
+
+// batchOperations parses an OData $batch body (multipart/mixed, changesets
+// nested one level) into its operations. Anything it cannot parse exactly
+// refuses the whole batch: the tenant's parser must never see an operation
+// the guard did not.
+func batchOperations(header map[string]string, body []byte) ([]batchOp, error) {
+	ct := ""
+	for k, v := range header {
+		if strings.EqualFold(k, "Content-Type") {
+			ct = v
+		}
+	}
+	mt, params, err := mime.ParseMediaType(ct)
+	if err != nil || mt != "multipart/mixed" || params["boundary"] == "" {
+		return nil, errors.New("not a multipart/mixed body")
+	}
+	var ops []batchOp
+	if err := readBatchParts(multipart.NewReader(bytes.NewReader(body), params["boundary"]), 0, &ops); err != nil {
+		return nil, err
+	}
+	if len(ops) == 0 {
+		return nil, errors.New("no operations")
+	}
+	return ops, nil
+}
+
+func readBatchParts(mr *multipart.Reader, depth int, ops *[]batchOp) error {
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		mt, params, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
+		if err != nil {
+			return err
+		}
+		switch {
+		case mt == "multipart/mixed" && depth == 0 && params["boundary"] != "":
+			if err := readBatchParts(multipart.NewReader(part, params["boundary"]), 1, ops); err != nil {
+				return err
+			}
+		case mt == "application/http":
+			req, err := http.ReadRequest(bufio.NewReader(part))
+			if err != nil {
+				return fmt.Errorf("operation: %w", err)
+			}
+			if req.Proto != "HTTP/1.1" || !slices.Contains([]string{"GET", "POST", "PUT", "PATCH", "MERGE", "DELETE"}, req.Method) {
+				return fmt.Errorf("operation %q %q not accepted", req.Method, req.Proto)
+			}
+			b, err := io.ReadAll(io.LimitReader(req.Body, 1<<20))
+			if err != nil {
+				return err
+			}
+			path := req.RequestURI
+			if !strings.HasPrefix(path, "/") {
+				path = apiPrefix + path
+			}
+			*ops = append(*ops, batchOp{method: req.Method, path: path, body: b})
+		default:
+			return fmt.Errorf("part of type %q not accepted", mt)
+		}
+	}
+}

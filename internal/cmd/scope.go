@@ -6,10 +6,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 
+	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/cpars-innovation/cpicli/pkg/scope"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -17,6 +20,30 @@ import (
 
 // activeScope is the scope of this process (nil: unrestricted).
 var activeScope *scope.Scope
+
+// lastRefusal is the last scope refusal of the current command (nil: none).
+var lastRefusal atomic.Pointer[scope.Refusal]
+
+// withScopeRefusal makes a failed command whose failures came from the scope
+// end with exit code 9 (errorCategory scope): commands that report per-item
+// failures (configure, orchestrator) otherwise turn them into "failed".
+// Partial results stay partial.
+func withScopeRefusal(err error) error {
+	r := lastRefusal.Load()
+	if err == nil || r == nil || output.ExitCode(err) != exitcode.DeployFailed {
+		return err
+	}
+	return &scopeFailure{err: err, refusal: r}
+}
+
+type scopeFailure struct {
+	err     error
+	refusal *scope.Refusal
+}
+
+func (e *scopeFailure) Error() string { return e.err.Error() + " (" + e.refusal.Error() + ")" }
+func (e *scopeFailure) Unwrap() error { return e.err }
+func (e *scopeFailure) ExitCode() int { return exitcode.Scope }
 
 func addScopeFlags(c *cobra.Command) {
 	f := c.PersistentFlags()
@@ -87,6 +114,7 @@ func installScope(cmd *cobra.Command) error {
 		return err
 	}
 	activeScope = s
+	lastRefusal.Store(nil)
 	if s == nil {
 		httpclnt.SetGuard(nil)
 		return nil
@@ -105,7 +133,11 @@ func installScope(cmd *cobra.Command) error {
 			}
 			return body, err
 		},
+		ProcessDirectAddresses: func(fctx context.Context, id string) ([]string, error) {
+			return ops.ProcessDirectAddresses(cpi.InitHTTPExecuter(serviceDetails(cmd)).WithContext(fctx), id)
+		},
 		OnRefuse: func(r *scope.Refusal) {
+			lastRefusal.Store(r)
 			log.Warn().Str("action", r.Action).Str("resource", r.Resource.String()).Msg(r.Error())
 			output.Emit(ctx, "scope.refused", map[string]any{"action": r.Action, "kind": r.Resource.Kind, "id": r.Resource.ID, "reason": r.Reason})
 		},

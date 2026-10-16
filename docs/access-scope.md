@@ -60,17 +60,26 @@ never from a config file, so a session that can edit `cpictl.yaml` cannot widen 
 The boundary is the HTTP client, not the tools. Every request a cpictl process sends to the tenant passes one guard,
 whichever command or MCP tool sends it, including tools added later:
 
-- **Writes, deploys and deletes** outside the scope are refused before the request is sent. In a `$batch`, every
-  operation is checked.
+- **Writes, deploys and deletes** outside the scope are refused before the request is sent. A `$batch` is parsed
+  operation by operation and each one is checked; a batch that cannot be parsed completely is refused as a whole.
 - **Lists** (packages, artifacts of a package, runtime artifacts, service endpoints, message logs, custom header
   search, Partner Directory, the Web UI runtime list) are filtered. Totals (`__count`) are removed, so they don't
-  reveal hidden entries.
+  reveal hidden entries. A list URL can only be read: a write to it (also with a `$filter`) is refused.
+- **`$expand`** is limited to the expansions cpictl uses (entry points, custom header log, run step properties,
+  design guidelines), so an expansion cannot carry entities the filter does not see.
 - **An artifact's package** is found by listing the artifacts of the allowed packages (a few calls, cached;
   refreshed once on an unknown ID). An artifact outside them is refused like one that does not exist, and the
   refusal does not name its package.
 - **Message details** (errors, attachments, store entries, runs, traces) are allowed for messages of flows in the
   scope. Their child IDs are only accepted when they came with an allowed answer.
-- **Test messages** go only to entry points the guard has seen for flows in the scope, and only with `test`.
+- **Test messages** go only to entry points the guard has seen for flows in the scope, and only with `test`. An
+  endpoint covers its own path and paths below it, not siblings (`/sd/order` does not cover `/sd/orders`).
+- **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
+  address that belongs to the sender of a flow in the scope; the guard reads those addresses from the allowed flows
+  (externalised parameters resolved).
+- **The test tooling** is exempt only by exact name: flows starting with `CPICTL_Test_`, and the Partner Directory
+  partners `CPICTL_Test` and `CPICTL_Stub`, whose parameters `test` may change (stub responses). Messages of tooling
+  flows, and their children, are readable with `test`.
 - **API Management**, tenant-wide artifact lists and any request the guard does not know are refused.
 
 A refusal has exit code **9** and `errorCategory: "scope"`, and names the action and the resource:

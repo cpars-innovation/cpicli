@@ -107,3 +107,24 @@ func TestScopeFileAndFlagsAreExclusive(t *testing.T) {
 	assert.Equal(t, exitcode.OK, code, doc)
 	assert.False(t, strings.Contains(fmt.Sprint(doc["result"]), "FI_Billing"))
 }
+
+// configure writes parameters through a $batch: under a scope every
+// operation of the batch is checked, and an in-scope batch goes through.
+func TestScopeConfigureBatch(t *testing.T) {
+	mock := configureMock(t)
+	mock.Artifacts["A"].Package = "Orders"
+	mock.Packages = []cpitest.Package{{ID: "Orders", Name: "Orders", ShortText: "O"}}
+	t.Cleanup(func() { httpclnt.SetGuard(nil) })
+	file := writeConfigureFile(t, "          - {key: Host, value: new}\n")
+	args := append([]string{"configure", "--config-path", file, "--deploy-delay", "1", "--output", "json"}, basicAuth(mock)...)
+
+	r := runMain(t, append(args, "--scope-packages", "Orders", "--scope-actions", "read,configure,deploy")...)
+	require.Equal(t, 0, r.code, r.stdout+r.stderr)
+	assert.Equal(t, 1, mock.Count("POST /api/v1/$batch"))
+
+	file = writeConfigureFile(t, "          - {key: Host, value: newer}\n")
+	r = runMain(t, "configure", "--config-path", file, "--deploy-delay", "1", "--output", "json", "--tmn-host", basicAuth(mock)[1],
+		"--tmn-userid", "user", "--tmn-password", "secret", "--scope-packages", "Other", "--scope-actions", "read,configure,deploy")
+	assert.Equal(t, exitcode.Scope, r.code, r.stdout)
+	assert.Equal(t, 1, mock.Count("POST /api/v1/$batch"), "no batch sent out of scope")
+}
