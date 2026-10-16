@@ -42,9 +42,10 @@ per package, also for scripts reused across packages; a shared package can follo
 A collection script is a contract, so it says what it does and is tested (rules
 `collection-script-doc`, `collection-script-tests`, `collection-script-coverage`):
 
-- After `lint_fix` moved a script into a collection, add a doc comment to each public function:
-  the first sentence is what discovery and `graph_search` show to the next person looking for it,
-  then what it reads and writes, the errors, and how a step calls it (collection, file, function).
+- After `lint_fix` moved a script into a collection, add a doc comment to each public function
+  from the template in [script-docs.md](../cpi-build/script-docs.md): the first sentence is what
+  discovery and `graph_search` show to the next person looking for it, then `@reads` / `@writes`,
+  `@throws`, `@keywords` and how a step calls it (`@example`).
   Make helpers that flows must not call `private`.
 - Write tests in `tests/scripts/<package>/<collection>/` that call every public function, with the
   inputs the flows send today (take them from the flows' test cases or traces). The test build

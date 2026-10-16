@@ -12,6 +12,8 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `similar-script` | the differences are accidental | unify (keep the best version), then as `duplicate-script` | medium: test every variant's flow |
 | `duplicate-mapping` | 2+ flows | one message mapping artifact in the package, the flows reference it | medium: mapping step reference changes |
 | `missing-script-collection` | always | snapshot the package holding it, or fix the ID | the flow does not deploy without it |
+| `collection-script-doc-quality` | always for collections | rewrite placeholder first sentences, name every header and property the code uses with `@reads` / `@writes` ([script-docs.md](../cpi-build/script-docs.md)) | none (comments only); re-upload the collection |
+| `collection-script-keywords` | with other changes to the collection | `@keywords` with the search words and business terms | none |
 | `collection-script-doc` | always for collections | a `/** */` comment per public function: purpose (first sentence, what search finds), reads, writes, errors, how to call it ([script-tests.md](../cpi-build/script-tests.md)) | none (comments only); re-upload the collection |
 
 ## Partner Directory

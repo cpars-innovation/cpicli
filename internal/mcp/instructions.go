@@ -89,7 +89,10 @@ undeploy requires confirm=true.`},
 handling, scripts, naming); follow the conventions of the repository (e.g. .cpi/conventions.md).`},
 	{[]string{"inspect", "build", "improve", "promote", "partner-directory", "monitor"}, `Graph: after discovery, graph_search, graph_neighbors and graph_path answer which flows call a
 flow (ProcessDirect/JMS), use a credential, script, header or Partner Directory parameter, or
-call a system, from .cpi/graph.json (local, fast; rerun discover_tenant after changes).`},
+call a system, from .cpi/graph.json (local, fast; rerun discover_tenant after changes). Before
+writing a script, graph_search types ["script"] with words of its purpose: reusable=true scripts
+are in script collections; call them instead of writing new code. Comment scripts as in
+help {"topic": "script-doc"} (lint checks it).`},
 	{[]string{"build", "test"}, `Autonomous loops: loop_start before changing anything, loop_status, loop_end when done or stopped.`},
 	{nil, `Every result has {ok, errorCategory, exitCode, error, result}; errorCategory: usage (fix the
 arguments), auth (stop, ask the user), tenant_http (retry later), failed (the tenant rejected the

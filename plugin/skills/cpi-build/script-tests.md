@@ -7,6 +7,8 @@ checks this:
 | Rule | Checks |
 |------|--------|
 | `collection-script-doc` | every public function of a collection script has a doc comment |
+| `collection-script-doc-quality` | the comments say something and name every header and property the code reads or writes ([script-docs.md](script-docs.md)) |
+| `collection-script-keywords` (info) | the script has `@keywords` |
 | `collection-script-tests` | every public function is called by a test in `tests/scripts/<package>/<collection>/` |
 | `collection-script-coverage` | line coverage per script in the JaCoCo report is at least `scriptTests.minCoverage` (default 80) |
 | `script-doc` (info) | a flow's local script says what it does |

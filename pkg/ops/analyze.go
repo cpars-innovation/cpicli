@@ -113,6 +113,19 @@ type ScriptFacts struct {
 	// with their doc comments (Groovy).
 	Summary   string           `json:"summary,omitempty"`
 	Functions []ScriptFunction `json:"functions,omitempty"`
+	// Keywords are the words of its @keywords tags.
+	Keywords []string `json:"keywords,omitempty"`
+	// Reads and Writes are the headers and properties the code reads and
+	// writes by literal name ("header SAP_Date", "property orderId").
+	Reads  []string `json:"reads,omitempty"`
+	Writes []string `json:"writes,omitempty"`
+	// Shape is the same for scripts that differ only in comments and
+	// formatting.
+	Shape string `json:"shape,omitempty"`
+	// DocStatus is ok, incomplete or missing (Groovy); DocIssues say what
+	// is missing (docs/script-docs.md).
+	DocStatus string           `json:"docStatus,omitempty"`
+	DocIssues []ScriptDocIssue `json:"docIssues,omitempty"`
 }
 
 // ExceptionSubprocessFacts describe an exception subprocess.
@@ -222,7 +235,7 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 		}
 		if dir == "script" {
 			if data, err := fs.ReadFile(fsys, p); err == nil {
-				f.Scripts = append(f.Scripts, analyzeScript(path.Base(p), data))
+				f.Scripts = append(f.Scripts, analyzeScript(path.Base(p), data, false))
 				for _, m := range reGroovyParam.FindAllSubmatch(data, -1) {
 					f.PDReferences = append(f.PDReferences, string(m[2])+":"+string(m[1]))
 				}
@@ -238,7 +251,7 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 	return f, nil
 }
 
-func analyzeScript(name string, data []byte) ScriptFacts {
+func analyzeScript(name string, data []byte, collection bool) ScriptFacts {
 	sum := sha256.Sum256(data)
 	s := ScriptFacts{Name: name, Hash: hex.EncodeToString(sum[:6]), Lines: bytes.Count(data, []byte("\n"))}
 	if len(data) > 0 && data[len(data)-1] != '\n' {
@@ -257,9 +270,22 @@ func analyzeScript(name string, data []byte) ScriptFacts {
 	}
 	s.CustomHeaders = sortedUnique(s.CustomHeaders)
 	s.LogsAttachments = bytes.Contains(data, []byte("addAttachmentAs"))
+	s.Shape = ScriptShape(data)
 	if s.Language == "groovy" {
 		doc := ParseScriptDoc(data)
-		s.Summary, s.Functions = doc.Summary, doc.Functions
+		s.Summary, s.Functions, s.Keywords = doc.Summary, doc.Functions, doc.Keywords()
+		s.Reads, s.Writes = ScriptAccess(data)
+		s.DocIssues = CheckScriptDoc(data, collection)
+		public := 0
+		for _, f := range doc.Functions {
+			if !f.Private {
+				public++
+			}
+		}
+		if !collection {
+			public = 1
+		}
+		s.DocStatus = DocStatusOf(s.DocIssues, public)
 	}
 	return s
 }
@@ -520,7 +546,7 @@ func AnalyzeScriptCollection(fsys fs.FS) (*ScriptCollectionFacts, error) {
 		if rerr != nil {
 			return rerr
 		}
-		f.Scripts = append(f.Scripts, analyzeScript(strings.TrimPrefix(p, ResourcesDir+"/script/"), data))
+		f.Scripts = append(f.Scripts, analyzeScript(strings.TrimPrefix(p, ResourcesDir+"/script/"), data, true))
 		return nil
 	})
 	return f, err

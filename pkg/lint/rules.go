@@ -61,6 +61,8 @@ var lintRules = []lintRule{
 	{id: "duplicate-mapping", group: GroupReuse, severity: SevWarning, title: "The same message mapping or XSLT is in several flows: make it a shared mapping artifact", cross: ruleDuplicateMappings},
 	{id: "missing-script-collection", group: GroupReuse, severity: SevWarning, title: "A referenced script collection is not in the repository", artifact: ruleMissingCollection},
 	{id: "collection-script-doc", group: GroupReuse, severity: SevWarning, title: "A function of a script collection has no doc comment (what it does, how to call it)", artifact: ruleCollectionScriptDoc},
+	{id: "collection-script-doc-quality", group: GroupReuse, severity: SevWarning, title: "A script collection's comments do not say enough to reuse it (placeholder description, headers or properties not named)", artifact: ruleCollectionScriptDocQuality},
+	{id: "collection-script-keywords", group: GroupReuse, severity: SevInfo, title: "A script of a script collection has no @keywords, so it is harder to find for reuse", artifact: ruleCollectionScriptKeywords},
 	// partner directory
 	{id: "router-literals", group: GroupPartnerDir, severity: SevWarning, title: "A router decides on many literal values: a routing table for the Partner Directory", artifact: ruleRouterLiterals},
 	{id: "lookup-table-in-script", group: GroupPartnerDir, severity: SevInfo, title: "A script holds a lookup table: Partner Directory or a value mapping", artifact: ruleLookupTables},
@@ -209,12 +211,6 @@ func normalizeScript(data []byte) string {
 }
 
 var reComment = regexp.MustCompile(`(?s)/\*.*?\*/|(?m)//[^\n]*$`)
-var reSpace = regexp.MustCompile(`\s+`)
-
-// structuralScript drops comments and all whitespace.
-func structuralScript(data []byte) string {
-	return reSpace.ReplaceAllString(reComment.ReplaceAllString(string(data), ""), "")
-}
 
 func hashOf(s string) string {
 	sum := sha256.Sum256([]byte(s))
@@ -399,7 +395,7 @@ func ruleUseCollection(lc *lintContext) []Finding {
 
 func ruleSimilarScripts(lc *lintContext) []Finding {
 	var out []Finding
-	for _, uses := range localScriptGroups(lc, func(d []byte) string { return hashOf(structuralScript(d)) }) {
+	for _, uses := range localScriptGroups(lc, ops.ScriptShape) {
 		exact := map[string]bool{}
 		flows := map[string]bool{}
 		for _, u := range uses {

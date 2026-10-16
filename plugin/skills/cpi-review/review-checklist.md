@@ -52,7 +52,10 @@ Apply `.cpi/conventions.md` first; its "Review checklist additions" are mandator
 ## Scripts and mappings
 - Scripts: null checks, no `println`, exceptions with meaningful messages, no unused imports,
   no reading the whole body as String for large messages unless needed.
-- Every script says what it does (comment at the top or above its function).
+- Every script says what it does (comment at the top or above its function, template in
+  cpi-build/script-docs.md): no placeholder, headers and properties it reads and writes named.
+- New logic that a script collection already has (`graph_search` types script, `reusable`)
+  is called from the collection, not copied.
 - Script collections: each changed or new public function has a doc comment (purpose, reads,
   writes, errors, how to call it) that matches the code, and tests in
   `tests/scripts/<package>/<collection>/` call it; lint shows no `collection-script-doc`,

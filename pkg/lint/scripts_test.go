@@ -192,3 +192,46 @@ func TestUnsupportedScriptClass(t *testing.T) {
 	assert.Contains(t, f[0].Message, "new.groovy line 1")
 	assert.Contains(t, f[1].Message, "stub.groovy line 2")
 }
+
+// Comments of script collections have to be good enough to reuse the
+// script: no placeholders, every header and property named, keywords.
+func TestCollectionScriptDocQuality(t *testing.T) {
+	project := t.TempDir()
+	content := filepath.Join(project, "packages")
+	good := `/**
+ * Formats the SAP date in header SAP_Date as ISO 8601.
+ *
+ * @reads    header SAP_Date
+ * @writes   property isoDate
+ * @keywords date, ISO 8601
+ */
+def Message formatSapDate(Message message) {
+    message.setProperty("isoDate", message.getHeader("SAP_Date", String))
+}
+`
+	poor := `/** TODO */
+def Message formatDate(Message message) {
+    message.setProperty("isoDate", message.getHeader("SAP_Date", String))
+}
+`
+	tFlow{pkg: "Shared", id: "Common_Scripts", collection: true, scripts: map[string]string{"Good.groovy": good, "Poor.groovy": poor}}.write(t, content)
+	tFlow{pkg: "Orders", id: "Orders_In", steps: []tStep{tScript("S1", "Map", "Map.groovy")},
+		scripts: map[string]string{"Map.groovy": "// Script.\ndef Message processData(Message message) {\n  message\n}\n"}}.write(t, content)
+
+	res, err := Run(context.Background(), Options{Dir: content})
+	require.NoError(t, err)
+
+	quality := findingsOf(res, "collection-script-doc-quality", "Common_Scripts")
+	require.Len(t, quality, 1, "Good.groovy is complete")
+	assert.Equal(t, `Poor.groovy: formatDate: the description "TODO" says nothing; the comments do not name header SAP_Date, property isoDate (use @reads / @writes)`, quality[0].Message)
+	assert.Equal(t, SevWarning, quality[0].Severity)
+
+	keywords := findingsOf(res, "collection-script-keywords", "Common_Scripts")
+	require.Len(t, keywords, 1)
+	assert.Contains(t, keywords[0].Message, "Poor.groovy")
+	assert.Equal(t, SevInfo, keywords[0].Severity)
+
+	flowDoc := findingsOf(res, "script-doc", "Orders_In")
+	require.Len(t, flowDoc, 1)
+	assert.Equal(t, `script Map.groovy: the description "Script." says nothing about what it does`, flowDoc[0].Message)
+}

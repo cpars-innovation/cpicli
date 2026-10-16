@@ -21,6 +21,22 @@ All notable changes to cpictl. Coming from FlashPipe? See
     names matched by prefix, `$expand` carrying hidden entities). All are closed and tested; configure and
     orchestrated commands whose items were refused by the scope now also end with exit code 9.
 
+- **Scripts are documented for reuse ([docs/script-docs.md](docs/script-docs.md)).** A comment template
+  for Groovy scripts: a first sentence with the words someone would search for, then `@reads`, `@writes`,
+  `@body`, `@throws`, `@keywords`, `@example`.
+  - discover and the graph read the tags. Script nodes now carry `reusable` (`true` for scripts of
+    script collections), `keywords`, `reads` and `writes` (headers and properties the code uses by name),
+    `docStatus` (`ok`, `incomplete`, `missing`), `usages` (flows using the script) and `shape` (equal for
+    scripts that differ only in comments and formatting, to find near-duplicates).
+  - `graph_search` with several words finds nodes that contain all of them (`"format date"`).
+  - New lint rules `collection-script-doc-quality` (warning: placeholder first sentence, headers or
+    properties the code uses that the comments do not name) and `collection-script-keywords` (info);
+    `script-doc` also reports placeholder first sentences.
+  - `cpictl script-doc <files>` checks single scripts offline (`--fail` for CI); `--hook` runs it as a
+    Claude Code hook, which the cpi plugin now installs: after the agent writes a Groovy script it gets
+    the missing parts back right away.
+  - The skills search the graph for reusable scripts before writing one and use the template.
+
 Security hardening (from a security review of the codebase):
 - **IDs are escaped in every SAP API URL.** Package, artifact, runtime, Partner Directory, configuration and API
   Management keys were put into URLs as they came. An ID like `X')/IntegrationPackages('Y` changed which entity the

@@ -32,7 +32,10 @@ func graphTools(cfg Config) []Tool {
 			Name: "graph_search", Title: "Search the content graph",
 			Description: "Find flows, packages, endpoints (sender, ProcessDirect and JMS addresses), systems (receiver hosts), credentials, scripts, headers, " +
 				"properties, custom headers, Partner Directory parameters, OData entities (host/entity set) and IDoc types (ORDERS05) in the graph that " +
-				"discover_tenant wrote; matches key, name and attributes, best first. " +
+				"discover_tenant wrote; matches key, name and attributes (a query of several words matches nodes that contain all of them), best first. " +
+				"Scripts carry what is needed to reuse them: reusable=true for scripts of script collections (call those instead of copying), summary, " +
+				"keywords, functions, reads and writes (headers/properties by name), usages (flows using it), docStatus (ok, incomplete, missing) and " +
+				"shape (equal shape = same code apart from comments and formatting: search the shape value to find near-duplicates). " +
 				"Faster and smaller than reading discovery.json. Node types: " + strings.Join(ops.GraphNodeTypes, ", ") + ". Reads a local file only; " +
 				"the graph reflects the last discovery.",
 			InputSchema: object(props{

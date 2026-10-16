@@ -178,8 +178,9 @@ func BuildGraph(d *Discovery) *Graph {
 					fns = append(fns, strings.TrimSpace(fn.Name+": "+fn.Summary))
 				}
 			}
-			script := b.node(NodeScript, c.ID+"/"+s.Name, c.ID+"/"+s.Name, map[string]string{"collection": c.ID, "package": c.PackageID,
-				"language": s.Language, "lines": fmt.Sprint(s.Lines), "summary": s.Summary, "functions": strings.Join(fns, "; ")})
+			attrs := scriptAttrs(s, true)
+			attrs["collection"], attrs["package"], attrs["functions"] = c.ID, c.PackageID, strings.Join(fns, "; ")
+			script := b.node(NodeScript, c.ID+"/"+s.Name, c.ID+"/"+s.Name, attrs)
 			for _, h := range s.CustomHeaders {
 				b.edge(GraphEdge{From: script, To: b.node(NodeCustomHeader, h, h, nil), Type: EdgeLogsHeader})
 			}
@@ -223,7 +224,7 @@ func BuildGraph(d *Discovery) *Graph {
 			b.edge(GraphEdge{From: flow, To: collectionScript(r.Collection, r.Script), Type: EdgeUsesScript, Via: r.Function})
 		}
 		for _, s := range f.Scripts {
-			script := b.node(NodeScript, s.Hash, s.Name, map[string]string{"language": s.Language, "lines": fmt.Sprint(s.Lines), "summary": s.Summary})
+			script := b.node(NodeScript, s.Hash, s.Name, scriptAttrs(s, false))
 			b.edge(GraphEdge{From: flow, To: script, Type: EdgeUsesScript})
 			for _, h := range s.CustomHeaders {
 				b.edge(GraphEdge{From: script, To: b.node(NodeCustomHeader, h, h, nil), Type: EdgeLogsHeader})
@@ -265,6 +266,7 @@ func BuildGraph(d *Discovery) *Graph {
 	for _, e := range derived {
 		b.edge(e)
 	}
+	b.countScriptUsages()
 	g := b.g
 	sort.Slice(g.Nodes, func(i, j int) bool { return g.Nodes[i].ID < g.Nodes[j].ID })
 	sort.Slice(g.Edges, func(i, j int) bool {
@@ -588,7 +590,10 @@ func (g *Graph) Search(query string, types []string, limit int) (*GraphSearchRes
 }
 
 // matchRank: 0 exact key or name, 1 prefix, 2 contained in key or name, 3
-// contained in an attribute; -1 no match. An empty query matches everything.
+// contained in an attribute, 4 every word of a query of several words
+// somewhere in the key, name or attributes ("format date" finds a script
+// whose summary says "Formats an SAP date"); -1 no match. An empty query
+// matches everything.
 func matchRank(q string, n GraphNode) int {
 	if q == "" {
 		return 0
@@ -607,6 +612,19 @@ func matchRank(q string, n GraphNode) int {
 		if strings.Contains(strings.ToLower(v), q) {
 			return 3
 		}
+	}
+	if words := strings.Fields(q); len(words) > 1 {
+		all := []string{key, name}
+		for _, v := range n.Attrs {
+			all = append(all, strings.ToLower(v))
+		}
+		text := strings.Join(all, " ")
+		for _, w := range words {
+			if !strings.Contains(text, w) {
+				return -1
+			}
+		}
+		return 4
 	}
 	return -1
 }
@@ -789,4 +807,45 @@ func checkTypes(types, valid []string, kind string) error {
 		}
 	}
 	return nil
+}
+
+// scriptAttrs are what a script node says for reuse: what it does
+// (summary, keywords), what it touches (reads, writes), whether its doc is
+// good enough to reuse it (docStatus), scripts that differ only in comments
+// and formatting (same shape) and whether it is meant for reuse (reusable:
+// the scripts of script collections).
+func scriptAttrs(s ScriptFacts, collection bool) map[string]string {
+	a := map[string]string{"language": s.Language, "lines": fmt.Sprint(s.Lines), "summary": s.Summary,
+		"reusable": fmt.Sprint(collection), "shape": s.Shape}
+	set := func(k, v string) {
+		if v != "" {
+			a[k] = v
+		}
+	}
+	set("keywords", strings.Join(s.Keywords, ", "))
+	set("reads", strings.Join(s.Reads, ", "))
+	set("writes", strings.Join(s.Writes, ", "))
+	set("docStatus", s.DocStatus)
+	return a
+}
+
+// countScriptUsages sets "usages" on each script node: the number of flows
+// that use it (a flow script used by several flows is one node, a
+// candidate for a script collection).
+func (b *graphBuilder) countScriptUsages() {
+	count := map[string]int{}
+	for _, e := range b.g.Edges {
+		if e.Type == EdgeUsesScript {
+			count[e.To]++
+		}
+	}
+	for i, n := range b.g.Nodes {
+		if n.Type != NodeScript {
+			continue
+		}
+		if n.Attrs == nil {
+			b.g.Nodes[i].Attrs = map[string]string{}
+		}
+		b.g.Nodes[i].Attrs["usages"] = fmt.Sprint(count[n.ID])
+	}
 }

@@ -133,6 +133,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`resources`](#resources) | List the resources (scripts, mappings, schemas, ...) of an integration flow |
 | [`resources get`](#resources-get) | Download one resource of an integration flow |
 | [`runtimes`](#runtimes) | List the tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each |
+| [`script-doc`](#script-doc) | Check the comments of Groovy scripts against the script doc template |
 | [`send`](#send) | Send a test message to a deployed integration flow |
 | [`skills`](#skills) | List, read and install the cpi skills built into cpictl |
 | [`skills install`](#skills-install) | Copy the skills into the skill folder of an agent |
@@ -3063,6 +3064,67 @@ the flow is not on the Cloud Integration runtime.
   cpictl runtimes
   cpictl runtimes --artifacts
   cpictl runtimes --artifacts --runtime integrationcell --output json
+```
+
+## script-doc
+
+Check the comments of Groovy scripts against the script doc template
+
+```
+Checks what the comments of Groovy scripts say, offline: a first sentence that
+says what the script does, and for scripts of a script collection (found by the
+MANIFEST.MF of the artifact folder) a description per public function, every
+header and property the code reads or writes named with @reads / @writes, and
+@keywords. These are the facts discover and the graph use to find scripts for
+reuse; lint reports the same as script-doc, collection-script-doc,
+collection-script-doc-quality and collection-script-keywords
+(docs/script-docs.md).
+
+The template (one comment per public function, or one at the top of a flow
+script):
+
+/**
+ * Formats the SAP date in header SAP_Date as ISO 8601 into header ISO_Date.
+ *
+ * Optional details: when to use it, edge cases, what it does not do.
+ *
+ * @reads    header SAP_Date (yyyyMMdd)
+ * @reads    property dateFormat (optional, default yyyy-MM-dd)
+ * @writes   header ISO_Date
+ * @body     unchanged
+ * @throws   IllegalArgumentException when SAP_Date is not yyyyMMdd
+ * @keywords date, format, ISO 8601, SAP date
+ * @example  script collection Common_Scripts, file DateUtils.groovy, function formatSapDate
+ */
+def Message formatSapDate(Message message) {
+
+Tags: @reads and @writes ("header X", "property Y", or "body" with what is
+expected), @body (what happens to the body), @param and @return for helper
+functions, @throws, @keywords (comma-separated words someone would search
+for), @example (how to call it), @deprecated (what to use instead).
+
+With --hook it runs as a Claude Code PostToolUse hook: it reads the hook's
+JSON from standard input, checks the file the tool wrote when it is a Groovy
+script and, when something is missing, writes it to standard error with exit
+code 2, which Claude Code hands to the agent. Other files and complete
+comments end silently with 0. The cpi plugin installs this hook.
+```
+
+**Usage:** `cpictl script-doc [file...] [flags]`
+
+**Flags:**
+
+```
+      --fail   Exit with code 5 when a script's comments are incomplete
+      --hook   Run as a Claude Code PostToolUse hook (JSON on standard input)
+```
+
+**Examples:**
+
+```
+  cpictl script-doc packages/Common/Common_Scripts/src/main/resources/script/DateUtils.groovy
+  cpictl script-doc --output json script/*.groovy
+  cpictl script-doc --hook < hook-input.json
 ```
 
 ## send

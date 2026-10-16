@@ -51,6 +51,7 @@ stay inside the repository you opened.
 | `cpi-improve` | Lint packages or flows ([lint.md](lint.md)), write proposals to `.cpi/improvements/` (script collections, Partner Directory, dead steps, best practices), apply one agreed proposal at a time | local files; tenant (dev) when applying |
 | `cpi-operate` | Find what is failing and why, follow a message by its business key, handle messages waiting in JMS queues (retry, move), check runtime errors, locks, certificates, connections and tenant settings ([monitoring.md](monitoring.md)) | tenant (retries, moves, log level) only with your go |
 | agent `cpi-reviewer` | Does the review for cpi-review with a fresh context and read-only tools | none |
+| hook `cpictl script-doc --hook` | After Claude Code writes a Groovy script, reports what its comments lack (first sentence, `@reads` / `@writes`, `@keywords`; [script-docs.md](script-docs.md)) so the agent completes them; silent for other files and when `cpictl` is not installed | none |
 
 Skills are picked automatically from what you ask ("build an interface that ...", "why do the
 orders fail?"), or called directly, e.g. `/cpi:cpi-discover`. To see what is available, run

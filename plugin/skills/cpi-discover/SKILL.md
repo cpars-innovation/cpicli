@@ -36,9 +36,13 @@ The summary contains counts, not rules. Then **look at examples** to understand 
 - `list_credentials`: how are credentials named (compare with `summary.credentialRefs`)?
 - Script collections are in `discovery.json` (`scriptCollections`): each script with its summary
   and functions (from their doc comments), and `iflows[].collectionScripts` says which flows call
-  which function. `graph_search` with `types: ["script"]` finds them by purpose. Note collections
-  whose functions have no comments: the conventions should name them as reuse candidates that
-  need documenting (lint `collection-script-doc`).
+  which function. `graph_search` with `types: ["script"]` finds them by purpose; script nodes
+  carry `reusable`, `docStatus`, `keywords`, `reads`, `writes`, `usages` and `shape`. Note
+  collections whose scripts are not `docStatus: ok`: the conventions should name them as reuse
+  candidates that need documenting (lint `collection-script-doc`, `collection-script-doc-quality`),
+  and flow scripts with `usages` > 1 or a shared `shape` as candidates for a collection. Put the
+  comment template ([script-docs.md](../cpi-build/script-docs.md)) into the conventions'
+  script section.
 - The graph shows how flows work together: `graph_search` with `types: ["endpoint"]` lists the
   ProcessDirect and JMS addresses (naming of internal interfaces), `graph_neighbors` on a
   common script or header shows which flows share it, `sends_to` edges show whether flows are

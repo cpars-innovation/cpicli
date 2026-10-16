@@ -26,6 +26,8 @@ cpictl lint --list-rules
 | | `duplicate-mapping` | warning | the same message mapping or XSLT in several flows | |
 | | `missing-script-collection` | warning | a referenced collection not in the repository | |
 | | `collection-script-doc` | warning | a public function of a script collection without a doc comment (what it does, what it reads and writes, how to call it); the first sentence is what discovery and `graph_search` show | |
+| | `collection-script-doc-quality` | warning | a script collection's comments do not say enough to reuse it: a placeholder first sentence (TODO, "Script.", fewer than three words, the function name) or a header or property the code reads or writes by name that no comment names ([script-docs.md](script-docs.md)) | |
+| | `collection-script-keywords` | info | a script of a script collection without `@keywords`, the words `graph_search` finds it by | |
 | partner-directory | `router-literals` | warning | a router deciding on 4+ literal values of one header or property | |
 | | `lookup-table-in-script` | info | a script with 10+ literal map entries or case branches | |
 | | `deployment-copies` | info | one folder deployed under several IDs with different `configOverrides` (from the deploy config) | |
@@ -69,7 +71,7 @@ cpictl lint --list-rules
 | | `flow-without-deployment` | warning | a flow in a package folder the deploy config (`repository.deployConfig`, `--deploy-config`, `orchestrator.deployConfig`) covers, without an entry of its own | |
 | hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
 | hygiene | `outdated-component` | info | a step or adapter older than the tenant offers (with a [component catalogue](components.md)), else older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
-| | `script-doc` | info | a flow's local script with no comment saying what it does (at the top or above its function) | |
+| | `script-doc` | info | a flow's local script with no comment saying what it does (at the top or above its function), or one whose first sentence is a placeholder | |
 | | `default-step-name` | info | "Groovy Script 1", "Content Modifier 2", ... | |
 | | `layout` | info | the diagram has steps or lines that are not drawn, overlapping shapes, shapes outside their pool, lines through steps or shapes that nearly touch ([diagram layout](#diagram-layout)) | yes |
 | | `naming` | warning | a flow ID not matching `naming.iflowId` | |

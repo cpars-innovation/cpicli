@@ -38,6 +38,7 @@ Group findings into **proposals** by what a person would approve, not one per fi
 | Proposal | Built from |
 |----------|-----------|
 | One script collection per cluster of shared scripts (package or shared) | `duplicate-script`, `use-script-collection`, `similar-script`, `large-script` |
+| Documentation of script collections, so they are found and reused | `collection-script-doc`, `collection-script-doc-quality`, `collection-script-keywords` |
 | One shared mapping artifact per duplicated mapping | `duplicate-mapping` |
 | One Partner Directory design per routing table, lookup table or flow family | `router-literals`, `lookup-table-in-script`, `deployment-copies`, `hardcoded-endpoint` |
 | A dead-weight sweep per package | `unconnected-step`, `unused-*`, `noop-content-modifier`, `property-never-read`, `dead-local-process` |

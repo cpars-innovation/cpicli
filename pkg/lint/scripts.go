@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -21,7 +22,7 @@ import (
 
 // collectionRules are the artifact rules that check script collections (the
 // others check integration flows).
-var collectionRules = map[string]bool{"collection-script-doc": true, "collection-script-tests": true, "collection-script-coverage": true,
+var collectionRules = map[string]bool{"collection-script-doc": true, "collection-script-doc-quality": true, "collection-script-keywords": true, "collection-script-tests": true, "collection-script-coverage": true,
 	"hardcoded-secret": true, "hardcoded-url-in-script": true, "swallowed-exception": true, "println": true}
 
 // collectionScriptFiles are the Groovy scripts of a script collection, sorted.
@@ -90,18 +91,56 @@ func ruleScriptDoc(lc *lintContext, a *lintArtifact) []Finding {
 		if entry == "" {
 			entry = "processData"
 		}
-		documented := doc.Header != ""
-		for _, fn := range doc.Functions {
-			if fn.Name == entry && fn.Documented() {
-				documented = true
+		summary, fn := ops.SummaryOf(doc.Header), ""
+		for _, f := range doc.Functions {
+			if summary == "" && f.Name == entry && f.Documented() {
+				summary, fn = f.Summary, f.Name
 			}
 		}
-		if documented {
-			continue
+		fix := "add a comment at the top or above " + entry + ": what the step does and what it reads and writes (docs/script-docs.md)"
+		switch {
+		case summary == "":
+			out = append(out, a.finding("script-doc", file, s.el.ID, s.el.Name, s.script,
+				fmt.Sprintf("script %s says nothing about what it does", s.script), fix))
+		case ops.PoorSummary(summary, fn):
+			out = append(out, a.finding("script-doc", file, s.el.ID, s.el.Name, s.script,
+				fmt.Sprintf("script %s: the description %q says nothing about what it does", s.script, summary), fix))
 		}
-		out = append(out, a.finding("script-doc", file, s.el.ID, s.el.Name, s.script,
-			fmt.Sprintf("script %s says nothing about what it does", s.script),
-			"add a comment at the top or above "+entry+": what the step does and what it reads and writes"))
+	}
+	return out
+}
+
+func ruleCollectionScriptDocQuality(lc *lintContext, a *lintArtifact) []Finding {
+	return collectionDocIssues(a, "collection-script-doc-quality", []string{ops.DocIssuePlaceholder, ops.DocIssueUndocumented},
+		"the first sentence says what the function does (it is what graph_search and other developers see); name every header "+
+			"and property it reads or writes with @reads / @writes (template: docs/script-docs.md)")
+}
+
+func ruleCollectionScriptKeywords(lc *lintContext, a *lintArtifact) []Finding {
+	return collectionDocIssues(a, "collection-script-keywords", []string{ops.DocIssueNoKeywords},
+		"add @keywords with the words someone would search for (\"@keywords date, format, ISO 8601\"); graph_search finds the script by them")
+}
+
+// collectionDocIssues reports the doc issues of the given kinds of each
+// script of a script collection, one finding per script.
+func collectionDocIssues(a *lintArtifact, rule string, kinds []string, fix string) []Finding {
+	if a.Type != "ScriptCollection" {
+		return nil
+	}
+	var out []Finding
+	for _, f := range collectionScriptFiles(a) {
+		var msgs, fns []string
+		for _, i := range ops.CheckScriptDoc(a.Scripts[f], true) {
+			if slices.Contains(kinds, i.Kind) {
+				msgs = append(msgs, i.Message)
+				if i.Function != "" {
+					fns = append(fns, i.Function)
+				}
+			}
+		}
+		if len(msgs) > 0 {
+			out = append(out, a.finding(rule, f, "", "", strings.Join(fns, ","), scriptRef(f)+": "+strings.Join(msgs, "; "), fix))
+		}
 	}
 	return out
 }
