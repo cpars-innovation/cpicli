@@ -36,6 +36,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
     Claude Code hook, which the cpi plugin now installs: after the agent writes a Groovy script it gets
     the missing parts back right away.
   - The skills search the graph for reusable scripts before writing one and use the template.
+- **Graph: adapter and step versions, mappings.** Every adapter and step a flow uses is a `component` node
+  (`component:adapter/HTTP/Receiver`, "OData receiver (OData V2)") with the versions in use, the newest and
+  how many flows are behind it; the flow's version is on the `uses_component` edge. With the editor's
+  component catalogue (`cpictl components import`) the node also says what the tenant offers and how many
+  flows are outdated. Mapping files (by content hash, so copies are one node), referenced message mapping
+  artifacts and value mappings that scripts look up are nodes too (`mapping`, `value_mapping`).
+  See [docs/graph.md](docs/graph.md#versions-of-adapters-and-steps).
 
 Security hardening (from a security review of the codebase):
 - **IDs are escaped in every SAP API URL.** Package, artifact, runtime, Partner Directory, configuration and API

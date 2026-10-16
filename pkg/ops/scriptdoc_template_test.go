@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -153,4 +154,58 @@ func TestGraphScriptReuse(t *testing.T) {
 	res, err = g.Search("format nothing", nil, 0)
 	require.NoError(t, err)
 	assert.Zero(t, res.Total, "every word has to match")
+}
+
+// Adapters and steps are component nodes (all versions in one node), the
+// edge carries the flow's version; the catalogue's editor versions mark
+// outdated flows. Mappings and value mappings are nodes too.
+func TestGraphComponentsAndMappings(t *testing.T) {
+	http := func(v string) string {
+		return "ctype::AdapterVariant/cname::sap:HTTP/tp::HTTP/mp::None/direction::Receiver/version::" + v
+	}
+	odata := "ctype::AdapterVariant/cname::sap:OData/tp::HTTP/mp::OData V2/direction::Receiver/version::1.25.0"
+	groovy := "ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2"
+	flow := func(id string, comps ...string) IFlowFacts {
+		return IFlowFacts{ID: id, PackageID: "Sales", Triggers: []Trigger{}, Receivers: []Trigger{}, Components: comps}
+	}
+	a := flow("A", http("1.17.1"), odata, groovy)
+	a.Mappings = []MappingRef{{Name: "Orders.mmap", Kind: "message mapping", Hash: "abc123"}, {Artifact: "Shared_OrderMapping", Step: "Map order"}}
+	a.ValueMappings = []string{"SAP/Country"}
+	b := flow("B", http("1.14.0"))
+	b.Mappings = []MappingRef{{Name: "Orders.mmap", Kind: "message mapping", Hash: "abc123"}}
+	g := BuildGraph(&Discovery{IFlows: []IFlowFacts{a, b}})
+	edges := edgeSet(g.Edges)
+
+	assert.Contains(t, edges, "iflow:A -uses_component-> component:adapter/HTTP/Receiver")
+	assert.Contains(t, edges, "iflow:A -uses_component-> component:adapter/OData/OData V2/Receiver")
+	assert.Contains(t, edges, "iflow:A -uses_component-> component:step/GroovyScript")
+	assert.Contains(t, edges, "iflow:A -uses_mapping-> mapping:abc123")
+	assert.Contains(t, edges, "iflow:B -uses_mapping-> mapping:abc123", "the same mapping file in two flows is one node")
+	assert.Contains(t, edges, "iflow:A -uses_mapping-> mapping:Shared_OrderMapping")
+	assert.Contains(t, edges, "iflow:A -uses_value_mapping-> value_mapping:SAP/Country")
+
+	n, ok := g.Node("component:adapter/HTTP/Receiver")
+	require.True(t, ok)
+	assert.Equal(t, "HTTP receiver", n.Name)
+	assert.Equal(t, "1.17.1: 1, 1.14.0: 1", n.Attrs["versions"])
+	assert.Equal(t, "1.17.1", n.Attrs["newest"])
+	assert.Equal(t, "1", n.Attrs["behind"])
+	for _, e := range g.Edges {
+		if e.From == "iflow:B" && e.Type == EdgeUsesComponent {
+			assert.Equal(t, "1.14.0", e.Version)
+		}
+	}
+	o, _ := g.Node("component:adapter/OData/OData V2/Receiver")
+	assert.Equal(t, "OData receiver (OData V2)", o.Name)
+
+	g.MarkOfferedVersions(&catalog.Catalog{Adapters: []catalog.Adapter{
+		{Name: "HTTP", Direction: "Receiver", VariantURI: http("1.18.0"), Version: "1.18.0", Source: catalog.SourceEditor}}})
+	n, _ = g.Node("component:adapter/HTTP/Receiver")
+	assert.Equal(t, "1.18.0", n.Attrs["offered"])
+	assert.Equal(t, "2", n.Attrs["outdated"])
+
+	res, err := g.Search("http receiver", []string{NodeComponent}, 0)
+	require.NoError(t, err)
+	require.NotZero(t, res.Total)
+	assert.Equal(t, "component:adapter/HTTP/Receiver", res.Matches[0].ID)
 }

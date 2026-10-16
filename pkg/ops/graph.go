@@ -3,6 +3,7 @@ package ops
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,50 +14,57 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/catalog"
 )
 
 // Node types of the content graph.
 const (
 	NodePackage      = "package"
 	NodeIFlow        = "iflow"
-	NodeEndpoint     = "endpoint"     // a sender or ProcessDirect/JMS receiver address
-	NodeSystem       = "system"       // a host that receivers call
-	NodeCredential   = "credential"   // credential name or key alias
-	NodeScript       = "script"       // script content (by hash: identical copies are one node)
-	NodeHeader       = "header"       // header set by a Content Modifier
-	NodeProperty     = "property"     // exchange property set by a Content Modifier
-	NodeCustomHeader = "customheader" // custom header property written by a script
-	NodePD           = "pd"           // Partner Directory parameter PID:ID
-	NodeODataEntity  = "odata_entity" // <host or service>/<entity set> an OData receiver reads or writes
-	NodeIDocType     = "idoc_type"    // IDoc type (ORDERS05, ZORDERS05)
+	NodeEndpoint     = "endpoint"      // a sender or ProcessDirect/JMS receiver address
+	NodeSystem       = "system"        // a host that receivers call
+	NodeCredential   = "credential"    // credential name or key alias
+	NodeScript       = "script"        // script content (by hash: identical copies are one node)
+	NodeHeader       = "header"        // header set by a Content Modifier
+	NodeProperty     = "property"      // exchange property set by a Content Modifier
+	NodeCustomHeader = "customheader"  // custom header property written by a script
+	NodePD           = "pd"            // Partner Directory parameter PID:ID
+	NodeODataEntity  = "odata_entity"  // <host or service>/<entity set> an OData receiver reads or writes
+	NodeIDocType     = "idoc_type"     // IDoc type (ORDERS05, ZORDERS05)
+	NodeComponent    = "component"     // adapter or step variant (HTTP receiver, Groovy script step), any version
+	NodeMapping      = "mapping"       // a flow's mapping file (by hash) or a message mapping artifact it references
+	NodeValueMapping = "value_mapping" // value mapping <agency>/<identifier> a script looks up
 )
 
 // Edge types of the content graph.
 const (
-	EdgeContains       = "contains"        // package -> iflow
-	EdgeExposes        = "exposes"         // iflow -> endpoint it is started by
-	EdgeCalls          = "calls"           // iflow -> ProcessDirect/JMS endpoint it sends to
-	EdgeSendsTo        = "sends_to"        // iflow -> iflow, through an endpoint (via)
-	EdgeCallsSystem    = "calls_system"    // iflow -> system
-	EdgeUsesCredential = "uses_credential" // iflow -> credential
-	EdgeUsesScript     = "uses_script"     // iflow -> script
-	EdgeSetsHeader     = "sets_header"     // iflow -> header
-	EdgeSetsProperty   = "sets_property"   // iflow -> property
-	EdgeLogsHeader     = "logs_header"     // script -> customheader
-	EdgeReadsPD        = "reads_pd"        // iflow -> pd
-	EdgeReadsOData     = "reads_odata"     // iflow -> odata_entity (Query, Read)
-	EdgeWritesOData    = "writes_odata"    // iflow -> odata_entity (Create, Update, Merge, Delete, Function Import, $batch)
-	EdgeReceivesIDoc   = "receives_idoc"   // iflow -> idoc_type, the flow has an IDoc sender channel
-	EdgeSendsIDoc      = "sends_idoc"      // iflow -> idoc_type, the flow has an IDoc receiver channel
+	EdgeContains       = "contains"           // package -> iflow
+	EdgeExposes        = "exposes"            // iflow -> endpoint it is started by
+	EdgeCalls          = "calls"              // iflow -> ProcessDirect/JMS endpoint it sends to
+	EdgeSendsTo        = "sends_to"           // iflow -> iflow, through an endpoint (via)
+	EdgeCallsSystem    = "calls_system"       // iflow -> system
+	EdgeUsesCredential = "uses_credential"    // iflow -> credential
+	EdgeUsesScript     = "uses_script"        // iflow -> script
+	EdgeSetsHeader     = "sets_header"        // iflow -> header
+	EdgeSetsProperty   = "sets_property"      // iflow -> property
+	EdgeLogsHeader     = "logs_header"        // script -> customheader
+	EdgeReadsPD        = "reads_pd"           // iflow -> pd
+	EdgeReadsOData     = "reads_odata"        // iflow -> odata_entity (Query, Read)
+	EdgeWritesOData    = "writes_odata"       // iflow -> odata_entity (Create, Update, Merge, Delete, Function Import, $batch)
+	EdgeReceivesIDoc   = "receives_idoc"      // iflow -> idoc_type, the flow has an IDoc sender channel
+	EdgeSendsIDoc      = "sends_idoc"         // iflow -> idoc_type, the flow has an IDoc receiver channel
+	EdgeUsesComponent  = "uses_component"     // iflow -> component, in the edge's version
+	EdgeUsesMapping    = "uses_mapping"       // iflow -> mapping
+	EdgeUsesValueMap   = "uses_value_mapping" // iflow -> value_mapping
 )
 
 // GraphNodeTypes and GraphEdgeTypes list the types for validation and docs.
 var (
 	GraphNodeTypes = []string{NodePackage, NodeIFlow, NodeEndpoint, NodeSystem, NodeCredential, NodeScript,
-		NodeHeader, NodeProperty, NodeCustomHeader, NodePD, NodeODataEntity, NodeIDocType}
+		NodeHeader, NodeProperty, NodeCustomHeader, NodePD, NodeODataEntity, NodeIDocType, NodeComponent, NodeMapping, NodeValueMapping}
 	GraphEdgeTypes = []string{EdgeContains, EdgeExposes, EdgeCalls, EdgeSendsTo, EdgeCallsSystem, EdgeUsesCredential,
 		EdgeUsesScript, EdgeSetsHeader, EdgeSetsProperty, EdgeLogsHeader, EdgeReadsPD, EdgeReadsOData, EdgeWritesOData,
-		EdgeReceivesIDoc, EdgeSendsIDoc}
+		EdgeReceivesIDoc, EdgeSendsIDoc, EdgeUsesComponent, EdgeUsesMapping, EdgeUsesValueMap}
 	// pathEdgeTypes are followed by GraphPath by default: how messages move.
 	pathEdgeTypes = []string{EdgeExposes, EdgeCalls, EdgeSendsTo}
 )
@@ -106,6 +114,8 @@ type GraphEdge struct {
 	// writes_odata; where the IDoc type of receives_idoc and sends_idoc was
 	// found.
 	Via string `json:"via,omitempty"`
+	// Version is the component version of uses_component.
+	Version string `json:"version,omitempty"`
 }
 
 // linkedAdapters are the adapters whose receiver address matches a sender
@@ -146,7 +156,7 @@ func (b *graphBuilder) node(typ, key, name string, attrs map[string]string) stri
 }
 
 func (b *graphBuilder) edge(e GraphEdge) {
-	key := e.From + "\x00" + e.Type + "\x00" + e.To
+	key := e.From + "\x00" + e.Type + "\x00" + e.To + "\x00" + e.Version
 	if b.edges[key] {
 		return
 	}
@@ -230,6 +240,23 @@ func BuildGraph(d *Discovery) *Graph {
 				b.edge(GraphEdge{From: script, To: b.node(NodeCustomHeader, h, h, nil), Type: EdgeLogsHeader})
 			}
 		}
+		for _, uri := range f.Components {
+			if key, name, attrs, ok := componentOf(uri); ok {
+				b.edge(GraphEdge{From: flow, To: b.node(NodeComponent, key, name, attrs), Type: EdgeUsesComponent, Version: catalog.Version(uri)})
+			}
+		}
+		for _, m := range f.Mappings {
+			if m.Artifact != "" {
+				b.edge(GraphEdge{From: flow, To: b.node(NodeMapping, m.Artifact, m.Artifact, map[string]string{"artifact": "true"}),
+					Type: EdgeUsesMapping, Via: m.Step})
+				continue
+			}
+			b.edge(GraphEdge{From: flow, To: b.node(NodeMapping, m.Hash, m.Name, map[string]string{"kind": m.Kind, "shape": m.Hash}),
+				Type: EdgeUsesMapping, Via: m.Step})
+		}
+		for _, v := range f.ValueMappings {
+			b.edge(GraphEdge{From: flow, To: b.node(NodeValueMapping, v, v, nil), Type: EdgeUsesValueMap})
+		}
 		for _, h := range f.HeadersSet {
 			b.edge(GraphEdge{From: flow, To: b.node(NodeHeader, h, h, nil), Type: EdgeSetsHeader})
 		}
@@ -267,6 +294,7 @@ func BuildGraph(d *Discovery) *Graph {
 		b.edge(e)
 	}
 	b.countScriptUsages()
+	b.summarizeComponents()
 	g := b.g
 	sort.Slice(g.Nodes, func(i, j int) bool { return g.Nodes[i].ID < g.Nodes[j].ID })
 	sort.Slice(g.Edges, func(i, j int) bool {
@@ -474,7 +502,7 @@ func graphFromDiscoveryFile(file string) (*Graph, error) {
 	if err != nil {
 		return nil, err
 	}
-	return BuildGraph(d), nil
+	return BuildGraphFor(d, file), nil
 }
 
 // ReadDiscovery reads a file written by WriteDiscovery.
@@ -848,4 +876,134 @@ func (b *graphBuilder) countScriptUsages() {
 		}
 		b.g.Nodes[i].Attrs["usages"] = fmt.Sprint(count[n.ID])
 	}
+}
+
+// componentOf turns a cmdVariantUri of an adapter or step into a component
+// node: key and name without the version ("adapter/HTTP/Receiver", "HTTP
+// receiver"), so that all versions of a variant are one node.
+func componentOf(uri string) (key, name string, attrs map[string]string, ok bool) {
+	p := catalog.ParseURI(uri)
+	cname := strings.TrimPrefix(p["cname"], "sap:")
+	if cname == "" {
+		return "", "", nil, false
+	}
+	// adapters and steps; processes, events and the flow configuration
+	// say nothing about versions anyone upgrades
+	kind := map[string]string{"AdapterVariant": "adapter", "FlowstepVariant": "step"}[p["ctype"]]
+	if kind == "" || kind == "step" && strings.HasSuffix(cname, "Event") {
+		return "", "", nil, false
+	}
+	attrs = map[string]string{"kind": kind, "component": cname, "variant": catalog.Key(uri)}
+	parts := []string{kind, cname}
+	name = cname
+	if kind == "adapter" {
+		mp := p["mp"]
+		if mp != "" && mp != "None" && mp != "Not Applicable" {
+			parts = append(parts, mp)
+			attrs["messageProtocol"] = mp
+		}
+		if tp := p["tp"]; tp != "" && tp != "None" && tp != "Not Applicable" {
+			attrs["transportProtocol"] = tp
+		}
+		dir := p["direction"]
+		parts = append(parts, dir)
+		attrs["direction"] = dir
+		name = strings.TrimSpace(cname + " " + strings.ToLower(dir))
+		if attrs["messageProtocol"] != "" {
+			name += " (" + attrs["messageProtocol"] + ")"
+		}
+	}
+	return strings.Join(parts, "/"), name, attrs, true
+}
+
+// summarizeComponents sets on each component node the versions the flows
+// use ("1.17.1: 3, 1.14.0: 1", newest first), the newest one, and the
+// number of flows on an older version (behind).
+func (b *graphBuilder) summarizeComponents() {
+	versions := map[string]map[string]map[string]bool{} // node -> version -> flows
+	for _, e := range b.g.Edges {
+		if e.Type != EdgeUsesComponent {
+			continue
+		}
+		if versions[e.To] == nil {
+			versions[e.To] = map[string]map[string]bool{}
+		}
+		if versions[e.To][e.Version] == nil {
+			versions[e.To][e.Version] = map[string]bool{}
+		}
+		versions[e.To][e.Version][e.From] = true
+	}
+	for i, n := range b.g.Nodes {
+		vs, ok := versions[n.ID]
+		if !ok {
+			continue
+		}
+		list := slices.Collect(maps.Keys(vs))
+		slices.SortFunc(list, func(a, c string) int { return catalog.CompareVersions(c, a) })
+		var parts []string
+		behind := map[string]bool{}
+		for j, v := range list {
+			parts = append(parts, fmt.Sprintf("%s: %d", cmpOr(v, "no version"), len(vs[v])))
+			if j > 0 {
+				for f := range vs[v] {
+					behind[f] = true
+				}
+			}
+		}
+		for f := range vs[list[0]] {
+			delete(behind, f) // a flow with the newest and an older one is not behind
+		}
+		b.g.Nodes[i].Attrs["versions"] = strings.Join(parts, ", ")
+		b.g.Nodes[i].Attrs["newest"] = list[0]
+		b.g.Nodes[i].Attrs["behind"] = fmt.Sprint(len(behind))
+	}
+}
+
+// MarkOfferedVersions adds what the tenant's editor offers (component
+// catalogue entries from the editor, cpictl components import) to the
+// component nodes: offered, and outdated = flows on an older version.
+func (g *Graph) MarkOfferedVersions(c *catalog.Catalog) {
+	if c == nil {
+		return
+	}
+	offered := map[string]string{}
+	for _, e := range g.Edges {
+		if e.Type != EdgeUsesComponent {
+			continue
+		}
+		if _, seen := offered[e.To]; seen {
+			continue
+		}
+		offered[e.To] = ""
+		n, _ := g.Node(e.To)
+		if v, ok := c.Offered(n.Attrs["variant"]); ok {
+			offered[e.To] = v
+		}
+	}
+	outdated := map[string]map[string]bool{}
+	for _, e := range g.Edges {
+		if v := offered[e.To]; e.Type == EdgeUsesComponent && v != "" && catalog.CompareVersions(e.Version, v) < 0 {
+			if outdated[e.To] == nil {
+				outdated[e.To] = map[string]bool{}
+			}
+			outdated[e.To][e.From] = true
+		}
+	}
+	for i, n := range g.Nodes {
+		if v := offered[n.ID]; v != "" {
+			g.Nodes[i].Attrs["offered"] = v
+			g.Nodes[i].Attrs["outdated"] = fmt.Sprint(len(outdated[n.ID]))
+		}
+	}
+}
+
+// BuildGraphFor builds the graph of a discovery file's discovery and marks
+// component versions against the component catalogue next to it
+// (components.json), when there is one.
+func BuildGraphFor(d *Discovery, discoveryFile string) *Graph {
+	g := BuildGraph(d)
+	if c, err := catalog.Load(filepath.Join(filepath.Dir(discoveryFile), "components.json")); err == nil {
+		g.MarkOfferedVersions(c)
+	}
+	return g
 }

@@ -41,6 +41,9 @@ or a unique name.
 | `pd` | literal Partner Directory parameter `PID:ID` (`:ID` when only the ID is literal) | `pd:SAP_SYSTEM_001:Identity` |
 | `odata_entity` | `<host>/<entity set>` an OData or SuccessFactors OData receiver reads or writes; `SuccessFactors/<entity set>` for SuccessFactors without host; attributes: `version` (V2, V4), `operations` (all flows), `host`, `entitySet`. A host that cannot be resolved makes an entity of its own flow (`…@<flow>`, `unresolved`) | `odata_entity:s4.example.com/A_SalesOrder`, `odata_entity:SuccessFactors/User` |
 | `idoc_type` | IDoc type (basic type or extension) a flow with an IDoc channel handles | `idoc_type:ORDERS05`, `idoc_type:ZORDERS05` |
+| `component` | an adapter (`adapter/<name>[/<message protocol>]/<direction>`) or step (`step/<name>`) in all versions; name like "HTTP receiver", "OData receiver (OData V2)"; attributes: `kind`, `component`, `direction`, `transportProtocol`, `messageProtocol`, `variant` (cmdVariantUri without version), `versions` (version: flows, newest first), `newest`, `behind` (flows on an older version than the newest in use) and, with a component catalogue from the tenant's editor next to the discovery (`cpictl components import`), `offered` (the tenant's version) and `outdated` (flows below it) | `component:adapter/HTTP/Receiver`, `component:adapter/OData/OData V2/Receiver`, `component:step/GroovyScript` |
+| `mapping` | a flow's mapping file (message mapping, XSLT, operation mapping) by content hash (the same file in several flows is one node), or a message mapping artifact a step references (`artifact: true`) | `mapping:9c1e0a7b2d4f`, `mapping:Shared_OrderMapping` |
+| `value_mapping` | value mapping `<agency>/<identifier>` a script looks up with literal arguments (`getMappedValue`) | `value_mapping:SAP/Country` |
 
 ## Edges
 
@@ -60,8 +63,23 @@ or a unique name.
 | `writes_odata` | iflow → odata_entity, operation Create, Update, Merge, Patch, Delete, Function Import or `$batch` (`via` is the operation) |
 | `receives_idoc` | iflow → idoc_type, the flow has an IDoc sender channel (`via`: where the type was found) |
 | `sends_idoc` | iflow → idoc_type, the flow has an IDoc receiver channel (`via`: where the type was found) |
+| `uses_component` | iflow → component, with the flow's `version` of it |
+| `uses_mapping` | iflow → mapping (`via`: the step that references a mapping artifact) |
+| `uses_value_mapping` | iflow → value_mapping |
 
 `exposes`, `calls`, `calls_system`, `reads_odata` and `writes_odata` carry the `adapter`.
+
+## Versions of adapters and steps
+
+Every adapter and step a flow uses is a `component` node, its version on the `uses_component` edge.
+
+- Which flows use the HTTP receiver, and in which version: `graph_neighbors` on
+  `component:adapter/HTTP/Receiver` with `direction: "in"`; each edge has `version`.
+- Where versions differ: `graph_search` with `types: ["component"]`; `versions` lists them,
+  `behind` counts flows on an older one.
+- Against the tenant: import the editor's component catalogue once (`cpictl components import`,
+  [components.md](components.md)) into `.cpi/components.json`; the next discover marks `offered` and
+  `outdated`. lint's `outdated-component` lists the same per flow.
 
 ## OData and IDoc
 

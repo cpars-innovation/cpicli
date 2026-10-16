@@ -53,7 +53,7 @@ and which systems they call. --graph=false skips it.`,
 			}
 			res := map[string]any{"file": file, "source": d.Source, "summary": d.Summary, "errors": d.Errors}
 			if withGraph, _ := cmd.Flags().GetBool("graph"); withGraph {
-				g := ops.BuildGraph(d)
+				g := ops.BuildGraphFor(d, file)
 				if err := ops.WriteGraph(g, ops.GraphFile(file)); err != nil {
 					return err
 				}

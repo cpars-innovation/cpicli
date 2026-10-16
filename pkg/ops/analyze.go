@@ -74,9 +74,16 @@ type IFlowFacts struct {
 	// IDocTypes are the IDoc types the flow handles, from its mappings,
 	// schemas, conditions and payloads (not from the IDoc adapter, which
 	// does not name them).
-	IDocTypes []IDocType     `json:"idocTypes,omitempty"`
-	Resources map[string]int `json:"resources"`
-	Error     string         `json:"error,omitempty"`
+	IDocTypes []IDocType `json:"idocTypes,omitempty"`
+	// Mappings are the flow's mapping files (message mappings, XSLT,
+	// operation mappings) and the message mapping artifacts its steps
+	// reference.
+	Mappings []MappingRef `json:"mappings,omitempty"`
+	// ValueMappings are the value mappings (<agency>/<identifier>) its
+	// scripts look up with literal source agency and identifier.
+	ValueMappings []string       `json:"valueMappings,omitempty"`
+	Resources     map[string]int `json:"resources"`
+	Error         string         `json:"error,omitempty"`
 
 	idocTypes map[string]map[string]bool // type -> sources, while reading
 }
@@ -126,6 +133,35 @@ type ScriptFacts struct {
 	// is missing (docs/script-docs.md).
 	DocStatus string           `json:"docStatus,omitempty"`
 	DocIssues []ScriptDocIssue `json:"docIssues,omitempty"`
+}
+
+// MappingRef is a mapping a flow uses: a file of its own (Name, Kind, Hash
+// of the content without line ending and trailing blank differences) or a
+// message mapping artifact a step references (Artifact, Step).
+type MappingRef struct {
+	Name     string `json:"name,omitempty"`
+	Kind     string `json:"kind,omitempty"` // message mapping, xslt, operation mapping
+	Hash     string `json:"hash,omitempty"`
+	Artifact string `json:"artifact,omitempty"`
+	Step     string `json:"step,omitempty"`
+}
+
+// mappingKinds are the mapping file types by extension.
+var mappingKinds = map[string]string{".mmap": "message mapping", ".xsl": "xslt", ".xslt": "xslt", ".opmap": "operation mapping"}
+
+// reValueMapping is a value mapping lookup with literal source agency and
+// identifier (ValueMappingApi.getMappedValue).
+var reValueMapping = regexp.MustCompile(`getMappedValue\(\s*["']([^"'$]+)["']\s*,\s*["']([^"'$]+)["']`)
+
+// mappingHash identifies the same mapping in several flows.
+func mappingHash(data []byte) string {
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+	for i, l := range lines {
+		lines[i] = strings.TrimRight(l, " \t")
+	}
+	sum := sha256.Sum256([]byte(strings.Trim(strings.Join(lines, "\n"), "\n")))
+	return hex.EncodeToString(sum[:6])
 }
 
 // ExceptionSubprocessFacts describe an exception subprocess.
@@ -233,8 +269,16 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 				f.addIDocTypes(rel, idocTypesInFile(rel, data))
 			}
 		}
+		if kind := mappingKinds[strings.ToLower(path.Ext(p))]; kind != "" && dir != "script" {
+			if data, err := fs.ReadFile(fsys, p); err == nil {
+				f.Mappings = append(f.Mappings, MappingRef{Name: path.Base(p), Kind: kind, Hash: mappingHash(data)})
+			}
+		}
 		if dir == "script" {
 			if data, err := fs.ReadFile(fsys, p); err == nil {
+				for _, m := range reValueMapping.FindAllSubmatch(data, -1) {
+					f.ValueMappings = append(f.ValueMappings, string(m[1])+"/"+string(m[2]))
+				}
 				f.Scripts = append(f.Scripts, analyzeScript(path.Base(p), data, false))
 				for _, m := range reGroovyParam.FindAllSubmatch(data, -1) {
 					f.PDReferences = append(f.PDReferences, string(m[2])+":"+string(m[1]))
@@ -245,7 +289,7 @@ func AnalyzeIFlow(fsys fs.FS) (*IFlowFacts, error) {
 	})
 	f.resolveSAPChannels(edmx)
 	f.collectIDocTypes()
-	for _, l := range []*[]string{&f.ProcessDirectCalls, &f.PDReferences, &f.SenderAdapters, &f.ReceiverAdapters, &f.CredentialRefs, &f.HeadersSet, &f.PropertiesSet, &f.Components} {
+	for _, l := range []*[]string{&f.ValueMappings, &f.ProcessDirectCalls, &f.PDReferences, &f.SenderAdapters, &f.ReceiverAdapters, &f.CredentialRefs, &f.HeadersSet, &f.PropertiesSet, &f.Components} {
 		*l = sortedUnique(*l)
 	}
 	return f, nil
@@ -395,6 +439,9 @@ func (f *IFlowFacts) addElement(el *modelElement) {
 	if bundle := p["scriptBundleId"]; bundle != "" && p["script"] != "" {
 		f.CollectionScripts = append(f.CollectionScripts, CollectionScriptRef{Collection: bundle, Script: path.Base(p["script"]),
 			Function: p["scriptFunction"]})
+	}
+	if ref, ok := strings.CutPrefix(p["mappingpath"], "p://"); ok && ref != "" {
+		f.Mappings = append(f.Mappings, MappingRef{Artifact: path.Base(ref), Step: el.label})
 	}
 	if uri := p["cmdVariantUri"]; uri != "" {
 		f.Components = append(f.Components, uri)

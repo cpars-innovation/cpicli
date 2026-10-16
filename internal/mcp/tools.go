@@ -1769,7 +1769,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if err := ops.WriteDiscovery(d, out); err != nil {
 					return nil, err
 				}
-				g := ops.BuildGraph(d)
+				g := ops.BuildGraphFor(d, out)
 				if err := ops.WriteGraph(g, ops.GraphFile(out)); err != nil {
 					return nil, err
 				}

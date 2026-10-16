@@ -1078,10 +1078,10 @@ Query the content graph written by discover (offline)
 
 ```
 Query .cpi/graph.json, the graph that 'cpictl discover' writes next to
-discovery.json. Nodes: package, iflow, endpoint, system, credential, script, header, property, customheader, pd, odata_entity, idoc_type.
+discovery.json. Nodes: package, iflow, endpoint, system, credential, script, header, property, customheader, pd, odata_entity, idoc_type, component, mapping, value_mapping.
 Node IDs are <type>:<key> (iflow:Orders_In, endpoint:ProcessDirect:/billing/in,
 pd:SAP_SYSTEM_001:Identity); commands also accept a key or a unique name.
-Edges: contains, exposes, calls, sends_to, calls_system, uses_credential, uses_script, sets_header, sets_property, logs_header, reads_pd, reads_odata, writes_odata, receives_idoc, sends_idoc.
+Edges: contains, exposes, calls, sends_to, calls_system, uses_credential, uses_script, sets_header, sets_property, logs_header, reads_pd, reads_odata, writes_odata, receives_idoc, sends_idoc, uses_component, uses_mapping, uses_value_mapping.
 sends_to links flows through matching ProcessDirect and JMS addresses;
 {{parameter}} addresses are resolved with the flow's parameters.prop value.
 

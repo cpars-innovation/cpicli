@@ -139,7 +139,7 @@ Directory references: run discover again for the full graph.`,
 			if err != nil {
 				return err
 			}
-			g := ops.BuildGraph(d)
+			g := ops.BuildGraphFor(d, src)
 			file := ops.GraphFile(src)
 			if cmd.Flags().Changed("file") {
 				file = config.GetString(cmd, "file")

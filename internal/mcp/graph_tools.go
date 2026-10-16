@@ -36,6 +36,9 @@ func graphTools(cfg Config) []Tool {
 				"Scripts carry what is needed to reuse them: reusable=true for scripts of script collections (call those instead of copying), summary, " +
 				"keywords, functions, reads and writes (headers/properties by name), usages (flows using it), docStatus (ok, incomplete, missing) and " +
 				"shape (equal shape = same code apart from comments and formatting: search the shape value to find near-duplicates). " +
+				"Adapters and steps are component nodes (\"HTTP receiver\", component:adapter/HTTP/Receiver) with versions (version: flows), newest, " +
+				"behind and, with an editor catalogue, offered and outdated; graph_neighbors on one lists the flows with their version on each edge. " +
+				"Mappings (files by hash, referenced message mapping artifacts) and value mappings scripts look up are nodes too. " +
 				"Faster and smaller than reading discovery.json. Node types: " + strings.Join(ops.GraphNodeTypes, ", ") + ". Reads a local file only; " +
 				"the graph reflects the last discovery.",
 			InputSchema: object(props{
