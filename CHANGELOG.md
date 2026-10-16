@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.21.0
+
 - **Access scope ([docs/access-scope.md](docs/access-scope.md)).** `--scope-file scope.json`, or the
   `--scope-packages`, `--scope-artifacts`, `--scope-partners`, `--scope-tenant` and `--scope-actions` flags, on any
   command and on `cpictl mcp`. It restricts the process to some packages, artifacts and Partner Directory partners,
