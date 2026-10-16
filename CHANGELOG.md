@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.20.0
+
 - **Integration cells ([#24](https://github.com/cpars-innovation/cpicli/issues/24)).** A flow bound
   to an integration cell deploys there, but the public API lists only the Cloud Integration runtime,
   so `deploy` ran into a timeout (`task status "SUCCESS", runtime status "NOT_DEPLOYED"`). It now
