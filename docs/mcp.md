@@ -10,6 +10,9 @@ deploy it, read the runtime error, fix, repeat.
 - Tenant settings are the same as for the CLI (flags, `CPICTL_*` environment variables,
   `cpictl.yaml`), see [configuration.md](configuration.md). One server = one tenant.
 
+Restrict a server to part of the tenant with an access scope: `cpictl mcp --scope-file scope.json`, see
+[access-scope.md](access-scope.md).
+
 ## Setup
 
 ### Claude Code

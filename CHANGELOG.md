@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Access scope ([docs/access-scope.md](docs/access-scope.md)).** `--scope-file scope.json`, or the
+  `--scope-packages`, `--scope-artifacts`, `--scope-partners`, `--scope-tenant` and `--scope-actions` flags, on any
+  command and on `cpictl mcp`. It restricts the process to some packages, artifacts and Partner Directory partners,
+  explicit tenant-wide areas and a set of actions (read, download, upload, deploy, configure, test, log-level,
+  delete, pd-write). Everything else is hidden or refused (default deny).
+  - It is enforced in the HTTP client for every request, whatever command or tool sends it: writes are refused before
+    they are sent, every `$batch` operation is checked, and lists are filtered.
+  - Refusals have exit code 9 and `errorCategory: "scope"`, and appear as `scope.refused` events; MCP `help` shows the
+    scope and its SHA-256.
+  - Go: `pkg/scope`, the same matcher for CPI Studio.
+  - Without a scope nothing changes.
+
 Security hardening (from a security review of the codebase):
 - **IDs are escaped in every SAP API URL.** Package, artifact, runtime, Partner Directory, configuration and API
   Management keys were put into URLs as they came. An ID like `X')/IntegrationPackages('Y` changed which entity the

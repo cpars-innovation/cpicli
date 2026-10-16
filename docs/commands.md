@@ -193,6 +193,12 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
       --output string               Output format: text or json. With json the result is written to stdout as one JSON document and logs are written to stderr as JSON lines (default "text")
       --profile string              Profile to use: $HOME/.cpictl/<name>.yaml (default: $CPICTL_PROFILE, else the one chosen with 'cpictl profile use')
       --read-retries int            Retries of a tenant read (GET) answered with 429, 502, 503 or 504, with backoff 2s, 4s, 8s ... (0: none). Writes are never retried (default 3)
+      --scope-actions strings       Access scope without a file: actions (read, download, upload, deploy, configure, test, log-level, delete, pd-write)
+      --scope-artifacts strings     Access scope without a file: artifact patterns (!X excludes)
+      --scope-file string           Access scope (JSON or YAML): packages, artifacts, partners, tenant areas and actions this process may use; everything else is refused or hidden. Fixed for the process; not read from config files
+      --scope-packages strings      Access scope without a file: package patterns (with --scope-actions)
+      --scope-partners strings      Access scope without a file: Partner Directory partner patterns
+      --scope-tenant strings        Access scope without a file: tenant-wide grants (<area>:read|write, e.g. variables:read)
       --summary string              Append a markdown job summary of orchestrator, configure, deploy, undeploy and snapshot to this file (default: $GITHUB_STEP_SUMMARY when set; "off": none)
       --tier string                 Tier of the tenant (dev, test, prod, ...), usually set in the profile; on prod, sending test messages and test runs are refused unless --allow-production
       --tmn-host string             Tenant host of Cloud Integration (or API portal host for API Management)

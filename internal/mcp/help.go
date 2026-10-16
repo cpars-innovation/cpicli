@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"github.com/cpars-innovation/cpicli/pkg/scope"
 	"slices"
 	"strings"
 
@@ -23,6 +24,8 @@ type CommandInfo struct {
 // HelpInfo is what the help tool reports: the tools of this server after
 // filtering, and the CLI.
 type HelpInfo struct {
+	// Scope is the access scope of the server (nil: unrestricted).
+	Scope   *scope.Scope
 	Tools   []Tool
 	Removed []string
 	// Reasons say why each removed tool is not offered (optional).
@@ -154,6 +157,11 @@ func HelpTool(info HelpInfo) Tool {
 			"loop": map[string]any{"required": info.Loop.Required, "caps": map[string]any{"maxIterations": info.Loop.Caps.MaxIterations,
 				"sameErrorLimit": info.Loop.Caps.SameErrorLimit, "wallClockMinutes": info.Loop.Caps.WallClockMinutes, "maxDeploys": info.Loop.Caps.MaxDeploys}},
 			"masking": map[string]any{"maskPatterns": nonNil(info.MaskPatterns), "redactPayloads": info.RedactPayloads}}
+		if sc := info.Scope; sc != nil {
+			server["scope"] = map[string]any{"active": true, "sha256": sc.Hash(), "scope": sc}
+		} else {
+			server["scope"] = map[string]any{"active": false}
+		}
 		if p := info.BranchPolicy; p != nil {
 			server["branchPolicy"] = map[string]any{"file": p.File, "readonlyBranches": p.ReadonlyBranches, "now": p.Decide()}
 		}

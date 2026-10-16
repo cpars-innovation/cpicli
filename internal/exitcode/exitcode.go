@@ -12,4 +12,5 @@ const (
 	Timeout      = 6 // operation did not finish within the polling budget
 	Partial      = 7 // some items succeeded, some failed
 	Stopped      = 8 // an MCP build loop limit was reached; tenant changes are refused
+	Scope        = 9 // the operation is outside the access scope (--scope-file)
 )

@@ -811,6 +811,15 @@ func (e *Error) ExitCode() int {
 	if len(failed) < len(e.Results) {
 		return exitcode.Partial
 	}
+	// refused by the access scope (no tenant call was made): exit code 9
+	scopeOnly := true
+	for _, r := range failed {
+		var coder output.ExitCoder
+		scopeOnly = scopeOnly && errors.As(r.Err, &coder) && coder.ExitCode() == exitcode.Scope
+	}
+	if scopeOnly {
+		return exitcode.Scope
+	}
 	code := exitcode.Timeout
 	for _, r := range failed {
 		c := exitcode.Timeout

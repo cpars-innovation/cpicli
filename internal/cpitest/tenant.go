@@ -1538,6 +1538,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 
 	case r.Method == http.MethodGet && path == "/api/v1/IntegrationPackages":
+		if r.URL.Query().Has("$select") { // like a tenant
+			odataError(w, http.StatusNotImplemented, "Not Implemented", "$select is not supported.")
+			return
+		}
 		results := []map[string]string{}
 		for _, p := range m.Packages {
 			results = append(results, map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version, "ShortText": p.ShortText, "Description": p.Description})

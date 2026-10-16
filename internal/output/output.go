@@ -156,6 +156,8 @@ func Category(code int) string {
 		return "partial"
 	case exitcode.Stopped:
 		return "stopped"
+	case exitcode.Scope:
+		return "scope"
 	}
 	return "error"
 }

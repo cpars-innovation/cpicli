@@ -235,7 +235,8 @@ func (e *HTTPExecuter) send(method string, path string, payload []byte, headers 
 	for _, cookie := range cookies {
 		req.AddCookie(cookie)
 	}
-	return e.httpClient.Do(req)
+	base := fmt.Sprintf("%v://%v:%d", e.scheme, e.host, e.port)
+	return e.guarded(method, base, path, payload, headers, func() (*http.Response, error) { return e.httpClient.Do(req) })
 }
 
 // sleepCtx waits d or until ctx ends (then it returns ctx's error).

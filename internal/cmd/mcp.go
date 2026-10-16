@@ -154,7 +154,7 @@ CPICTL_* environment variables.`,
 			}
 			// help reports the tools that are really available, so it is added after filtering
 			var server *mcp.Server
-			help := mcp.HelpInfo{Tools: tools, Removed: removed, Reasons: reasons, Mode: mode, ReadOnly: readOnly,
+			help := mcp.HelpInfo{Scope: activeScope, Tools: tools, Removed: removed, Reasons: reasons, Mode: mode, ReadOnly: readOnly,
 				Commands: commandInfos(cmd.Root()), Loop: ledger.Policy, MaskPatterns: maskPatterns, RedactPayloads: redactPayloads,
 				ServerInstructions: mcp.ModeInstructions(mode) + mcp.LoopPolicyInstructions(ledger.Policy), BranchPolicy: branchPolicy}
 			if branchPolicy != nil {

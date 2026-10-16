@@ -5,6 +5,7 @@ package mcp
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -267,27 +268,13 @@ type ToolResult struct {
 	Result     any   `json:"result"`
 }
 
-// Category returns the error category name of an exit code.
+// Category returns the error category name of an exit code (the same names
+// as the CLI's JSON output).
 func Category(code int) string {
-	switch code {
-	case exitcode.OK:
+	if code == exitcode.OK {
 		return ""
-	case exitcode.Usage:
-		return "usage"
-	case exitcode.Auth:
-		return "auth"
-	case exitcode.TenantHTTP:
-		return "tenant_http"
-	case exitcode.DeployFailed:
-		return "failed"
-	case exitcode.Timeout:
-		return "timeout"
-	case exitcode.Partial:
-		return "partial"
-	case exitcode.Stopped:
-		return "stopped"
 	}
-	return "error"
+	return cmp.Or(output.Category(code), "error")
 }
 
 // categorizer is an error with its own errorCategory (such as

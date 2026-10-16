@@ -59,6 +59,7 @@ Exit codes: 0 ok, 2 usage, 3 auth, 4 tenant HTTP error, 5 failed, 6 timeout,
 	}
 
 	rootCmd.PersistentFlags().String("config", "", "config file (default: the profile, else $CPICTL_CONFIG, else $HOME/cpictl.yaml plus ./cpictl.yaml of the repository)")
+	addScopeFlags(rootCmd)
 	rootCmd.PersistentFlags().String("profile", "", "Profile to use: $HOME/.cpictl/<name>.yaml (default: $CPICTL_PROFILE, else the one chosen with 'cpictl profile use')")
 
 	// Define cobra flags, the default value has the lowest (least significant) precedence
@@ -564,6 +565,9 @@ func configPermissionWarning(files []configFile) string {
 }
 
 func initializeConfig(cmd *cobra.Command) error {
+	if err := installScope(cmd); err != nil {
+		return err
+	}
 	cfgFile, profile, err := resolveConfigSource(config.GetString(cmd, "config"), config.GetString(cmd, "profile"))
 	if err != nil {
 		return output.Usage(err)
