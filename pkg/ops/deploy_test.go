@@ -383,3 +383,29 @@ func TestDeploy_DowngradeRules(t *testing.T) {
 		assert.Equal(t, RuleVersion, r.Rule)
 	})
 }
+
+// A flow bound to an integration cell deploys there; the public runtime API
+// lists only Cloud Integration, so the deploy finds it in the Web UI's
+// runtime list (#24).
+func TestDeploy_OnIntegrationCell(t *testing.T) {
+	now := time.Now()
+	results, _ := run(t, map[string]*cpitest.Artifact{
+		"Cell": {Type: "Integration", DesignVersion: "1", TaskStatuses: []string{"SUCCESS"}, RuntimeLocation: "integrationcell",
+			AfterDeploy: []*cpitest.Runtime{{Version: "1", Status: "STARTED", DeployedOn: now, Location: "integrationcell"}}},
+		"Broken": {Type: "Integration", DesignVersion: "1", TaskStatuses: []string{"SUCCESS"}, RuntimeLocation: "integrationcell",
+			AfterDeploy: []*cpitest.Runtime{{Version: "1", Status: "ERROR", DeployedOn: now, Location: "integrationcell"}}},
+		"Old": {Type: "Integration", DesignVersion: "2", TaskStatuses: []string{"SUCCESS"}, RuntimeLocation: "integrationcell",
+			AfterDeploy: []*cpitest.Runtime{{Version: "1", Status: "STARTED", DeployedOn: t0, Location: "integrationcell"}}},
+		"Nowhere": {Type: "Integration", DesignVersion: "1", TaskStatuses: []string{"SUCCESS"}, AfterDeploy: []*cpitest.Runtime{nil}},
+	}, []string{"Cell", "Broken", "Old", "Nowhere"}, fastOpts())
+	assert.Equal(t, StatusDeployed, results[0].Status, results[0].Error)
+	assert.Equal(t, "integrationcell", results[0].RuntimeLocation)
+	assert.Equal(t, "1", results[0].Version)
+
+	assert.Equal(t, StatusFailed, results[1].Status)
+	assert.Contains(t, results[1].Error, "deployment on runtime integrationcell unsuccessful, ended with status ERROR (FAILED)")
+
+	assert.Equal(t, StatusTimeout, results[2].Status, "the cell still shows the previous deployment")
+	assert.Contains(t, results[2].Error, "the build and deploy task succeeded, but Old is not on the Cloud Integration runtime and runtime integrationcell still shows the deployment of 2026-01-01T10:00:00Z (version 1)")
+	assert.Contains(t, results[3].Error, "Nowhere is not on the Cloud Integration runtime and on no other runtime either")
+}

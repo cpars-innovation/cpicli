@@ -50,6 +50,7 @@ func TestShippedFlowsHaveFlowReferences(t *testing.T) {
 			m, err := Parse(data)
 			require.NoError(t, err, p)
 			assert.Empty(t, m.MissingRefs, p)
+			assert.Empty(t, ScriptStepGaps(m), p)
 			n++
 			return nil
 		}))

@@ -2,7 +2,7 @@ Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: cpictl receiver stub
 Bundle-SymbolicName: CPICTL_Test_Stub; singleton:=true
-Bundle-Version: 1.3.0
+Bundle-Version: 1.4.0
 SAP-BundleType: IntegrationFlow
 SAP-NodeType: IFLMAP
 SAP-RuntimeProfile: iflmap

@@ -50,6 +50,29 @@ cpictl status --runtime-status ERROR               # all deployed artifacts in E
 cpictl endpoints --artifact-id OrderIntake         # URLs to send test messages to
 ```
 
+### Integration cells (`cpictl runtimes`)
+
+A tenant can have more than one runtime: the Cloud Integration runtime and integration cells. A
+flow bound to an integration cell deploys and runs there, but SAP's public API
+(`IntegrationRuntimeArtifacts`, used by `status`, `drift`, `endpoints`, ...) lists only the Cloud
+Integration runtime, so such a flow looks `NOT_DEPLOYED`.
+
+```bash
+cpictl runtimes                                    # the tenant's runtimes
+cpictl runtimes --artifacts                        # and what is deployed on each
+cpictl runtimes --runtime integrationcell          # one runtime (MCP: list_runtimes)
+```
+
+These read the Web UI's runtime list (Monitor > Manage Integration Content), which the tenant
+answers for the API key too. It is not a public API, so SAP may change it. `deploy` uses it when
+the build and deploy task ended `SUCCESS` but the flow is not on the Cloud Integration runtime: it
+finds the flow on its integration cell, reports `DEPLOYED` with `runtimeLocation`, or `FAILED`
+when the cell shows the deployment failed.
+
+Which runtime a flow deploys to is decided by the tenant, not by cpictl. The public deploy call
+takes no runtime, and a flow created through the API is bound to the tenant's default runtime,
+as set in the Web UI.
+
 ## Test messages
 
 ```bash

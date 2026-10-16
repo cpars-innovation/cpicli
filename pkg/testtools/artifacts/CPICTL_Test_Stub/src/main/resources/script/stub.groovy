@@ -3,6 +3,7 @@ import com.sap.it.api.ITApiFactory
 import com.sap.it.api.pd.PartnerDirectoryService
 import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
+import java.util.concurrent.TimeUnit
 
 // cpictl receiver stub (CPICTL_Test_Stub), installed by `cpictl test tools install`.
 //
@@ -100,7 +101,8 @@ def Message processData(Message message) {
     }
 
     if (delay > 0) {
-        Thread.sleep(delay as long)
+        // not Thread.sleep: an integration cell once refused a script using Thread (#24)
+        TimeUnit.MILLISECONDS.sleep(delay as long)
     }
     message.setBody(answer)
     extra.each { k, v -> message.setHeader(k.toString(), v == null ? "" : v.toString()) }

@@ -132,6 +132,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`profile use`](#profile-use) | Make a profile the default (stored in $HOME/.cpictl/current); 'use -' clears it |
 | [`resources`](#resources) | List the resources (scripts, mappings, schemas, ...) of an integration flow |
 | [`resources get`](#resources-get) | Download one resource of an integration flow |
+| [`runtimes`](#runtimes) | List the tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each |
 | [`send`](#send) | Send a test message to a deployed integration flow |
 | [`skills`](#skills) | List, read and install the cpi skills built into cpictl |
 | [`skills install`](#skills-install) | Copy the skills into the skill folder of an agent |
@@ -1821,7 +1822,7 @@ removes content modifiers that do nothing). Review the diff, raise the versions
       --dry-run                With --fix: only list the changes
       --fail-on string         Exit with code 5 when a new finding has at least this severity: info, warning, error (config: lint.failOn)
       --fix                    Apply the fixes to the local files
-      --fix-rules strings      Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step, missing-flow-reference; all: every fixable rule)
+      --fix-rules strings      Rules to fix (default: duplicate-script, use-script-collection, unused-script, unconnected-step, missing-flow-reference, incomplete-script-step; all: every fixable rule)
       --list-rules             List the rules
       --min-severity string    Do not report findings below this severity (default "info")
       --package strings        Only report these packages (names or patterns)
@@ -3025,6 +3026,37 @@ Download one resource. In text mode the content is written to stdout (or
       --out string           Write the content to this file instead of stdout / the JSON result
       --type string          Resource type, e.g. groovy, xslt, mmap, xsd, wsdl, jar
       --version string       Designtime version (default "active")
+```
+
+## runtimes
+
+List the tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each
+
+```
+A tenant can have more than one runtime: the Cloud Integration runtime and
+integration cells. A flow bound to an integration cell deploys there, but SAP's
+public API lists only the Cloud Integration runtime, so such a flow looks
+undeployed to every other command. This command reads the runtime list of the
+Web UI (Monitor > Manage Integration Content) instead, which the tenant answers
+for the API key too. deploy uses the same list when a deployment succeeded but
+the flow is not on the Cloud Integration runtime.
+```
+
+**Usage:** `cpictl runtimes [flags]`
+
+**Flags:**
+
+```
+      --artifacts        Also list the artifacts deployed on each runtime
+      --runtime string   Only this runtime (ID from the list, e.g. integrationcell); implies --artifacts
+```
+
+**Examples:**
+
+```
+  cpictl runtimes
+  cpictl runtimes --artifacts
+  cpictl runtimes --artifacts --runtime integrationcell --output json
 ```
 
 ## send

@@ -5,6 +5,26 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Integration cells ([#24](https://github.com/cpars-innovation/cpicli/issues/24)).** A flow bound
+  to an integration cell deploys there, but the public API lists only the Cloud Integration runtime,
+  so `deploy` ran into a timeout (`task status "SUCCESS", runtime status "NOT_DEPLOYED"`). It now
+  looks the flow up on the tenant's other runtimes (the Web UI's runtime list, which the tenant
+  answers for the API key) and reports `DEPLOYED` with `runtimeLocation`, or `FAILED`. When the
+  flow is nowhere, the timeout says the task succeeded and names the cell as the likely place.
+  New `cpictl runtimes` (MCP `list_runtimes`) lists the runtimes and what is deployed on each.
+  The mock tenant has cell-bound flows (`Artifact.RuntimeLocation`, `Runtime.Location`) and both
+  Web UI endpoints. Go: `ops.ListRuntimes`, `cpi.Runtime.Locations`, `cpi.Runtime.LocationArtifacts`,
+  `ops.Result.RuntimeLocation`.
+- New lint rule `incomplete-script-step` (error, fixed by default; reported by CPI Studio on
+  [#20](https://github.com/cpars-innovation/cpicli/issues/20)). A script step without
+  `activityType`, `subActivityType` or `componentVersion` passes Check and deploys, but the runtime
+  fails it (`"mappingClass" is null`). Go: `iflow.ScriptStepGaps`, `iflow.CompleteScriptSteps`.
+- `unsupported-script-class` is now info, not warning. Studio deployed a minimal `Thread.sleep` on an
+  integration cell without a refusal, so "a cell refuses Thread" no longer holds as stated. The stub
+  (1.4.0) sleeps with `TimeUnit.MILLISECONDS.sleep`, which a cell accepts.
+- Script pattern rules (`println`, `body-as-string`, `unsupported-script-class`, ...) no longer match
+  inside comments.
+
 ## 0.19.0
 
 - **Test tools run on a tenant again (harness 1.2.0, stub 1.3.0, XSLT flow 1.1.0;

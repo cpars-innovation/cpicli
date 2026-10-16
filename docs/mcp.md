@@ -319,6 +319,7 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
 | `delete_data_store_entry` | tenant, **destructive** | Delete one entry; requires `confirm: true` |
 | `list_locks` | | Artifacts open for editing in the Web UI: artifact, package, who holds the lock, since when |
+| `list_runtimes` | `artifacts`, `runtime` | The tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each. The public API lists only Cloud Integration: a flow bound to an integration cell looks undeployed everywhere else |
 | `list_integration_connections` | | Sender host -> flows -> receiver host, as the tenant computes it from the deployed flows (`refresh` recomputes) |
 | `get_tenant_settings` | | External logging and archiving on/off, last archiving runs |
 | `download_log_archive` | local file | Zip of the latest `http` or `trace` log files, below the server root |

@@ -49,9 +49,9 @@ type RuleInfo struct {
 // fixableRules can be applied by lint --fix (fixByDefault: without --fix-rules).
 var fixableRules = map[string]bool{
 	"duplicate-script": true, "use-script-collection": true, "unused-script": true, "unconnected-step": true, "noop-content-modifier": true,
-	"layout": true, "missing-flow-reference": true,
+	"layout": true, "missing-flow-reference": true, "incomplete-script-step": true,
 }
-var fixByDefault = map[string]bool{"duplicate-script": true, "use-script-collection": true, "unused-script": true, "unconnected-step": true, "missing-flow-reference": true}
+var fixByDefault = map[string]bool{"duplicate-script": true, "use-script-collection": true, "unused-script": true, "unconnected-step": true, "missing-flow-reference": true, "incomplete-script-step": true}
 
 var lintRules = []lintRule{
 	// reuse
@@ -88,7 +88,8 @@ var lintRules = []lintRule{
 	{id: "collection-script-coverage", group: GroupRobustness, severity: SevWarning, title: "A script collection script is below the line coverage minimum (JaCoCo report)", artifact: ruleCollectionScriptCoverage},
 	{id: "idoc-no-idempotency", group: GroupRobustness, severity: SevInfo, title: "A flow receives IDocs without an Idempotent Process Call or JMS decoupling", artifact: ruleIDocNoIdempotency},
 	{id: "missing-flow-reference", group: GroupRobustness, severity: SevError, title: "Steps do not list their sequence flows (incoming/outgoing): the process deploys but does not run", artifact: ruleMissingFlowRefs},
-	{id: "unsupported-script-class", group: GroupRobustness, severity: SevWarning, title: "A script uses a class an integration cell refuses at deploy (Thread)", artifact: ruleUnsupportedScriptClass},
+	{id: "incomplete-script-step", group: GroupRobustness, severity: SevError, title: "A script step lacks activityType, subActivityType or componentVersion: Check passes, the run fails", artifact: ruleIncompleteScriptSteps},
+	{id: "unsupported-script-class", group: GroupRobustness, severity: SevInfo, title: "A script uses Thread, which an integration cell refused once at deploy", artifact: ruleUnsupportedScriptClass},
 	// performance and data protection
 	{id: "body-as-string", group: GroupPerformance, severity: SevInfo, title: "A script reads the whole body as a string", artifact: ruleBodyAsString},
 	{id: "payload-attachment", group: GroupPerformance, severity: SevWarning, title: "A script logs the payload as an attachment", artifact: rulePayloadAttachment},
@@ -914,7 +915,7 @@ func scriptFindings(a *lintArtifact, rule string, re *regexp.Regexp, msg, sugges
 		if scriptLanguage(file) == "" {
 			continue
 		}
-		data := a.Scripts[file]
+		data := blankComments(a.Scripts[file]) // code only
 		if loc := re.FindIndex(data); loc != nil {
 			n := len(re.FindAllIndex(data, -1))
 			line := lineOf(data, loc[0])
@@ -981,8 +982,8 @@ var reUnsupportedClass = regexp.MustCompile(`\b(?:java\.lang\.)?Thread\s*[.(]|\b
 
 func ruleUnsupportedScriptClass(lc *lintContext, a *lintArtifact) []Finding {
 	return scriptFindings(a, "unsupported-script-class", reUnsupportedClass,
-		"uses Thread, which an integration cell refuses at deploy (\"There are unsupported classes [Thread] that are used in the script.\"; the API still reports the deploy task as successful)",
-		"avoid Thread (no sleeping or own threads in a script); the Cloud Integration runtime accepts it, so this only matters for flows that run on an integration cell")
+		"uses Thread; an integration cell refused a script using it once (\"There are unsupported classes [Thread] that are used in the script.\"), while a minimal Thread.sleep deployed on a cell later",
+		"to be safe on an integration cell sleep with TimeUnit.MILLISECONDS.sleep (accepted there) and start no own threads; the Cloud Integration runtime accepts Thread")
 }
 
 // --- configuration -----------------------------------------------------------

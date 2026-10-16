@@ -3,6 +3,8 @@ package lint
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -49,7 +51,7 @@ func chain(prefix string, els ...string) string {
 			pr = map[string]string{"activityType": "Enricher", "cmdVariantUri": "ctype::FlowstepVariant/cname::Enricher/version::1.5.1",
 				"headerTable": "<row><cell id='Action'>Create</cell><cell id='Name'>" + strings.TrimPrefix(kind, "header=") + "</cell></row>"}
 		case kind == "script":
-			pr = map[string]string{"activityType": "Script", "script": "x.groovy", "cmdVariantUri": "ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2"}
+			pr = map[string]string{"activityType": "Script", "subActivityType": "GroovyScript", "componentVersion": "1.1", "script": "x.groovy", "cmdVariantUri": "ctype::FlowstepVariant/cname::GroovyScript/version::1.1.2"}
 		case kind != "":
 			pr = map[string]string{"cmdVariantUri": "ctype::FlowstepVariant/cname::" + kind + "/version::1.0.0"}
 		}
@@ -150,4 +152,42 @@ func TestMissingFlowReferences(t *testing.T) {
 	res, err = Run(context.Background(), Options{Dir: root})
 	require.NoError(t, err)
 	assert.Empty(t, findingsOf(res, "missing-flow-reference", "Bare"))
+}
+
+// A script step without activityType, subActivityType and componentVersion
+// passes Check and deploys, but fails at runtime (#20); --fix adds them.
+func TestIncompleteScriptSteps(t *testing.T) {
+	root := t.TempDir()
+	step := func(id, props string) string {
+		return `<bpmn2:callActivity id="` + id + `" name="` + id + `"><bpmn2:extensionElements>` + props + `</bpmn2:extensionElements></bpmn2:callActivity>`
+	}
+	p := func(k, v string) string {
+		return `<ifl:property><key>` + k + `</key><value>` + v + `</value></ifl:property>`
+	}
+	model := bpmn("", process("Process_1", "IntegrationProcess",
+		step("Bare", p("script", "a.groovy")+p("cmdVariantUri", "ctype::FlowstepVariant/cname::GroovyScript/version::2.0.0"))+
+			step("JS", p("script", "b.js")+p("activityType", "Script"))+
+			step("Full", p("script", "c.groovy")+p("activityType", "Script")+p("subActivityType", "GroovyScript")+p("componentVersion", "1.1"))))
+	tFlow{pkg: "P", id: "S", files: map[string]string{"scenarioflows/integrationflow/S.iflw": model}}.write(t, root)
+	res, err := Run(context.Background(), Options{Dir: root})
+	require.NoError(t, err)
+	got := findingsOf(res, "incomplete-script-step", "S")
+	require.Len(t, got, 2)
+	assert.Equal(t, "Bare", got[0].Element)
+	assert.Contains(t, got[0].Message, "has no activityType, subActivityType, componentVersion")
+	assert.Equal(t, SevError, got[0].Severity)
+	assert.Contains(t, got[1].Message, "has no subActivityType, componentVersion")
+
+	_, err = Fix(context.Background(), Options{Dir: root}, FixOptions{})
+	require.NoError(t, err)
+	res, err = Run(context.Background(), Options{Dir: root})
+	require.NoError(t, err)
+	got = findingsOf(res, "incomplete-script-step", "S")
+	require.Len(t, got, 1, "JavaScript without a cmdVariantUri: no version to take")
+	assert.Equal(t, "JS", got[0].Element)
+	assert.Contains(t, got[0].Message, "has no componentVersion")
+	data, err := os.ReadFile(filepath.Join(root, "P", "S", "src/main/resources/scenarioflows/integrationflow/S.iflw"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "<key>componentVersion</key><value>2.0</value>")
+	assert.Contains(t, string(data), "<key>subActivityType</key><value>JavaScript</value>")
 }

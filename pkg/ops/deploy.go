@@ -5,6 +5,7 @@ package ops
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -111,6 +112,10 @@ type Result struct {
 	// Warnings are findings that did not fail the deployment, e.g. a build
 	// and deploy task that failed while the runtime runs the new version.
 	Warnings []string `json:"warnings,omitempty"`
+	// RuntimeLocation is the runtime the artifact was found on when it is
+	// not the Cloud Integration runtime the public API reports (an
+	// integration cell, e.g. "integrationcell"); empty otherwise.
+	RuntimeLocation string `json:"runtimeLocation,omitempty"`
 
 	// Err is the underlying error for FAILED/TIMEOUT results (not serialised).
 	Err error `json:"-"`
@@ -205,6 +210,39 @@ func (t *apiTenant) BuildAndDeployStatus(taskID string) (string, error) {
 
 func (t *apiTenant) RuntimeArtifact(id string) (*cpi.RuntimeArtifact, error) {
 	return t.rt.GetArtifact(id)
+}
+
+// otherRuntimes is implemented by a Tenant that can see runtimes the public
+// API does not report: a flow bound to an integration cell deploys there,
+// but IntegrationRuntimeArtifacts lists only the Cloud Integration runtime.
+type otherRuntimes interface {
+	// OtherRuntimeArtifact finds id on a runtime other than Cloud
+	// Integration (nil: on none).
+	OtherRuntimeArtifact(id string) (*cpi.LocatedArtifact, error)
+}
+
+// OtherRuntimeArtifact looks id up on every runtime location but Cloud
+// Integration, through the Web UI's runtime list.
+func (t *apiTenant) OtherRuntimeArtifact(id string) (*cpi.LocatedArtifact, error) {
+	locs, err := t.rt.Locations()
+	if err != nil {
+		return nil, err
+	}
+	for _, l := range locs {
+		if l.ID == cpi.CloudIntegrationLocation {
+			continue
+		}
+		arts, err := t.rt.LocationArtifacts(l.ID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range arts {
+			if arts[i].Id == id {
+				return &arts[i], nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 func (t *apiTenant) RuntimeErrorInfo(id string) (string, error) {
@@ -455,6 +493,8 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 	taskConfirmed := false
 	taskStatus, runtimeStatus := "", ""
 	var lastErr error
+	otherErr := errNotLookedUp
+	var otherStale *cpi.LocatedArtifact // found elsewhere, but the previous deployment
 	report := func(check int, state string) {
 		opts.progress.report(opts.totalChecks, "artifact %s: %s, check %d/%d", a.ID, state, check, opts.MaxChecks)
 	}
@@ -522,6 +562,12 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 		}
 		if rt == nil {
 			runtimeStatus = "NOT_DEPLOYED"
+			if taskConfirmed {
+				// the task succeeded: the flow may run on an integration cell
+				if res, done := onOtherRuntime(tenant, a, r, triggeredAt, skew, &otherErr, &otherStale); done {
+					return res
+				}
+			}
 			logger.Info().Msgf("Check %d/%d - artifact %v not yet visible on runtime", check, opts.MaxChecks, a.ID)
 			report(check, "not yet on runtime")
 			continue
@@ -555,12 +601,66 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 	if lastErr != nil {
 		err = fmt.Errorf("%w; last error: %v", err, lastErr)
 	}
-	if runtimeStatus == "NOT_DEPLOYED" || runtimeStatus == "" {
+	switch {
+	case taskConfirmed && (runtimeStatus == "NOT_DEPLOYED" || runtimeStatus == ""):
+		// the task succeeded but the public API never listed the flow
+		where := "on no other runtime either (Web UI runtime list)"
+		if otherStale != nil {
+			where = fmt.Sprintf("runtime %s still shows the deployment of %s (version %s)", otherStale.Location,
+				otherStale.DeployedOn.UTC().Format(time.RFC3339), otherStale.Version)
+		} else if otherErr != nil {
+			where = fmt.Sprintf("the other runtimes could not be read (%v)", otherErr)
+		}
+		err = fmt.Errorf("%w; the build and deploy task succeeded, but %v is not on the Cloud Integration runtime and %s. "+
+			"A flow bound to an integration cell runs there, which the public API does not list: see cpictl runtimes", err, a.ID, where)
+	case runtimeStatus == "NOT_DEPLOYED" || runtimeStatus == "":
 		// the deployment never reached the runtime: not a flow problem
 		err = fmt.Errorf("%w; it never appeared on the runtime: check in the Web UI (Monitor > Manage Integration Content) that the tenant's runtime is up and accepts deployments. "+
-			"An integration cell can refuse a flow at deploy time without the API saying so (e.g. a script using a class it does not allow, such as Thread: lint unsupported-script-class)", err)
+			"An integration cell can refuse a flow at deploy time without the API saying so (one refused a script using Thread: lint unsupported-script-class)", err)
 	}
 	return timeout(r, err)
+}
+
+// errNotLookedUp: the other runtimes were not asked (yet).
+var errNotLookedUp = errors.New("not looked up")
+
+// onOtherRuntime looks for the deployment of a on a runtime the public API
+// does not report. done is true when the outcome is final; *lookupErr keeps
+// the last lookup error (nil after a successful lookup), *stale the artifact
+// found there when it is still the previous deployment.
+func onOtherRuntime(tenant Tenant, a Artifact, r Result, triggeredAt time.Time, skew time.Duration, lookupErr *error, stale **cpi.LocatedArtifact) (Result, bool) {
+	o, ok := tenant.(otherRuntimes)
+	if !ok {
+		return r, false
+	}
+	la, err := o.OtherRuntimeArtifact(a.ID)
+	*lookupErr = err
+	if err != nil {
+		log.Debug().Str("artifact", a.ID).Msgf("other runtimes not readable: %v", err)
+		return r, false
+	}
+	*stale = nil
+	if la == nil {
+		return r, false
+	}
+	if !la.DeployedOn.IsZero() && la.DeployedOn.Before(triggeredAt.Add(-skew)) {
+		*stale = la // still the previous deployment
+		return r, false
+	}
+	r.RuntimeLocation = la.Location
+	switch {
+	case la.Status == "STARTED":
+		if la.Version != "" {
+			r.Version = la.Version
+		}
+		r.Status = StatusDeployed
+		log.Info().Str("artifact", a.ID).Msgf("Artifact %v deployed successfully on runtime %s", a.ID, la.Location)
+		return r, true
+	case la.Status == "ERROR" || la.DeployState == "FAILED":
+		return fail(r, fmt.Errorf("artifact %v deployment on runtime %s unsuccessful, ended with status %s (%s): see Monitor > Manage Integration Content, runtime %s, in the Web UI",
+			a.ID, la.Location, la.Status, la.DeployState, la.Location)), true
+	}
+	return r, false // STARTING
 }
 
 // isFresh reports whether the runtime artifact reflects the deployment that

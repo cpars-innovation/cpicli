@@ -61,7 +61,8 @@ unused scripts and unconnected steps (local files; the cpi-improve skill plans a
 	{[]string{"inspect", "build"}, `Inspect: list_packages, list_artifacts (cached briefly; refresh=true re-reads), list_resources,
 get_resource (read without download). get_parameters artifact_ids reads several flows at once.`},
 	{[]string{"monitor"}, `Operate: message_summary (volume and failures per flow, connection and error fingerprint over a
-window: start here for "what is failing"), list_runtime_artifacts statuses=["ERROR"], get_runtime_status, list_message_logs,
+window: start here for "what is failing"), list_runtime_artifacts statuses=["ERROR"], get_runtime_status (Cloud Integration only:
+list_runtimes shows integration cells and what runs there), list_message_logs,
 list_service_endpoints; runtime data: list_data_stores, list_data_store_entries,
 get_data_store_entry, delete_data_store_entry (confirm), list_variables, get_variable,
 list_jms_queues, get_jms_broker, list_number_ranges, list_log_files / get_log_file (adapter errors

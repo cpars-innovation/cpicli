@@ -38,7 +38,19 @@ type Runtime struct {
 	Version    string
 	Status     string
 	DeployedOn time.Time // zero: not reported
+	// Location is the runtime location (empty: cloudintegration). Like on a
+	// tenant, the public IntegrationRuntimeArtifacts lists only Cloud
+	// Integration; the Web UI's runtime list shows the others.
+	Location string
 }
+
+// otherLocation reports whether rt runs on a runtime the public API does
+// not report (an integration cell).
+func (rt *Runtime) otherLocation() bool {
+	return rt != nil && rt.Location != "" && rt.Location != cloudIntegration
+}
+
+const cloudIntegration = "cloudintegration"
 
 // Artifact scripts the tenant behaviour for one artifact ID.
 type Artifact struct {
@@ -95,6 +107,9 @@ type Artifact struct {
 	guidelineGets     int
 	// EndpointURL makes the deployed artifact appear in ServiceEndpoints.
 	EndpointURL string
+	// RuntimeLocation is the runtime the flow is bound to (SAP-WorkspaceProfile;
+	// empty: cloudintegration): a live deploy runs it there.
+	RuntimeLocation string
 	// EndpointHidden is the number of ServiceEndpoints listings that still
 	// omit the endpoint: a real tenant lists it about a minute after the
 	// flow reports STARTED (set on deploy from Tenant.EndpointDelay).
@@ -1404,7 +1419,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		rows := []map[string]any{}
 		for _, id := range sortedKeys(m.Artifacts) {
 			rt := m.Artifacts[id].Runtime
-			if rt == nil || (filter != "" && !strings.Contains(filter, "'"+rt.Status+"'")) {
+			if rt == nil || rt.otherLocation() || (filter != "" && !strings.Contains(filter, "'"+rt.Status+"'")) {
 				continue
 			}
 			rows = append(rows, map[string]any{"Id": id, "Version": rt.Version, "Name": id, "Type": "INTEGRATION_FLOW", "Status": rt.Status, "DeployedOn": odataDate(rt.DeployedOn)})
@@ -1441,6 +1456,21 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, _ = w.Write(a.Zip)
+
+	case r.Method == http.MethodGet && path == "/Operations/com.sap.it.op.srv.web.cf.RuntimeLocationListCommand":
+		locs := []map[string]string{{"id": cloudIntegration, "type": "SAP Cloud Integration", "typeId": "sapcloudintegration", "state": "Active"}}
+		for _, l := range m.runtimeLocations() {
+			locs = append(locs, map[string]string{"id": l, "displayName": "Integration Cell", "type": "BTP Integration Cell", "typeId": "btpintegrationcell", "state": "Active"})
+		}
+		writeJSON(w, map[string]any{"runtimeLocations": locs})
+
+	case r.Method == http.MethodGet && path == "/Operations/com.sap.it.op.tmn.commands.dashboard.webui.IntegrationComponentsListCommand":
+		// like the tenant: XML only
+		if accept := r.Header.Get("Accept"); accept != "" && !strings.Contains(accept, "xml") && !strings.Contains(accept, "*/*") {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		m.writeComponentsList(w, cmp.Or(r.URL.Query().Get("runtimeLocationId"), cloudIntegration))
 
 	case r.Method == http.MethodPost && path == "/Operations/com.sap.it.op.tmn.commands.dashboard.webui.IntegrationComponentSetMplLogLevelCommand":
 		// like the tenant: the command does not produce JSON
@@ -1711,7 +1741,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 				odataError(w, status, "Internal Server Error", problem)
 				return
 			}
-			a.Runtime, a.undeployed = &Runtime{Version: version, Status: "STARTED", DeployedOn: time.Now()}, false
+			a.Runtime, a.undeployed = &Runtime{Version: version, Status: "STARTED", DeployedOn: time.Now(), Location: a.RuntimeLocation}, false
 			a.ErrorInfo = ""
 			if problem != "" {
 				a.Runtime.Status, a.ErrorInfo = "ERROR", problem
@@ -1766,7 +1796,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		default:
 			rt = a.Runtime
 		}
-		if rt == nil {
+		if rt == nil || rt.otherLocation() {
 			notFound(w)
 			return
 		}

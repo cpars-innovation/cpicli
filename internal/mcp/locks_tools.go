@@ -30,6 +30,23 @@ func lockTools(cfg Config, readOnly map[string]any) []Tool {
 			},
 		},
 		{
+			Name: "list_runtimes", Title: "List runtimes (Cloud Integration, integration cells)",
+			Description: "The tenant's runtimes and, with artifacts=true, what is deployed on each: version, status, deploy state, design-time runtime binding. A flow bound to an integration cell runs there, but the public API (list_runtime_artifacts, get_runtime_status) lists only Cloud Integration: use this when a flow deployed fine but looks undeployed.",
+			InputSchema: object(props{"artifacts": boolean("Also list the deployed artifacts per runtime"), "runtime": str("Only this runtime (ID, e.g. integrationcell); implies artifacts")}),
+			Annotations: readOnly,
+			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				var a struct {
+					Artifacts bool   `json:"artifacts"`
+					Runtime   string `json:"runtime"`
+				}
+				if err := decode(raw, &a); err != nil {
+					return nil, err
+				}
+				runtimes, err := ops.ListRuntimes(cfg.Exe, a.Artifacts || a.Runtime != "", a.Runtime)
+				return map[string]any{"runtimes": runtimes}, err
+			},
+		},
+		{
 			Name: "unlock_artifact", Title: "Remove an edit lock",
 			Description: "Remove the edit lock of an artifact (as Unlock in the Web UI). Whoever holds the lock loses unsaved changes: only on the user's explicit request, after list_locks showed who holds it. Requires confirm=true.",
 			InputSchema: object(props{"artifact_id": str("Artifact to unlock"), "confirm": boolean("Must be true: the lock holder's unsaved changes are lost")}, "artifact_id", "confirm"),

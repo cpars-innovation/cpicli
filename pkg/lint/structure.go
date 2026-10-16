@@ -294,3 +294,30 @@ func ruleMissingFlowRefs(lc *lintContext, a *lintArtifact) []Finding {
 	}
 	return out
 }
+
+// ruleIncompleteScriptSteps: script steps without the properties SAP's
+// editor writes (activityType Script, subActivityType, componentVersion).
+// The tenant's Check passes and the flow deploys, but the runtime fails the
+// step: NullPointerException, "mappingClass" is null (reported by CPI
+// Studio on two tenants, #20).
+func ruleIncompleteScriptSteps(lc *lintContext, a *lintArtifact) []Finding {
+	var out []Finding
+	for _, file := range sortedModelFiles(a) {
+		m := a.Models[file]
+		gaps := iflow.ScriptStepGaps(m)
+		for _, id := range m.Order {
+			missing := gaps[id]
+			if len(missing) == 0 {
+				continue
+			}
+			el := m.Elements[id]
+			f := a.finding("incomplete-script-step", file, id, el.Name, el.Props["script"],
+				fmt.Sprintf("script step %q (%s) has no %s: the flow passes Check and deploys, but the runtime fails the step (NullPointerException: \"mappingClass\" is null)",
+					el.Name, el.Props["script"], strings.Join(missing, ", ")),
+				"lint --fix adds them as SAP's editor writes them (default fix)")
+			f.fix = &lintFix{kind: fixScriptProps, model: file}
+			out = append(out, f)
+		}
+	}
+	return out
+}
