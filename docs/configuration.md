@@ -71,7 +71,7 @@ tmn-host: mytenant-dev.it-cpi018.cfapps.eu10-003.hana.ondemand.com
 oauth-host: mytenant-dev.authentication.eu10.hana.ondemand.com
 oauth-clientid: sb-xxxxxxxx!b1234|it!b5678
 deploy:
-  maxCheckLimit: 40
+  timeout: 15m
 orchestrator:
   packagesDir: ./packages
 ```
@@ -187,7 +187,7 @@ oauth-host: mytenant.authentication.eu10.hana.ondemand.com
 
 deploy:
   artifactType: Integration
-  maxCheckLimit: 60      # slow deployments: 10 minutes instead of 5
+  timeout: 20m           # slow deployments: wait up to 20 minutes for all of them
 
 orchestrator:
   packagesDir: ./packages
@@ -209,8 +209,8 @@ when you need something else.
 
 | Setting | Default | Where |
 |---------|---------|-------|
-| Deployment status checks | every 10 s, up to 30 times (5 minutes); a failed deployment ends at its first check | `deploy` (`delayLength`, `maxCheckLimit`), `undeploy`, `orchestrator` / `configure` (`deployDelaySeconds`, `deployRetries`), MCP (`--poll-interval`, `--max-checks`) |
-| Deployments at the same time | 5 per package; packages one after another, in config order | `orchestrator`, `configure`, `deploy --pending` (`parallelDeployments`) |
+| Deployment status checks | every 10 s from one runtime list for all deployments; deploy, configure and orchestrator wait at most 10 minutes for all of them together ([deployments.md](deployments.md)); a failed deployment ends at its next check | `deploy` (`delayLength`, `timeout`), `orchestrator` / `configure` (`deployDelaySeconds`, `deployTimeout`); `undeploy` and MCP: 30 checks per artifact (`maxCheckLimit`, `--poll-interval`, `--max-checks`) |
+| Deployments triggered at a time | 5, then all watched together; script collections and mappings first, then flows, across packages | `orchestrator`, `configure`, `deploy --pending` (`parallelDeployments`) |
 | Tenant reads and uploads at the same time | 8, across all packages | `snapshot`, `orchestrator`, `configure`, `configure pull`, `drift` (`parallel`) |
 | Retries of throttled reads (429, 502-504) | 3, backoff 2 s, 4 s, 8 s (`Retry-After` honoured); writes never | all commands and MCP (`read-retries`) |
 | Parameters per `$batch` request | 90 | `configure` (`batchSize`) |

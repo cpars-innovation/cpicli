@@ -18,4 +18,4 @@ runtime-oauth-clientsecret: "<runtime client secret>"
 # Defaults per command work as in cpictl.yaml
 deploy:
   delayLength: 10
-  maxCheckLimit: 30
+  timeout: 10m

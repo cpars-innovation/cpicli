@@ -98,7 +98,7 @@ oauth-clientsecret: "..."
 runtime-oauth-clientid: "sb-...|it-rt-mytenant-dev!b5678"   # optional, for test messages
 runtime-oauth-clientsecret: "..."
 deploy:                                                      # optional command defaults
-  maxCheckLimit: 30
+  timeout: 10m
 ```
 
 ### 3. Switch between tenants
@@ -123,8 +123,8 @@ started with it). The repository's `cpictl.yaml` cannot set `tier` or `allow-pro
 
 For each setting the first source that has it wins:
 
-1. a command-line flag (`--max-check-limit 40`)
-2. an environment variable: `CPICTL_` + the flag name in upper case (`CPICTL_MAX_CHECK_LIMIT=40`)
+1. a command-line flag (`--deploy-timeout 15m`)
+2. an environment variable: `CPICTL_` + the flag name in upper case (`CPICTL_DEPLOY_TIMEOUT=15m`)
 3. the repository's `cpictl.yaml` (see below)
 4. the active profile, or `~/cpictl.yaml` when no profile is active
 5. the built-in default
@@ -331,7 +331,7 @@ Artifact statuses: `DEPLOYED`, `SKIPPED` (same version already running), `UNDEPL
 | 3 | Authentication failed (401/403, OAuth token) | check credentials and roles |
 | 4 | Tenant HTTP error or tenant unreachable | retry, check host |
 | 5 | Deployment, validation or test message failed on the tenant | fix the artifact |
-| 6 | Timeout | check `status`, raise `--max-check-limit` |
+| 6 | Timeout | check `status`, raise `--deploy-timeout` ([deployments.md](docs/deployments.md)) |
 | 7 | Partial failure | inspect the per-item results |
 | 8 | Loop stopped (MCP only): a build loop limit was reached | stop, report the loop summary |
 
@@ -478,6 +478,7 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 | [Testing](docs/testing.md) | Test messages by trigger type, test harness, test entries, tracing |
 | [Lint and improvements](docs/lint.md) | `lint` rules, `.cpi/lint.yaml`, baseline and CI gate, `--fix` (script collections), [diagram layout](docs/lint.md#diagram-layout) (`iflow layout`), the `cpi-improve` skill |
 | [Script comments](docs/script-docs.md) | Comment template for Groovy scripts, how discover, the graph and lint use it, `script-doc` and the agent hook |
+| [Deployments](docs/deployments.md) | How deploy, configure and orchestrator wait (one runtime list, one timeout), migrating pipeline settings, `runtimes watch` events and webhooks |
 | [Monitoring and checks](docs/monitoring.md) | Message logs, steps, attachments, payloads, validation, guidelines |
 | [Configure](docs/configure.md) | Parameters from YAML (`configure`, `configure pull`) |
 | [Security material](docs/security.md) | Credentials, `credentials apply`, keystore and certificate expiry |

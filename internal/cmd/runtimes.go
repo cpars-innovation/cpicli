@@ -44,6 +44,7 @@ the flow is not on the Cloud Integration runtime.`,
 			return nil
 		},
 	}
+	c.AddCommand(newRuntimesWatchCommand())
 	c.Flags().Bool("artifacts", false, "Also list the artifacts deployed on each runtime")
 	c.Flags().String("runtime", "", "Only this runtime (ID from the list, e.g. integrationcell); implies --artifacts")
 	return c

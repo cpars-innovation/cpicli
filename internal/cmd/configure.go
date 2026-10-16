@@ -156,6 +156,11 @@ All flags can be set in the config file under 'configure'.`,
 			if batchSize == 0 {
 				batchSize = httpclnt.DefaultBatchSize
 			}
+			wait, err := resolveDeployWait(cmd, "deploy-timeout", "configure.deployTimeout",
+				cmd.Flags().Changed("deploy-retries") || viper.IsSet("configure.deployRetries"), deployRetries, deployDelaySeconds)
+			if err != nil {
+				return err
+			}
 
 			if offline && !dryRun {
 				return output.Usagef("--offline only works with --dry-run")
@@ -176,7 +181,7 @@ All flags can be set in the config file under 'configure'.`,
 				return err
 			}
 			return runConfigure(cmd, configPath, deploymentPrefix, packageFilter, artifactFilter,
-				configureMode{dryRun: dryRun, force: force, offline: offline, allowDowngrade: allowDowngrade, versioning: versionMode, parallel: config.GetIntWithFallback(cmd, "parallel", "configure.parallel")}, deployRetries, deployDelaySeconds, parallelDeployments, batchSize, disableBatch)
+				configureMode{dryRun: dryRun, force: force, offline: offline, allowDowngrade: allowDowngrade, versioning: versionMode, parallel: config.GetIntWithFallback(cmd, "parallel", "configure.parallel")}, wait, parallelDeployments, batchSize, disableBatch)
 		},
 	}
 
@@ -189,7 +194,8 @@ All flags can be set in the config file under 'configure'.`,
 	configureCmd.Flags().BoolVar(&dryRun, "plan", false, "Same as --dry-run")
 	addDeferFlags(configureCmd)
 	configureCmd.Flags().Int("parallel", 8, "Artifacts whose parameters are read at the same time (config: configure.parallel)")
-	configureCmd.Flags().IntVar(&deployRetries, "deploy-retries", defaultDeployChecks, "Deployment status checks per artifact (config: configure.deployRetries)")
+	configureCmd.Flags().IntVar(&deployRetries, "deploy-retries", defaultDeployChecks, "Deprecated, use --deploy-timeout: status checks per artifact; when set without --deploy-timeout, the timeout is retries × delay (config: configure.deployRetries)")
+	configureCmd.Flags().String("deploy-timeout", "", "How long to wait for all deployments of the run together, e.g. 15m (default 10m; config: configure.deployTimeout)")
 	configureCmd.Flags().IntVar(&deployDelaySeconds, "deploy-delay", defaultDeployDelaySeconds, "Seconds between deployment status checks (config: configure.deployDelaySeconds)")
 	configureCmd.Flags().IntVar(&parallelDeployments, "parallel-deployments", defaultParallelDeployments, "Deployments at the same time per package (config: configure.parallelDeployments)")
 	configureCmd.Flags().IntVar(&batchSize, "batch-size", httpclnt.DefaultBatchSize, "Parameters per batch request (config: configure.batchSize)")
@@ -223,7 +229,7 @@ type configureMode struct {
 }
 
 func runConfigure(cmd *cobra.Command, configPath, deploymentPrefix, packageFilterStr, artifactFilterStr string,
-	mode configureMode, deployRetries, deployDelaySeconds, parallelDeployments, batchSize int, disableBatch bool) error {
+	mode configureMode, wait deployWait, parallelDeployments, batchSize int, disableBatch bool) error {
 	dryRun := mode.dryRun
 
 	log.Info().Msg("Starting artifact configuration")
@@ -301,7 +307,7 @@ func runConfigure(cmd *cobra.Command, configPath, deploymentPrefix, packageFilte
 		log.Info().Msgf("Deploying %d artifacts with max %d parallel deployments per package",
 			len(deploymentTasks), parallelDeployments)
 
-		deployments = deployConfiguredArtifacts(cmd.Context(), exe, deploymentTasks, deployRetries, deployDelaySeconds,
+		deployments = deployConfiguredArtifacts(cmd.Context(), exe, deploymentTasks, wait,
 			parallelDeployments, stats)
 	}
 
@@ -742,11 +748,11 @@ func updateParametersIndividual(configuration *cpi.Configuration, artifactID, ve
 }
 
 func deployConfiguredArtifacts(ctx context.Context, exe *httpclnt.HTTPExecuter, tasks []DeploymentTask,
-	deployRetries, deployDelaySeconds, parallelDeployments int, stats *ConfigureStats) []ops.Result {
+	wait deployWait, parallelDeployments int, stats *ConfigureStats) []ops.Result {
 
 	// Tasks with configuration changes are forced (the version does not
 	// change); the others are skipped when the runtime has the version.
-	results := deployTasks(ctx, exe, tasks, true, deployRetries, deployDelaySeconds, parallelDeployments)
+	results := deployTasks(ctx, exe, tasks, true, wait, parallelDeployments)
 	emitResults(ctx, results)
 	for _, r := range results {
 		if r.Status.Succeeded() {

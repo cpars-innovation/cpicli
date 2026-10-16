@@ -133,6 +133,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`resources`](#resources) | List the resources (scripts, mappings, schemas, ...) of an integration flow |
 | [`resources get`](#resources-get) | Download one resource of an integration flow |
 | [`runtimes`](#runtimes) | List the tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each |
+| [`runtimes watch`](#runtimes-watch) | Report deployments, status changes and undeployments on the tenant's runtime as events |
 | [`script-doc`](#script-doc) | Check the comments of Groovy scripts against the script doc template |
 | [`send`](#send) | Send a test message to a deployed integration flow |
 | [`skills`](#skills) | List, read and install the cpi skills built into cpictl |
@@ -543,7 +544,8 @@ All flags can be set in the config file under 'configure'.
   -c, --config-path string         Path to configuration YAML file (config: configure.configPath)
       --defer-deploy               Do not deploy: add the deployments to the pending file for one 'cpictl deploy --pending' at the end
       --deploy-delay int           Seconds between deployment status checks (config: configure.deployDelaySeconds) (default 10)
-      --deploy-retries int         Deployment status checks per artifact (config: configure.deployRetries) (default 30)
+      --deploy-retries int         Deprecated, use --deploy-timeout: status checks per artifact; when set without --deploy-timeout, the timeout is retries × delay (config: configure.deployRetries) (default 30)
+      --deploy-timeout string      How long to wait for all deployments of the run together, e.g. 15m (default 10m; config: configure.deployTimeout)
   -p, --deployment-prefix string   Deployment prefix for artifact IDs (config: configure.deploymentPrefix)
       --disable-batch              Disable batch processing, use individual requests (config: configure.disableBatch)
       --dry-run                    Show what would be done without making changes, including which artifacts would be deployed and why (config: configure.dryRun)
@@ -922,7 +924,8 @@ Configuration:
       --artifact-type string       Artifact type. Allowed values: Integration, MessageMapping, ScriptCollection, ValueMapping (config: deploy.artifactType) (default "Integration")
       --compare-versions           Perform version comparison of design time against runtime before deployment (config: deploy.compareVersions) (default true)
       --delay-length int           Seconds between deployment status checks (config: deploy.delayLength) (default 10)
-      --max-check-limit int        Deployment status checks per artifact (config: deploy.maxCheckLimit) (default 30)
+      --deploy-timeout string      How long to wait for all deployments together, e.g. 15m (default 10m; config: deploy.timeout)
+      --max-check-limit int        Deprecated, use --deploy-timeout: status checks per artifact; when set without --deploy-timeout, the timeout is checks × delay (config: deploy.maxCheckLimit) (default 30)
       --parallel-deployments int   With --pending: deployments at the same time per package (config: deploy.parallelDeployments) (default 5)
       --pending                    Deploy the pending deployments that orchestrator and configure --defer-deploy collected (each artifact once); failed ones stay in the file
       --pending-file string        Pending deployments file (default: .cpi/pending-deploy.json)
@@ -2506,7 +2509,8 @@ Configuration:
   -c, --deploy-config string       Path to deployment config file/folder/URL (config: orchestrator.deployConfig)
       --deploy-delay int           Seconds between deployment status checks (config: orchestrator.deployDelaySeconds) (default 10)
       --deploy-only                Only deploy artifacts, don't update
-      --deploy-retries int         Deployment status checks per artifact (config: orchestrator.deployRetries) (default 30)
+      --deploy-retries int         Deprecated, use --deploy-timeout: status checks per artifact; when set without --deploy-timeout, the timeout is retries × delay (config: orchestrator.deployRetries) (default 30)
+      --deploy-timeout string      How long to wait for all deployments of the run together, e.g. 15m (default 10m; config: orchestrator.deployTimeout)
   -p, --deployment-prefix string   Deployment prefix for package/artifact IDs (config: orchestrator.deploymentPrefix)
       --draft-handling string      Artifacts in draft on the tenant (someone edits them in the Web UI): SKIP (not uploaded, not deployed, reported) or ERROR (the run fails) (config: orchestrator.draftHandling) (default "SKIP")
       --fail-on-draft              Same as --draft-handling ERROR
@@ -3064,6 +3068,51 @@ the flow is not on the Cloud Integration runtime.
   cpictl runtimes
   cpictl runtimes --artifacts
   cpictl runtimes --artifacts --runtime integrationcell --output json
+```
+
+## runtimes watch
+
+Report deployments, status changes and undeployments on the tenant's runtime as events
+
+```
+Reads the runtime of the tenant with one request per interval, however many
+flows are deployed, and reports every change as an event: deployed (new on the
+runtime or deployed again), started, error (with the tenant's error text),
+status (any other status change) and undeployed. Deployments from anywhere count:
+cpictl, the Web UI, other tools.
+
+Each event is one JSON line on standard output; logs go to standard error. With
+--webhook every event is also POSTed as JSON to that URL (3 attempts). With
+--webhook-secret (or CPICTL_WEBHOOK_SECRET) the request carries
+X-Cpictl-Signature: sha256=<HMAC-SHA256 of the body>, so the receiver can check
+that it comes from this watcher. --cells also reads the runtimes the public API
+does not list (integration cells) through the Web UI's runtime list.
+
+It runs until stopped (Ctrl-C) or --duration ends. A failed read is logged and
+retried at the next interval; an authentication error ends it.
+```
+
+**Usage:** `cpictl runtimes watch [flags]`
+
+**Flags:**
+
+```
+      --artifacts strings            Only these artifact IDs (patterns with *)
+      --cells                        Also watch integration cells (Web UI runtime list: more requests per interval)
+      --duration duration            Stop after this time (default: until stopped)
+      --initial                      First report every deployed artifact (event type present)
+      --interval duration            Time between two reads of the runtime (default 10s)
+      --webhook string               POST every event as JSON to this URL (https; http only for localhost)
+      --webhook-header stringArray   Extra request header for the webhook, "Name: value" (repeatable)
+      --webhook-secret string        Sign webhook requests with HMAC-SHA256 (default: CPICTL_WEBHOOK_SECRET)
+```
+
+**Examples:**
+
+```
+  cpictl runtimes watch
+  cpictl runtimes watch --interval 5s --artifacts 'SD_*' --initial
+  cpictl runtimes watch --webhook https://studio.example.com/hooks/cpi --webhook-header "Authorization: Bearer $TOKEN"
 ```
 
 ## script-doc

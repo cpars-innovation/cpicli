@@ -450,6 +450,25 @@ func (m *Tenant) Executer() *httpclnt.HTTPExecuter {
 
 // ExpireCSRF invalidates the current CSRF token (as a tenant does when the
 // session ends); the next fetch issues a new one.
+// SetRuntime replaces what the runtime shows of artifact id (nil: not
+// deployed), as if someone deployed or undeployed it elsewhere.
+func (m *Tenant) SetRuntime(id string, rt *Runtime) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if a := m.Artifacts[id]; a != nil {
+		a.Runtime, a.triggered, a.undeployed = rt, false, false
+	}
+}
+
+// SetErrorInfo sets the runtime error text of artifact id.
+func (m *Tenant) SetErrorInfo(id, text string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if a := m.Artifacts[id]; a != nil {
+		a.ErrorInfo = text
+	}
+}
+
 func (m *Tenant) ExpireCSRF() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1418,7 +1437,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		filter := r.URL.Query().Get("$filter")
 		rows := []map[string]any{}
 		for _, id := range sortedKeys(m.Artifacts) {
-			rt := m.Artifacts[id].Runtime
+			rt := m.Artifacts[id].runtimeState()
 			if rt == nil || rt.otherLocation() || (filter != "" && !strings.Contains(filter, "'"+rt.Status+"'")) {
 				continue
 			}
@@ -1785,21 +1804,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			notFound(w)
 			return
 		}
-		var rt *Runtime
-		switch {
-		case a.undeployed:
-			if a.UndeployAfter >= 0 && a.undeployedGets >= a.UndeployAfter {
-				rt = nil
-			} else {
-				rt = a.Runtime
-			}
-			a.undeployedGets++
-		case a.triggered && len(a.AfterDeploy) > 0:
-			rt = pick(a.AfterDeploy, a.runtimeGets)
-			a.runtimeGets++
-		default:
-			rt = a.Runtime
-		}
+		rt := a.runtimeState()
 		if rt == nil || rt.otherLocation() {
 			notFound(w)
 			return
@@ -1825,6 +1830,25 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	default:
 		notFound(w)
 	}
+}
+
+// runtimeState is what the runtime shows of a for one GET (single or
+// list): after a deploy trigger the next AfterDeploy entry, after an
+// undeploy the old state until UndeployAfter GETs.
+func (a *Artifact) runtimeState() *Runtime {
+	switch {
+	case a.undeployed:
+		a.undeployedGets++
+		if a.UndeployAfter >= 0 && a.undeployedGets-1 >= a.UndeployAfter {
+			return nil
+		}
+		return a.Runtime
+	case a.triggered && len(a.AfterDeploy) > 0:
+		rt := pick(a.AfterDeploy, a.runtimeGets)
+		a.runtimeGets++
+		return rt
+	}
+	return a.Runtime
 }
 
 // deleteDesigntime removes the designtime artifact id and its edit locks; a

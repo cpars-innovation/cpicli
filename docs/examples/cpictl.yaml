@@ -30,8 +30,8 @@ oauth-host: mytenant.authentication.eu10.hana.ondemand.com
 deploy:
   artifactType: Integration   # Integration, MessageMapping, ScriptCollection, ValueMapping
   compareVersions: true       # skip artifacts whose version is already running
-  delayLength: 10             # seconds between status checks
-  maxCheckLimit: 30           # status checks per artifact (10 s x 30 = 5 minutes)
+  delayLength: 10             # seconds between status checks (one runtime list for all deployments)
+  timeout: 10m                # wait at most this long for all deployments together (docs/deployments.md)
   parallelDeployments: 5      # deploy --pending: deployments at the same time per package
   # artifactIds: [MyIFlow, MyOtherIFlow]
 
@@ -44,7 +44,7 @@ configure:
   configPath: ./config/dev.yml
   parallel: 8                 # parameter reads at the same time
   batchSize: 90
-  deployRetries: 30
+  deployTimeout: 10m
   deployDelaySeconds: 10
   parallelDeployments: 5
   pull:
@@ -61,8 +61,8 @@ orchestrator:
   # snapshotState: .cpi/snapshot-state.json   # default: found automatically; off: always download
   verifyDownload: false
   draftHandling: SKIP         # artifacts in draft on the tenant: SKIP (reported) or ERROR (exit 5)
-  parallelDeployments: 5
-  deployRetries: 30
+  parallelDeployments: 5      # triggered at a time; all are watched together
+  deployTimeout: 10m          # for all deployments of the run together
   deployDelaySeconds: 10
 
 # --- snapshot (see docs/snapshot.md) -------------------------------------------

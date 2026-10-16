@@ -185,10 +185,15 @@ Configuration:
 			if parallelDeployments == 0 {
 				parallelDeployments = defaultParallelDeployments
 			}
+			wait, err := resolveDeployWait(cmd, "deploy-timeout", "orchestrator.deployTimeout",
+				cmd.Flags().Changed("deploy-retries") || viper.IsSet("orchestrator.deployRetries"), deployRetries, deployDelaySeconds)
+			if err != nil {
+				return err
+			}
 
 			return runOrchestrator(cmd, mode, packagesDir, deployConfig,
 				deploymentPrefix, packageFilter, artifactFilter, keepTemp,
-				configPattern, mergeConfigs, deployRetries, deployDelaySeconds, parallelDeployments)
+				configPattern, mergeConfigs, wait, parallelDeployments)
 		},
 	}
 
@@ -204,7 +209,8 @@ Configuration:
 	orchestratorCmd.Flags().BoolVar(&updateMode, "update", false, "Update and deploy artifacts")
 	orchestratorCmd.Flags().BoolVar(&updateOnlyMode, "update-only", false, "Only update artifacts, don't deploy")
 	orchestratorCmd.Flags().BoolVar(&deployOnlyMode, "deploy-only", false, "Only deploy artifacts, don't update")
-	orchestratorCmd.Flags().IntVar(&deployRetries, "deploy-retries", defaultDeployChecks, "Deployment status checks per artifact (config: orchestrator.deployRetries)")
+	orchestratorCmd.Flags().IntVar(&deployRetries, "deploy-retries", defaultDeployChecks, "Deprecated, use --deploy-timeout: status checks per artifact; when set without --deploy-timeout, the timeout is retries × delay (config: orchestrator.deployRetries)")
+	orchestratorCmd.Flags().String("deploy-timeout", "", "How long to wait for all deployments of the run together, e.g. 15m (default 10m; config: orchestrator.deployTimeout)")
 	orchestratorCmd.Flags().IntVar(&deployDelaySeconds, "deploy-delay", defaultDeployDelaySeconds, "Seconds between deployment status checks (config: orchestrator.deployDelaySeconds)")
 	addVersioningFlag(orchestratorCmd)
 	orchestratorCmd.Flags().String("snapshot-state", "", "Snapshot state of the target tenant (written by snapshot) used instead of downloading artifacts for the comparison (config: orchestrator.snapshotState; default: .cpi/snapshot-state.json in the current directory or above --packages-dir; \"off\": always download)")
@@ -221,7 +227,7 @@ Configuration:
 
 func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deployConfigPath,
 	deploymentPrefix, packageFilterStr, artifactFilterStr string, keepTemp bool,
-	configPattern string, mergeConfigs bool, deployRetries, deployDelaySeconds, parallelDeployments int) error {
+	configPattern string, mergeConfigs bool, wait deployWait, parallelDeployments int) error {
 
 	log.Info().Msg("Starting orchestrator")
 	versionMode, err := versioningMode(cmd)
@@ -416,7 +422,7 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 		// Version comparison is kept from the previous implementation:
 		// artifacts whose runtime version equals the designtime version are
 		// not redeployed.
-		deployments = deployTasks(cmd.Context(), exe, deploymentTasks, true, deployRetries, deployDelaySeconds, parallelDeployments)
+		deployments = deployTasks(cmd.Context(), exe, deploymentTasks, true, wait, parallelDeployments)
 		orc.RecordDeployments(deployments)
 	}
 

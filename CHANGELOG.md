@@ -5,6 +5,24 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Deployments are watched from one runtime list, with one timeout ([docs/deployments.md](docs/deployments.md)).**
+  deploy, configure, orchestrator and `deploy --pending` read the runtime list once per interval for
+  all deployments in progress (before: one request per artifact and check).
+  - configure, orchestrator and `deploy --pending` no longer go package by package. Script collections
+    and mappings are deployed first, then all flows. Up to `parallelDeployments` are triggered at a
+    time, and all are watched together.
+  - **New: `--deploy-timeout` / `deploy.timeout` / `configure.deployTimeout` / `orchestrator.deployTimeout`
+    / `CPICTL_DEPLOY_TIMEOUT`** (default 10m): how long to wait for all deployments of the run together.
+    `--max-check-limit` / `maxCheckLimit` and `--deploy-retries` / `deployRetries` are deprecated. When set
+    without a timeout, the timeout is checks × interval (the same total as before).
+  - Logs show state changes and a closing summary (`finished in 2m13s: 40 deployed, 1 failed`)
+    instead of every check.
+  - `undeploy` and `delete` read the status from the list too.
+- **`cpictl runtimes watch`**: every deployment, status change and undeployment on the tenant as JSON
+  lines, from one request per interval, from any source (Web UI included). Errors carry the tenant's
+  text, and `--cells` also covers integration cells. With `--webhook` each event is POSTed (signed with
+  `CPICTL_WEBHOOK_SECRET`). Go: `ops.WatchRuntime`, `ops.DiffRuntime`.
+
 ## 0.21.0
 
 - **Access scope ([docs/access-scope.md](docs/access-scope.md)).** `--scope-file scope.json`, or the

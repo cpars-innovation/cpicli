@@ -83,8 +83,9 @@ func TestDeploy_SameVersionRedeployIsNotFalseSuccess(t *testing.T) {
 				AfterDeploy:  []*cpitest.Runtime{old, old, newer}},
 		}, []string{"A"}, fastOpts())
 		assert.Equal(t, StatusDeployed, results[0].Status)
-		// 1 baseline read + 3 polls (2 stale)
-		assert.Equal(t, 4, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts('A')"))
+		// 1 baseline read + 3 polls (2 stale), all from the runtime list
+		assert.Equal(t, 4, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts"))
+		assert.Zero(t, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts('A')"))
 	})
 
 	t.Run("times out if only the old deployment is visible", func(t *testing.T) {

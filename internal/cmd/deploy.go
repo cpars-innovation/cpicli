@@ -11,6 +11,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"strings"
 	"time"
 )
@@ -47,7 +48,8 @@ Configuration:
 	// Note: These can be set in config file under 'deploy' key
 	deployCmd.Flags().StringSlice("artifact-ids", nil, "Comma separated list of artifact IDs (config: deploy.artifactIds)")
 	deployCmd.Flags().Int("delay-length", defaultDeployDelaySeconds, "Seconds between deployment status checks (config: deploy.delayLength)")
-	deployCmd.Flags().Int("max-check-limit", defaultDeployChecks, "Deployment status checks per artifact (config: deploy.maxCheckLimit)")
+	deployCmd.Flags().String("deploy-timeout", "", "How long to wait for all deployments together, e.g. 15m (default 10m; config: deploy.timeout)")
+	deployCmd.Flags().Int("max-check-limit", defaultDeployChecks, "Deprecated, use --deploy-timeout: status checks per artifact; when set without --deploy-timeout, the timeout is checks × delay (config: deploy.maxCheckLimit)")
 	// To set to false, use --compare-versions=false
 	addVersioningFlag(deployCmd)
 	deployCmd.Flags().Bool("allow-downgrade", false, "Deploy even if the designtime version is older than the running version (config: deploy.allowDowngrade)")
@@ -71,6 +73,11 @@ func runDeploy(cmd *cobra.Command) error {
 	artifactIds := str.TrimSlice(config.GetStringSliceWithFallback(cmd, "artifact-ids", "deploy.artifactIds"))
 	delayLength := config.GetIntWithFallback(cmd, "delay-length", "deploy.delayLength")
 	maxCheckLimit := config.GetIntWithFallback(cmd, "max-check-limit", "deploy.maxCheckLimit")
+	wait, err := resolveDeployWait(cmd, "deploy-timeout", "deploy.timeout",
+		cmd.Flags().Changed("max-check-limit") || viper.IsSet("deploy.maxCheckLimit"), maxCheckLimit, delayLength)
+	if err != nil {
+		return err
+	}
 	compareVersions := config.GetBoolWithFallback(cmd, "compare-versions", "deploy.compareVersions")
 	allowDowngrade := config.GetBoolWithFallback(cmd, "allow-downgrade", "deploy.allowDowngrade")
 	mode, err := versioningMode(cmd)
@@ -85,7 +92,7 @@ func runDeploy(cmd *cobra.Command) error {
 			return output.Usagef("--pending and --artifact-ids cannot be combined")
 		}
 		parallel := config.GetIntWithFallback(cmd, "parallel-deployments", "deploy.parallelDeployments")
-		return runPendingDeploy(cmd, exe, serviceDetails, planOnly, maxCheckLimit, delayLength, parallel)
+		return runPendingDeploy(cmd, exe, serviceDetails, planOnly, wait, parallel)
 	}
 
 	artifacts := make([]ops.Artifact, 0, len(artifactIds))
@@ -111,16 +118,19 @@ func runDeploy(cmd *cobra.Command) error {
 		return output.Usagef("required flag \"artifact-ids\" not set (or config deploy.artifactIds)")
 	}
 
+	started := time.Now()
 	results := ops.Deploy(cmd.Context(), ops.NewTenant(exe), artifacts, ops.Options{
-		Interval:        time.Duration(delayLength) * time.Second,
-		MaxChecks:       maxCheckLimit,
+		Interval:        wait.Interval,
+		MaxChecks:       wait.MaxChecks,
+		Timeout:         wait.Timeout,
 		CompareVersions: compareVersions,
 		AllowDowngrade:  allowDowngrade,
 		Versioning:      mode,
-		// All artifacts are triggered and polled concurrently, as before
+		// All artifacts are triggered at once and watched together
 		Parallelism: len(artifacts),
 	})
 	logResults(results)
+	logDeploySummary(results, time.Since(started))
 	emitResults(cmd.Context(), results)
 	output.SetResult(cmd.Context(), artifactResults{Results: results})
 	if err := ops.Err(results); err != nil {
@@ -133,7 +143,7 @@ func runDeploy(cmd *cobra.Command) error {
 // runPendingDeploy deploys the pending deployments once each and keeps
 // only the failed ones in the file.
 func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDetails *cpi.ServiceDetails, planOnly bool,
-	maxChecks, delaySeconds, parallel int) error {
+	wait deployWait, parallel int) error {
 	path := pendingFile(cmd)
 	p, err := loadPending(path)
 	if err != nil {
@@ -157,8 +167,7 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 		output.SetResult(cmd.Context(), planResult{Plan: items})
 		return logPlan(items)
 	}
-	results := deployTasks(cmd.Context(), exe, tasks, true, maxChecks, delaySeconds, parallel)
-	logResults(results)
+	results := deployTasks(cmd.Context(), exe, tasks, true, wait, parallel)
 	emitResults(cmd.Context(), results)
 	output.SetResult(cmd.Context(), artifactResults{Results: results})
 	drafts := 0

@@ -33,7 +33,7 @@ func TestCredentialsFromConfigFile(t *testing.T) {
 	root.SetErr(&bytes.Buffer{})
 	root.SetArgs([]string{"undeploy", "--artifact-ids", "A"})
 	require.NoError(t, root.Execute())
-	assert.Equal(t, 1, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts('A')"))
+	assert.Equal(t, 1, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts"))
 }
 
 func TestDeployArtifactIDsFromConfigFile(t *testing.T) {
@@ -93,7 +93,7 @@ func TestConfigFromEnvAndPermissionWarning(t *testing.T) {
 	root.SetErr(&stderr)
 	root.SetArgs([]string{"undeploy", "--artifact-ids", "A"})
 	require.NoError(t, root.Execute())
-	assert.Equal(t, 1, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts('A')"))
+	assert.Equal(t, 1, mock.Count("GET /api/v1/IntegrationRuntimeArtifacts"))
 	if runtime.GOOS != "windows" {
 		assert.Contains(t, stderr.String(), "chmod 600")
 		assert.NotContains(t, stderr.String(), "secret\\n", "the value is never logged")

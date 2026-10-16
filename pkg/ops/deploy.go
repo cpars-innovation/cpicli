@@ -46,6 +46,9 @@ type Artifact struct {
 	ID        string
 	Type      string // Integration, MessageMapping, ScriptCollection, ValueMapping
 	PackageID string // informational only
+	// Force deploys even when Options.CompareVersions would skip it (the
+	// same version is already STARTED).
+	Force bool
 	// AllowDowngrade allows this artifact's designtime version to be older
 	// than the running one (as Options.AllowDowngrade for all artifacts).
 	AllowDowngrade bool
@@ -125,8 +128,14 @@ type Result struct {
 type Options struct {
 	// Interval between two status checks.
 	Interval time.Duration
-	// MaxChecks is the maximum number of status checks per artifact.
+	// MaxChecks is the maximum number of status checks per artifact when
+	// neither Timeout nor Deadline is set.
 	MaxChecks int
+	// Timeout is how long Deploy and Undeploy wait for all artifacts
+	// together, from the call (0: MaxChecks per artifact). Deadline, when
+	// set, is the absolute end instead (several calls sharing one budget).
+	Timeout  time.Duration
+	Deadline time.Time
 	// CompareVersions skips deployment when the same version is already STARTED.
 	CompareVersions bool
 	// AllowDowngrade deploys a designtime version that is older than the
@@ -154,6 +163,55 @@ type Options struct {
 
 	progress    *progress
 	totalChecks int
+	runtime     *runtimeSnapshot
+}
+
+// prepare sets the deadline, the shared runtime snapshot and the progress
+// total of one Deploy or Undeploy call.
+func (o Options) prepare(tenant Tenant, n int) Options {
+	if o.Deadline.IsZero() && o.Timeout > 0 {
+		o.Deadline = time.Now().Add(o.Timeout)
+	}
+	o.progress, o.runtime = newProgress(o.Progress), newRuntimeSnapshot(tenant, o.Interval)
+	o.totalChecks = o.checks() * n
+	return o
+}
+
+// checks is the number of checks per artifact shown in progress messages.
+func (o Options) checks() int {
+	if !o.Deadline.IsZero() && o.Interval > 0 {
+		return max(int(time.Until(o.Deadline)/o.Interval), 1)
+	}
+	return o.MaxChecks
+}
+
+// more tells whether check number check may run: always the first, then
+// until the deadline or MaxChecks.
+func (o Options) more(check int) bool {
+	if check == 1 {
+		return true
+	}
+	if !o.Deadline.IsZero() {
+		return time.Now().Before(o.Deadline)
+	}
+	return check <= o.MaxChecks
+}
+
+// pause is the wait before the next check: the interval, shortened to the
+// time left before the deadline.
+func (o Options) pause() time.Duration {
+	if !o.Deadline.IsZero() {
+		return max(min(o.Interval, time.Until(o.Deadline)), 0)
+	}
+	return o.Interval
+}
+
+// limit describes how long was waited, for timeout messages.
+func (o Options) limit(checks int) string {
+	if !o.Deadline.IsZero() {
+		return fmt.Sprintf("the deploy timeout (%d checks)", checks)
+	}
+	return fmt.Sprintf("%d checks", o.MaxChecks)
 }
 
 // designtimeModified is implemented by tenants that report when a
@@ -253,24 +311,30 @@ func (t *apiTenant) Undeploy(id string) error {
 	return t.rt.UnDeploy(id)
 }
 
-// Deploy deploys all artifacts and waits for each outcome. Results are
-// returned in input order; an individual failure never stops the others.
+// Deploy deploys all artifacts and waits for each outcome. Up to
+// Parallelism artifacts are checked and triggered at a time; the waiting is
+// shared: every artifact is watched until its outcome, Timeout or
+// Deadline, all from one runtime list per interval. Results are returned in
+// input order; an individual failure never stops the others.
 func Deploy(ctx context.Context, tenant Tenant, artifacts []Artifact, opts Options) []Result {
-	opts.progress, opts.totalChecks = newProgress(opts.Progress), opts.MaxChecks*len(artifacts)
-	return forEach(ctx, artifacts, opts.Parallelism, func(a Artifact) Result {
-		return deployOne(ctx, tenant, a, opts)
+	opts = opts.prepare(tenant, len(artifacts))
+	return forEachTriggered(ctx, artifacts, opts.Parallelism, func(a Artifact, triggered func()) Result {
+		return deployOne(ctx, tenant, a, opts, triggered)
 	})
 }
 
 // Undeploy removes all artifacts from runtime and waits until each is gone.
 func Undeploy(ctx context.Context, tenant Tenant, artifacts []Artifact, opts Options) []Result {
-	opts.progress, opts.totalChecks = newProgress(opts.Progress), opts.MaxChecks*len(artifacts)
-	return forEach(ctx, artifacts, opts.Parallelism, func(a Artifact) Result {
-		return undeployOne(ctx, tenant, a, opts)
+	opts = opts.prepare(tenant, len(artifacts))
+	return forEachTriggered(ctx, artifacts, opts.Parallelism, func(a Artifact, triggered func()) Result {
+		return undeployOne(ctx, tenant, a, opts, triggered)
 	})
 }
 
-func forEach(ctx context.Context, artifacts []Artifact, parallelism int, fn func(Artifact) Result) []Result {
+// forEachTriggered runs fn for every artifact; at most parallelism of them
+// at a time until they call triggered (the request to the tenant is sent),
+// then they wait without holding a slot.
+func forEachTriggered(ctx context.Context, artifacts []Artifact, parallelism int, fn func(Artifact, func()) Result) []Result {
 	results := make([]Result, len(artifacts))
 	if parallelism <= 0 || parallelism > len(artifacts) {
 		parallelism = len(artifacts)
@@ -280,8 +344,10 @@ func forEach(ctx context.Context, artifacts []Artifact, parallelism int, fn func
 	for i, a := range artifacts {
 		wg.Go(func() {
 			sem <- struct{}{}
-			defer func() { <-sem }()
-			r := fn(a)
+			var once sync.Once
+			release := func() { once.Do(func() { <-sem }) }
+			defer release()
+			r := fn(a, release)
 			r.ID, r.Type, r.PackageID = a.ID, a.Type, a.PackageID
 			results[i] = r
 		})
@@ -311,7 +377,7 @@ func timeout(r Result, err error) Result {
 	return r
 }
 
-func deployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Result {
+func deployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options, triggered func()) Result {
 	var r Result
 	logger := log.With().Str("artifact", a.ID).Logger()
 
@@ -334,7 +400,7 @@ func deployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Res
 
 	// The runtime state before the trigger is the baseline used to tell a
 	// fresh deployment from the previous one that is still visible.
-	before, err := tenant.RuntimeArtifact(a.ID)
+	before, err := opts.runtime.get(a.ID)
 	if err != nil {
 		return fail(r, err)
 	}
@@ -351,7 +417,7 @@ func deployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Res
 		return fail(r, err)
 	}
 	logger.Info().Str("rule", r.Rule).Msgf("Version %s of %v: rule %s (%s)", version, a.ID, r.Rule, r.Reason)
-	if opts.CompareVersions && before != nil && before.Status == "STARTED" && before.Version == version {
+	if opts.CompareVersions && !a.Force && before != nil && before.Status == "STARTED" && before.Version == version {
 		logger.Info().Msgf("Artifact %v with version %v already deployed. Skipping runtime deployment", a.ID, version)
 		r.Status = StatusSkipped
 		return r
@@ -360,6 +426,7 @@ func deployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Res
 	logger.Info().Str("version", version).Msgf("🚀 Deploying artifact %v with version %v%s", a.ID, version, versioningNote(mode))
 	triggeredAt := time.Now()
 	r.TaskID, err = tenant.TriggerDeploy(a.Type, a.ID)
+	triggered()
 	if err != nil {
 		return fail(r, WithTenantText(err))
 	}
@@ -495,12 +562,24 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 	var lastErr error
 	otherErr := errNotLookedUp
 	var otherStale *cpi.LocatedArtifact // found elsewhere, but the previous deployment
+	checks := opts.checks()
 	report := func(check int, state string) {
-		opts.progress.report(opts.totalChecks, "artifact %s: %s, check %d/%d", a.ID, state, check, opts.MaxChecks)
+		opts.progress.report(opts.totalChecks, "artifact %s: %s, check %d/%d", a.ID, state, check, checks)
+	}
+	// note logs a state at info level when it changed, else at debug
+	// level: with many artifacts only changes are worth reading
+	lastNote := ""
+	note := func(state, format string, args ...any) {
+		ev := logger.Debug()
+		if state != lastNote {
+			ev, lastNote = logger.Info(), state
+		}
+		ev.Msgf(format, args...)
 	}
 
-	for check := 1; check <= opts.MaxChecks; check++ {
-		if err := sleep(ctx, opts.Interval); err != nil {
+	check := 0
+	for check = 1; opts.more(check); check++ {
+		if err := sleep(ctx, opts.pause()); err != nil {
 			return fail(r, fmt.Errorf("deployment of %v not confirmed: %w", a.ID, err))
 		}
 
@@ -516,12 +595,12 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 				taskDone = true
 			case err != nil:
 				lastErr = err
-				logger.Warn().Msgf("Check %d/%d - failed to get build and deploy status: %v", check, opts.MaxChecks, err)
+				note("task-error", "Check %d - failed to get build and deploy status: %v", check, err)
 				report(check, "build and deploy status unavailable")
 				continue
 			default:
 				taskStatus = status
-				logger.Info().Msgf("Check %d/%d - build and deploy status of %v = %s", check, opts.MaxChecks, a.ID, status)
+				note("task "+status, "Check %d - build and deploy status of %v = %s", check, a.ID, status)
 				switch strings.ToUpper(status) {
 				case "SUCCESS":
 					taskDone, taskConfirmed = true, true
@@ -530,7 +609,7 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 					info := errorInfoSuffix(ctx, tenant, a.ID, opts.Interval)
 					// a first deploy on a fresh tenant can end FAIL while the
 					// runtime runs the new version (#24): report both
-					if rt, rerr := tenant.RuntimeArtifact(a.ID); rerr == nil && rt != nil && rt.Status == "STARTED" && isFresh(rt, before, triggeredAt, skew, false) {
+					if rt, rerr := opts.runtime.get(a.ID); rerr == nil && rt != nil && rt.Status == "STARTED" && isFresh(rt, before, triggeredAt, skew, false) {
 						if rt.Version != "" {
 							r.Version = rt.Version
 						}
@@ -550,13 +629,13 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 		}
 
 		// 2) Runtime status
-		rt, err := tenant.RuntimeArtifact(a.ID)
+		rt, err := opts.runtime.get(a.ID)
 		if err != nil {
 			if httpclnt.IsAuthError(err) {
 				return fail(r, err)
 			}
 			lastErr = err
-			logger.Warn().Msgf("Check %d/%d - failed to get runtime status: %v", check, opts.MaxChecks, err)
+			note("runtime-error", "Check %d - failed to get runtime status: %v", check, err)
 			report(check, "runtime status unavailable")
 			continue
 		}
@@ -568,17 +647,17 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 					return res
 				}
 			}
-			logger.Info().Msgf("Check %d/%d - artifact %v not yet visible on runtime", check, opts.MaxChecks, a.ID)
+			note("absent", "Check %d - artifact %v not yet visible on runtime", check, a.ID)
 			report(check, "not yet on runtime")
 			continue
 		}
 		runtimeStatus = rt.Status
 		if !isFresh(rt, before, triggeredAt, skew, taskConfirmed) {
-			logger.Info().Msgf("Check %d/%d - runtime still shows the previous deployment of %v (status %s)", check, opts.MaxChecks, a.ID, rt.Status)
+			note("previous", "Check %d - runtime still shows the previous deployment of %v (status %s)", check, a.ID, rt.Status)
 			report(check, "runtime still shows the previous deployment ("+rt.Status+")")
 			continue
 		}
-		logger.Info().Msgf("Check %d/%d - runtime status of %v = %s", check, opts.MaxChecks, a.ID, rt.Status)
+		note("runtime "+rt.Status, "Check %d - runtime status of %v = %s", check, a.ID, rt.Status)
 		report(check, rt.Status)
 		switch rt.Status {
 		case "STARTED":
@@ -596,8 +675,8 @@ func waitForDeployment(ctx context.Context, tenant Tenant, a Artifact, r Result,
 		}
 	}
 
-	err := fmt.Errorf("deployment status of %v remained unfinished after %d checks (task status %q, runtime status %q)",
-		a.ID, opts.MaxChecks, taskStatus, runtimeStatus)
+	err := fmt.Errorf("deployment status of %v remained unfinished after %s (task status %q, runtime status %q)",
+		a.ID, opts.limit(check-1), taskStatus, runtimeStatus)
 	if lastErr != nil {
 		err = fmt.Errorf("%w; last error: %v", err, lastErr)
 	}
@@ -703,11 +782,11 @@ func errorInfoSuffix(ctx context.Context, tenant Tenant, id string, wait time.Du
 	return ". Error message = " + strings.Join(lines, " | ")
 }
 
-func undeployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) Result {
+func undeployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options, triggered func()) Result {
 	var r Result
 	logger := log.With().Str("artifact", a.ID).Logger()
 
-	current, err := tenant.RuntimeArtifact(a.ID)
+	current, err := opts.runtime.get(a.ID)
 	if err != nil {
 		return fail(r, err)
 	}
@@ -718,7 +797,9 @@ func undeployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) R
 	}
 	r.Version = current.Version
 
-	if err = tenant.Undeploy(a.ID); err != nil {
+	err = tenant.Undeploy(a.ID)
+	triggered()
+	if err != nil {
 		if httpclnt.StatusCode(err) == 404 {
 			r.Status = StatusNotDeployed
 			return r
@@ -729,31 +810,32 @@ func undeployOne(ctx context.Context, tenant Tenant, a Artifact, opts Options) R
 
 	status := current.Status
 	var lastErr error
-	for check := 1; check <= opts.MaxChecks; check++ {
-		if err := sleep(ctx, opts.Interval); err != nil {
+	checks, check := opts.checks(), 0
+	for check = 1; opts.more(check); check++ {
+		if err := sleep(ctx, opts.pause()); err != nil {
 			return fail(r, fmt.Errorf("undeployment of %v not confirmed: %w", a.ID, err))
 		}
-		rt, err := tenant.RuntimeArtifact(a.ID)
+		rt, err := opts.runtime.get(a.ID)
 		if err != nil {
 			if httpclnt.IsAuthError(err) {
 				return fail(r, err)
 			}
 			lastErr = err
-			logger.Warn().Msgf("Check %d/%d - failed to get runtime status: %v", check, opts.MaxChecks, err)
-			opts.progress.report(opts.totalChecks, "artifact %s: runtime status unavailable, check %d/%d", a.ID, check, opts.MaxChecks)
+			logger.Warn().Msgf("Check %d - failed to get runtime status: %v", check, err)
+			opts.progress.report(opts.totalChecks, "artifact %s: runtime status unavailable, check %d/%d", a.ID, check, checks)
 			continue
 		}
 		if rt == nil {
-			opts.progress.report(opts.totalChecks, "artifact %s: UNDEPLOYED, check %d/%d", a.ID, check, opts.MaxChecks)
+			opts.progress.report(opts.totalChecks, "artifact %s: UNDEPLOYED, check %d/%d", a.ID, check, checks)
 			logger.Info().Msgf("Artifact %v undeployed successfully", a.ID)
 			r.Status = StatusUndeployed
 			return r
 		}
 		status = rt.Status
-		logger.Info().Msgf("Check %d/%d - artifact %v still on runtime (status %s)", check, opts.MaxChecks, a.ID, rt.Status)
-		opts.progress.report(opts.totalChecks, "artifact %s: still on runtime (%s), check %d/%d", a.ID, rt.Status, check, opts.MaxChecks)
+		logger.Debug().Msgf("Check %d - artifact %v still on runtime (status %s)", check, a.ID, rt.Status)
+		opts.progress.report(opts.totalChecks, "artifact %s: still on runtime (%s), check %d/%d", a.ID, rt.Status, check, checks)
 	}
-	err = fmt.Errorf("artifact %v still present on runtime after %d checks (status %q)", a.ID, opts.MaxChecks, status)
+	err = fmt.Errorf("artifact %v still present on runtime after %s (status %q)", a.ID, opts.limit(check-1), status)
 	if lastErr != nil {
 		err = fmt.Errorf("%w; last error: %v", err, lastErr)
 	}

@@ -79,10 +79,11 @@ How it runs:
    `$batch` requests (`--batch-size`, default 90). If a batch fails, the parameters are written
    one by one. Keys that do not exist on the artifact are skipped and counted as failed.
 2. **Deploy**: artifacts with `deploy: true` (or in a package with `deploy: true`) that were
-   configured successfully are deployed package by package, up to `--parallel-deployments`
-   (default 5) at a time: always after a parameter change, otherwise only when the runtime
-   version differs from the designtime version. Status is checked
-   `--deploy-retries` (default 30) times every `--deploy-delay` (default 10) seconds.
+   configured successfully are deployed: always after a parameter change, otherwise only when
+   the runtime version differs from the designtime version. Script collections and mappings go
+   first, then the flows; up to `--parallel-deployments` (default 5) are triggered at a time and
+   all are watched together, from one runtime list every `--deploy-delay` (default 10) seconds,
+   for at most `--deploy-timeout` (default 10m) in total ([deployments.md](deployments.md)).
 
 | Flag | Description |
 |------|-------------|
@@ -99,8 +100,9 @@ How it runs:
 | `--disable-batch` | Always write parameters one by one |
 
 All flags can be set in the global config file under `configure:` (`configPath`,
-`deploymentPrefix`, `packageFilter`, `artifactFilter`, `dryRun`, `deployRetries`,
-`deployDelaySeconds`, `parallelDeployments`, `batchSize`, `disableBatch`).
+`deploymentPrefix`, `packageFilter`, `artifactFilter`, `dryRun`, `deployTimeout`,
+`deployDelaySeconds`, `parallelDeployments`, `batchSize`, `disableBatch`; `deployRetries` is
+deprecated, see [deployments.md](deployments.md#migrating-pipeline-configuration)).
 
 With `--output json` the result contains the statistics, the `diff` (per key: `update` with local
 and tenant value, `unchanged`, `unknown_key`) and one deployment result per deployed artifact. Failures give exit code 7 when anything succeeded, otherwise 5.

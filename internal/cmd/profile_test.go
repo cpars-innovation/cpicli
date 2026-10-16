@@ -36,7 +36,7 @@ func TestProfiles(t *testing.T) {
 		code := Run(context.Background(), args, &stdout, &stderr, "test", "test")
 		return code, stdout.String(), stderr.String()
 	}
-	undeploys := func(m *cpitest.Tenant) int { return m.Count("GET /api/v1/IntegrationRuntimeArtifacts('A')") }
+	undeploys := func(m *cpitest.Tenant) int { return m.Count("GET /api/v1/IntegrationRuntimeArtifacts") }
 
 	// no profile chosen, no home file: no tenant
 	code, _, _ := run("undeploy", "--artifact-ids", "A")
