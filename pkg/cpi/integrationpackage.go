@@ -136,7 +136,7 @@ func (ip *IntegrationPackage) GetPackagesData() ([]*PackageSingleData, error) {
 
 func (ip *IntegrationPackage) Get(id string) (packageData *PackageSingleData, readOnly bool, exists bool, err error) {
 	log.Info().Msgf("Getting details of integration package %v", id)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages('%v')", id)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages(%s)", pathKey(id))
 
 	callType := "Get IntegrationPackages by ID"
 	resp, err := readOnlyCall(urlPath, callType, ip.exe)
@@ -165,7 +165,7 @@ func (ip *IntegrationPackage) Get(id string) (packageData *PackageSingleData, re
 
 func (ip *IntegrationPackage) GetArtifactsData(id string, artifactType string) ([]*ArtifactDetails, error) {
 	log.Info().Msgf("Getting %v designtime artifacts of package %v", artifactType, id)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages('%v')/%vDesigntimeArtifacts", id, artifactType)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages(%s)/%vDesigntimeArtifacts", pathKey(id), artifactType)
 
 	callType := fmt.Sprintf("Get %v designtime artifacts of IntegrationPackages", artifactType)
 	resp, err := readOnlyCall(urlPath, callType, ip.exe)
@@ -255,7 +255,7 @@ func (ip *IntegrationPackage) Create(packageData *PackageSingleData) error {
 func (ip *IntegrationPackage) Update(packageData *PackageSingleData) error {
 	packageId := packageData.Root.Id
 	log.Info().Msgf("Updating integration package %v", packageId)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages('%v')", packageId)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages(%s)", pathKey(packageId))
 
 	requestBody, err := ip.constructBody(packageData)
 	if err != nil {
@@ -267,7 +267,7 @@ func (ip *IntegrationPackage) Update(packageData *PackageSingleData) error {
 
 func (ip *IntegrationPackage) Delete(packageId string) error {
 	log.Info().Msgf("Deleting integration package %v", packageId)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages('%v')", packageId)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationPackages(%s)", pathKey(packageId))
 	return modifyingCall("DELETE", urlPath, nil, 202, "Delete integration package", ip.exe)
 }
 

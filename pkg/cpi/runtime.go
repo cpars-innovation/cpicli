@@ -65,7 +65,7 @@ func NewRuntime(exe *httpclnt.HTTPExecuter) *Runtime {
 // *httpclnt.HTTPError so that callers can treat "not deployed" explicitly.
 func (r *Runtime) UnDeploy(id string) error {
 	log.Info().Msgf("Undeploying runtime artifact %v", id)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationRuntimeArtifacts('%v')", id)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationRuntimeArtifacts(%s)", pathKey(id))
 
 	headers := map[string]string{}
 	headers["Accept"] = "application/json"
@@ -104,7 +104,7 @@ func (r *Runtime) Get(id string) (version string, status string, err error) {
 // deployed.
 func (r *Runtime) GetArtifact(id string) (*RuntimeArtifact, error) {
 	log.Debug().Msgf("Getting details of runtime artifact %v", id)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationRuntimeArtifacts('%v')", id)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationRuntimeArtifacts(%s)", pathKey(id))
 
 	callType := "Get runtime artifact"
 	resp, err := readOnlyCall(urlPath, callType, r.exe)
@@ -153,7 +153,7 @@ func (r *Runtime) GetArtifact(id string) (*RuntimeArtifact, error) {
 // a deployment was triggered (e.g. DEPLOYING, SUCCESS, FAIL).
 func (r *Runtime) GetBuildAndDeployStatus(taskId string) (string, error) {
 	log.Debug().Msgf("Getting build and deploy status of task %v", taskId)
-	urlPath := fmt.Sprintf("/api/v1/BuildAndDeployStatus(TaskId='%v')", taskId)
+	urlPath := fmt.Sprintf("/api/v1/BuildAndDeployStatus(TaskId=%s)", pathKey(taskId))
 
 	resp, err := readOnlyCall(urlPath, "Get build and deploy status", r.exe)
 	if err != nil {
@@ -173,7 +173,7 @@ func (r *Runtime) GetBuildAndDeployStatus(taskId string) (string, error) {
 
 func (r *Runtime) GetErrorInfo(id string) (string, error) {
 	log.Info().Msgf("Getting error info of runtime artifact %v", id)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationRuntimeArtifacts('%v')/ErrorInformation/$value", id)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationRuntimeArtifacts(%s)/ErrorInformation/$value", pathKey(id))
 
 	callType := "Get runtime artifact error information"
 	resp, err := readOnlyCall(urlPath, callType, r.exe)

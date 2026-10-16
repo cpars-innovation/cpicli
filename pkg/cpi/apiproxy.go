@@ -127,7 +127,7 @@ func (a *APIProxy) Upload(sourceDir string, workDir string) error {
 
 func (a *APIProxy) Exists(id string) (bool, error) {
 	log.Info().Msgf("Getting details of APIProxy %v", id)
-	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProxies('%v')", id)
+	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProxies(%s)", pathKey(id))
 
 	callType := "Get APIProxy"
 	_, err := readOnlyCall(urlPath, callType, a.exe)
@@ -176,7 +176,7 @@ func (a *APIProxy) List() ([]*APIProxyMetadata, error) {
 func (a *APIProxy) Delete(id string) error {
 	log.Info().Msgf("Deleting APIProxy %v", id)
 
-	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProxies('%v')", id)
+	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProxies(%s)", pathKey(id))
 	return modifyingCall("DELETE", urlPath, nil, 204, "Delete APIProxy", a.exe)
 }
 

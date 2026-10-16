@@ -18,6 +18,15 @@ import (
 // ranges, log files, idempotent repository and ID mapper entries.
 
 // pathKey formats a string key for use in a URL path.
+// PathKey is s as a quoted OData key for a URL path: quotes doubled, then
+// path-escaped, so an ID can never change which entity a URL addresses.
+func PathKey(s string) string { return pathKey(s) }
+
+// queryKey is s as a quoted OData literal in a query string.
+func queryKey(s string) string {
+	return "'" + url.QueryEscape(strings.ReplaceAll(s, "'", "''")) + "'"
+}
+
 func pathKey(s string) string {
 	return "'" + url.PathEscape(strings.ReplaceAll(s, "'", "''")) + "'"
 }

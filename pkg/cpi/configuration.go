@@ -6,7 +6,6 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/go-errors/errors"
 	"github.com/rs/zerolog/log"
-	"net/url"
 )
 
 type Configuration struct {
@@ -33,7 +32,7 @@ func NewConfiguration(exe *httpclnt.HTTPExecuter) *Configuration {
 
 func (c *Configuration) Get(id string, version string) (*ParametersData, error) {
 	log.Info().Msgf("Getting configuration parameters of Integration designtime artifact %v", id)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id='%v',Version='%v')/Configurations", id, version)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id=%s,Version=%s)/Configurations", pathKey(id), pathKey(version))
 
 	callType := "Get configuration parameters"
 	resp, err := readOnlyCall(urlPath, callType, c.exe)
@@ -55,9 +54,7 @@ func (c *Configuration) Get(id string, version string) (*ParametersData, error) 
 
 func (c *Configuration) Update(id string, version string, key string, value string) error {
 	log.Info().Msgf("Updating configuration parameter %v of Integration designtime artifact %v", key, id)
-	// Spaces in key needs to be escaped
-	encodedKey := url.PathEscape(key)
-	urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id='%v',Version='%v')/$links/Configurations('%v')", id, version, encodedKey)
+	urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id=%s,Version=%s)/$links/Configurations(%s)", pathKey(id), pathKey(version), pathKey(key))
 
 	parameterData := &ParameterData{ParameterValue: value}
 	requestBody, err := json.Marshal(parameterData)

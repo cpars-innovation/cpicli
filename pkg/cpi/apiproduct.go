@@ -147,7 +147,7 @@ type APIResourceMetadata struct {
 
 func (a *APIProduct) Download(name string, targetRootDir string) error {
 	log.Info().Msgf("Downloading APIProduct %v", name)
-	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProducts('%v')?$expand=additionalProperties,apiProxies,apiResources,apiResources/apiProxyEndPoint", name)
+	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProducts(%s)?$expand=additionalProperties,apiProxies,apiResources,apiResources/apiProxyEndPoint", pathKey(name))
 
 	resp, err := readOnlyCall(urlPath, "Get APIProduct", a.exe)
 	if err != nil {
@@ -269,7 +269,7 @@ func (a *APIProduct) Upload(sourceFile string, workDir string) error {
 
 func (a *APIProduct) Exists(id string) (bool, error) {
 	log.Info().Msgf("Checking existence of APIProduct %v", id)
-	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProducts('%v')", id)
+	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProducts(%s)", pathKey(id))
 
 	callType := "Get APIProduct"
 	_, err := readOnlyCall(urlPath, callType, a.exe)
@@ -316,13 +316,13 @@ func (a *APIProduct) List() ([]*APIProductMetadata, error) {
 func (a *APIProduct) Delete(id string) error {
 	log.Info().Msgf("Deleting APIProduct %v", id)
 
-	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProducts('%v')", id)
+	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIProducts(%s)", pathKey(id))
 	return modifyingCall("DELETE", urlPath, nil, 204, "Delete APIProduct", a.exe)
 }
 
 func (a *APIResource) Exists(id string) (bool, error) {
 	log.Info().Msgf("Checking existence of APIResource %v", id)
-	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIResources('%v')", id)
+	urlPath := fmt.Sprintf("/apiportal/api/1.0/Management.svc/APIResources(%s)", pathKey(id))
 
 	callType := "Get APIResource"
 	_, err := readOnlyCall(urlPath, callType, a.exe)

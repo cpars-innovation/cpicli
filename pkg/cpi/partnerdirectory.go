@@ -96,9 +96,9 @@ func (pd *PartnerDirectory) GetBinaryParameters(selectFields string) ([]BinaryPa
 
 // GetStringParameter retrieves a single string parameter
 func (pd *PartnerDirectory) GetStringParameter(pid, id string) (*StringParameter, error) {
-	path := fmt.Sprintf("/api/v1/StringParameters(Pid='%s',Id='%s')",
-		url.QueryEscape(pid),
-		url.QueryEscape(id))
+	path := fmt.Sprintf("/api/v1/StringParameters(Pid=%s,Id=%s)",
+		pathKey(pid),
+		pathKey(id))
 
 	log.Debug().Msgf("Getting string parameter %s/%s", pid, id)
 
@@ -135,9 +135,9 @@ func (pd *PartnerDirectory) GetStringParameter(pid, id string) (*StringParameter
 
 // GetBinaryParameter retrieves a single binary parameter
 func (pd *PartnerDirectory) GetBinaryParameter(pid, id string) (*BinaryParameter, error) {
-	path := fmt.Sprintf("/api/v1/BinaryParameters(Pid='%s',Id='%s')",
-		url.QueryEscape(pid),
-		url.QueryEscape(id))
+	path := fmt.Sprintf("/api/v1/BinaryParameters(Pid=%s,Id=%s)",
+		pathKey(pid),
+		pathKey(id))
 
 	log.Debug().Msgf("Getting binary parameter %s/%s", pid, id)
 
@@ -212,9 +212,9 @@ func (pd *PartnerDirectory) UpdateStringParameter(param StringParameter) error {
 		return fmt.Errorf("failed to marshal body: %w", err)
 	}
 
-	path := fmt.Sprintf("/api/v1/StringParameters(Pid='%s',Id='%s')",
-		url.QueryEscape(param.Pid),
-		url.QueryEscape(param.ID))
+	path := fmt.Sprintf("/api/v1/StringParameters(Pid=%s,Id=%s)",
+		pathKey(param.Pid),
+		pathKey(param.ID))
 
 	log.Debug().Msgf("Updating string parameter %s/%s", param.Pid, param.ID)
 
@@ -236,9 +236,9 @@ func (pd *PartnerDirectory) UpdateStringParameter(param StringParameter) error {
 
 // DeleteStringParameter deletes a string parameter
 func (pd *PartnerDirectory) DeleteStringParameter(pid, id string) error {
-	path := fmt.Sprintf("/api/v1/StringParameters(Pid='%s',Id='%s')",
-		url.QueryEscape(pid),
-		url.QueryEscape(id))
+	path := fmt.Sprintf("/api/v1/StringParameters(Pid=%s,Id=%s)",
+		pathKey(pid),
+		pathKey(id))
 
 	log.Debug().Msgf("Deleting string parameter %s/%s", pid, id)
 
@@ -300,9 +300,9 @@ func (pd *PartnerDirectory) UpdateBinaryParameter(param BinaryParameter) error {
 		return fmt.Errorf("failed to marshal body: %w", err)
 	}
 
-	path := fmt.Sprintf("/api/v1/BinaryParameters(Pid='%s',Id='%s')",
-		url.QueryEscape(param.Pid),
-		url.QueryEscape(param.ID))
+	path := fmt.Sprintf("/api/v1/BinaryParameters(Pid=%s,Id=%s)",
+		pathKey(param.Pid),
+		pathKey(param.ID))
 
 	log.Debug().Msgf("Updating binary parameter %s/%s", param.Pid, param.ID)
 
@@ -324,9 +324,9 @@ func (pd *PartnerDirectory) UpdateBinaryParameter(param BinaryParameter) error {
 
 // DeleteBinaryParameter deletes a binary parameter
 func (pd *PartnerDirectory) DeleteBinaryParameter(pid, id string) error {
-	path := fmt.Sprintf("/api/v1/BinaryParameters(Pid='%s',Id='%s')",
-		url.QueryEscape(pid),
-		url.QueryEscape(id))
+	path := fmt.Sprintf("/api/v1/BinaryParameters(Pid=%s,Id=%s)",
+		pathKey(pid),
+		pathKey(id))
 
 	log.Debug().Msgf("Deleting binary parameter %s/%s", pid, id)
 

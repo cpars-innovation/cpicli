@@ -657,8 +657,8 @@ func updateParametersBatch(exe *httpclnt.HTTPExecuter, configuration *cpi.Config
 
 		// Add to batch
 		requestBody := fmt.Sprintf(`{"ParameterValue":"%s"}`, escapeJSON(param.Value))
-		urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id='%s',Version='%s')/$links/Configurations('%s')",
-			artifactID, version, param.Key)
+		urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id=%s,Version=%s)/$links/Configurations(%s)",
+			cpi.PathKey(artifactID), cpi.PathKey(version), cpi.PathKey(param.Key))
 
 		log.Debug().Msgf("      Adding batch operation: %s %s", "PUT", urlPath)
 
