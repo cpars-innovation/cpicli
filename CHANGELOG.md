@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.22.0
+
 - **Backups for disaster recovery: `cpictl backup create | verify | diff` ([docs/backup.md](docs/backup.md)).**
   One archive per run holds:
   - every package and artifact (zip), the externalised parameters and the Partner Directory;

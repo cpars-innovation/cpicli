@@ -95,7 +95,16 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          cat > "${RUNNER_TEMP}/notes.md" <<NOTES
+          # the version's section of CHANGELOG.md, with links to the docs of this tag
+          awk -v h="## ${VERSION#v}" '$0==h{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md \
+            | sed "s#](docs/#](https://github.com/${GITHUB_REPOSITORY}/blob/${VERSION}/docs/#g" > "${RUNNER_TEMP}/changes.md"
+          if [ -s "${RUNNER_TEMP}/changes.md" ]; then
+            { echo "## What's new"; cat "${RUNNER_TEMP}/changes.md"; echo; } > "${RUNNER_TEMP}/notes.md"
+          else
+            echo "::warning::CHANGELOG.md has no section '## ${VERSION#v}'"
+            : > "${RUNNER_TEMP}/notes.md"
+          fi
+          cat >> "${RUNNER_TEMP}/notes.md" <<NOTES
           ## Install
 
           Download the archive for your platform, extract it and put \`cpictl\` on your PATH:
