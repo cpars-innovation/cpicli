@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.24.0
+
 - **Script cases on the tenant: `cpictl test scripts cases --online` (#13).** The same case files
   as the local run, on the tenant's runtime ([docs/testing.md](docs/testing.md#script-cases-on-the-tenant)).
   - Per script and function a test flow is generated in the test tooling package, deployed,
