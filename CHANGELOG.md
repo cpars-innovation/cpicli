@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Fixed:** with a zero status interval, deploy and undeploy could reuse the previous runtime
+  list on a coarse clock (Windows) and time out early. They now read it fresh every time.
+- **Windows:** the repository checks out with LF line endings (`.gitattributes` `eol=lf`), so
+  golden files, front matter and schemas compare the same on every OS.
+
 ## 0.25.0
 
 - **CLI: grouped names for four commands (from the review in #37).**

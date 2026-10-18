@@ -23,9 +23,10 @@ func writePolicy(t *testing.T, content string) string {
 func TestBranchPolicyDecide(t *testing.T) {
 	file := writePolicy(t, `{"_comment": "x", "default": "readwrite", "readonlyBranches": ["main", "release/*"],
 		"repos": [".", "sub", "missing"], "writableEnvironments": ["dev"]}`)
-	p, err := LoadBranchPolicy(file, "/work", "dev")
+	root, sub := filepath.FromSlash("/work"), filepath.Join(filepath.FromSlash("/work"), "sub")
+	p, err := LoadBranchPolicy(file, root, "dev")
 	require.NoError(t, err)
-	branches := map[string]string{"/work": "feature/x", "/work/sub": "HEAD"}
+	branches := map[string]string{root: "feature/x", sub: "HEAD"}
 	p.branchOf = func(dir string) (string, error) {
 		if b, ok := branches[dir]; ok {
 			return b, nil
@@ -35,18 +36,18 @@ func TestBranchPolicyDecide(t *testing.T) {
 	d := p.Decide()
 	assert.False(t, d.ReadOnly, "feature branch; a detached submodule and a missing repo are not judged: %v", d.Reasons)
 
-	branches["/work/sub"] = "release/2026.10"
+	branches[sub] = "release/2026.10"
 	d = p.Decide()
 	assert.True(t, d.ReadOnly)
 	assert.Equal(t, []string{"sub is on the read-only branch release/2026.10"}, d.Reasons)
 
-	branches["/work/sub"], branches["/work"] = "HEAD", "HEAD"
+	branches[sub], branches[root] = "HEAD", "HEAD"
 	assert.Equal(t, []string{". is on a detached HEAD"}, p.Decide().Reasons)
 
-	delete(branches, "/work")
+	delete(branches, root)
 	assert.Contains(t, p.Decide().Reasons[0], "cannot be read", "the root checkout must be judged: fail closed")
 
-	branches["/work"] = "feature/x"
+	branches[root] = "feature/x"
 	p.tier = "prod"
 	assert.Equal(t, []string{"tier prod is never writable (writableEnvironments)"}, p.Decide().Reasons)
 	p.tier, p.Default = "", "readonly"

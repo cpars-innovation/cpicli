@@ -45,7 +45,7 @@ func (s *runtimeSnapshot) get(id string) (*cpi.RuntimeArtifact, error) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.arts == nil || time.Since(s.at) > s.maxAge {
+	if s.arts == nil || s.maxAge <= 0 || time.Since(s.at) > s.maxAge { // no interval: never reuse (a coarse clock reads 0 between calls)
 		list, err := s.lister.RuntimeArtifacts()
 		if err != nil {
 			return nil, err
