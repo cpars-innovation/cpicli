@@ -245,7 +245,10 @@ func analyze(moduleDir string) (*analysis, error) {
 	var files []string
 	dec := json.NewDecoder(bytes.NewReader(out))
 	for {
-		var p struct{ ImportPath, Export, Dir string; GoFiles []string }
+		var p struct {
+			ImportPath, Export, Dir string
+			GoFiles                 []string
+		}
 		if err := dec.Decode(&p); err == io.EOF {
 			break
 		} else if err != nil {
