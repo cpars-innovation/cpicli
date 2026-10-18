@@ -13,7 +13,7 @@ import (
 // cpictl.yaml) and returns stdout, stderr and the command error.
 func runCLI(t *testing.T, mock *cpitest.Tenant, args ...string) (string, string, error) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	t.Setenv("CPICTL_PROFILE", "")
 	t.Setenv("CPICTL_CONFIG", "")
 	viper.Reset()

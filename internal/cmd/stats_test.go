@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"path/filepath"
 	"testing"
 
@@ -23,7 +24,7 @@ func runWithStats(t *testing.T, file string, args ...string) (int, string) {
 }
 
 func TestStatsRecordsCommands(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	file := filepath.Join(t.TempDir(), "stats.jsonl")
 	runWithStats(t, file, "skills", "list")
 	runWithStats(t, file, "skills", "list")

@@ -17,7 +17,7 @@ import (
 // projectRun runs the CLI in dir (a git repository) with an isolated HOME.
 func projectRun(t *testing.T, home, dir string, args ...string) (int, string) {
 	t.Helper()
-	t.Setenv("HOME", home)
+	cpitest.SetHome(t, home)
 	t.Chdir(dir)
 	viper.Reset()
 	t.Cleanup(viper.Reset)

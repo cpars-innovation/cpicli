@@ -229,7 +229,7 @@ func TestResolvePath(t *testing.T) {
 		assert.Error(t, err, bad)
 	}
 	// a symlink pointing outside the root is rejected too
-	require.NoError(t, os.Symlink("/etc", filepath.Join(root, "link")))
+	cpitest.Symlink(t, "/etc", filepath.Join(root, "link"))
 	_, err = resolvePath(root, "link")
 	assert.Error(t, err)
 }

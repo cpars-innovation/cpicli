@@ -1865,6 +1865,12 @@ func resolvePath(root, p string) (string, error) {
 	}
 	target := p
 	if !filepath.IsAbs(target) {
+		// on Windows "\x" (rooted, no drive) and "D:x" (drive-relative) are
+		// neither absolute nor relative to the root: refuse them instead of
+		// mapping them below the root
+		if filepath.VolumeName(target) != "" || (filepath.Separator == '\\' && (strings.HasPrefix(target, `\`) || strings.HasPrefix(target, "/"))) {
+			return "", output.Usagef("path %q is neither absolute nor relative to the server root", p)
+		}
 		target = filepath.Join(absRoot, target)
 	}
 	target = filepath.Clean(target)

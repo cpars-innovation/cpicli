@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +14,7 @@ import (
 // (found on a real tenant: the token request went to the host root).
 func TestProfileServiceDetailsOAuthPath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	cpitest.SetHome(t, home)
 	require.NoError(t, os.MkdirAll(filepath.Join(home, ".cpictl"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".cpictl", "trial.yaml"),
 		[]byte("tmn-host: tenant.example.com\noauth-host: auth.example.com\noauth-clientid: id\noauth-clientsecret: secret-value-123\n"), 0o600))

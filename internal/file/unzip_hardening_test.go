@@ -2,6 +2,7 @@ package file
 
 import (
 	"archive/zip"
+	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,7 +68,7 @@ func TestUnzipRefusesSymlinkedDirectoryLeavingTheDestination(t *testing.T) {
 		t.Skip("symlinks need privileges on Windows")
 	}
 	dst, outside := t.TempDir(), t.TempDir()
-	require.NoError(t, os.Symlink(outside, filepath.Join(dst, "sub")))
+	cpitest.Symlink(t, outside, filepath.Join(dst, "sub"))
 	err := UnzipSource(writeZip(t, entry{"sub/evil.txt", 0o644, "x"}), dst)
 	assert.ErrorContains(t, err, "leaves the destination")
 	_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))

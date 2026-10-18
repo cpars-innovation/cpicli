@@ -42,7 +42,7 @@ func runMain(t *testing.T, args ...string) cliRun {
 // isolated.
 func runMainWith(t *testing.T, after func(), args ...string) cliRun {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	t.Setenv("GITHUB_STEP_SUMMARY", "") // never the real job summary of a CI run
 	for _, kv := range os.Environ() {
 		if strings.HasPrefix(kv, "CPICTL_") || strings.HasPrefix(kv, "FLASHPIPE_") {

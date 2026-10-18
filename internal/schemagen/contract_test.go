@@ -27,7 +27,7 @@ func TestResultsMatchSchemas(t *testing.T) {
 	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{})
 	require.NoError(t, cpitest.SeedLandscape(mock, l, l.TierNames()[0], time.Now()))
 	host, port := mock.HostPort()
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	t.Setenv("CPICTL_PROFILE", "")
 	t.Setenv("CPICTL_CONFIG", "")
 	work := t.TempDir()

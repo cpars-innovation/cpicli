@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -68,7 +69,7 @@ func TestProfileAndProjectExamples(t *testing.T) {
 	dev, err := os.ReadFile(filepath.Join(examplesDir, "profiles", "dev.yaml"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".cpictl", "dev.yaml"), dev, 0o600))
-	t.Setenv("HOME", home)
+	cpitest.SetHome(t, home)
 	t.Chdir(repo)
 	viper.Reset()
 	t.Cleanup(viper.Reset)

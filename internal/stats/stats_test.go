@@ -3,6 +3,7 @@ package stats
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +33,9 @@ func TestRecordAndSummarize(t *testing.T) {
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	if runtime.GOOS != "windows" { // NTFS has no POSIX modes
+		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	}
 
 	entries, err := Read(path, time.Time{})
 	require.NoError(t, err)

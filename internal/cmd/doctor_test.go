@@ -41,7 +41,7 @@ func TestDoctor(t *testing.T) {
 	// a profile counts as configuration
 	home := t.TempDir()
 	r = runMainWith(t, func() {
-		t.Setenv("HOME", home)
+		cpitest.SetHome(t, home)
 		host, port := mock.HostPort()
 		require.NoError(t, os.MkdirAll(filepath.Join(home, ".cpictl"), 0o700))
 		require.NoError(t, os.WriteFile(filepath.Join(home, ".cpictl", "dev.yaml"),

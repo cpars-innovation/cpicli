@@ -103,7 +103,7 @@ func TestMCPToolFilterSettings(t *testing.T) {
 	assert.Contains(t, r.stderr, "invalid mode")
 
 	// runMain clears CPICTL_* variables, so call Run directly
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	t.Setenv("CPICTL_DISABLE_TOOLS", "undeploy,nope_*")
 	viper.Reset()
 	t.Cleanup(viper.Reset)

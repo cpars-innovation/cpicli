@@ -29,7 +29,7 @@ func TestProfiles(t *testing.T) {
 	}
 	t.Chdir(t.TempDir())
 	run := func(args ...string) (int, string, string) {
-		t.Setenv("HOME", home)
+		cpitest.SetHome(t, home)
 		viper.Reset()
 		t.Cleanup(viper.Reset)
 		var stdout, stderr bytes.Buffer

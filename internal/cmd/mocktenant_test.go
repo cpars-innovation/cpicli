@@ -16,7 +16,7 @@ import (
 )
 
 func TestMockTenantCommand(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	ca := filepath.Join(t.TempDir(), "ca.pem")
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -37,7 +37,7 @@ func TestMockTenantCommand(t *testing.T) {
 }
 
 func TestMockTenantSeedDir(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "packages"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "landscape.yaml"), []byte("name: customer-b\ntiers: [{name: qa}, {name: prod-eu}]\n"), 0o644))
@@ -53,7 +53,7 @@ func TestMockTenantSeedDir(t *testing.T) {
 }
 
 func TestMockTenantAdminTokenFlag(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
@@ -64,7 +64,7 @@ func TestMockTenantAdminTokenFlag(t *testing.T) {
 }
 
 func TestMockTenantCredentialsFlags(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	cpitest.SetHome(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 	var stdout, stderr bytes.Buffer

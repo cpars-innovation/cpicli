@@ -2,6 +2,7 @@ package ops
 
 import (
 	"encoding/json"
+	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,7 +100,7 @@ func TestFullSyncAbortsOnLocalReadError(t *testing.T) {
 			writeFile(t, filepath.Join(dir, "BROKEN", "String.properties"), "A=1\nB=2\n")
 			binDir := filepath.Join(dir, "BROKEN", "Binary")
 			require.NoError(t, os.MkdirAll(binDir, 0755))
-			require.NoError(t, os.Symlink(filepath.Join(dir, "does-not-exist"), filepath.Join(binDir, "cert.crt")))
+			cpitest.Symlink(t, filepath.Join(dir, "does-not-exist"), filepath.Join(binDir, "cert.crt"))
 		},
 	}
 

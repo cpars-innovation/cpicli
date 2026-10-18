@@ -233,16 +233,14 @@ func TestOrchestratorParallelUploads(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "deploy.yml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg.String()), 0o644))
 
-	started := time.Now()
 	r := runMain(t, append([]string{"orchestrator", "--packages-dir", repo, "--deploy-config", cfgPath, "--update-only",
 		"--snapshot-state", "off", "--parallel", "8", "--output", "json"}, basicAuth(mock)...)...)
-	elapsed := time.Since(started)
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, `"artifactsChanged": 16`)
 	for id, a := range mock.Artifacts {
 		assert.Equal(t, 1, a.Uploads, id)
 	}
+	// the peak proves the parallelism; a wall-clock bound would flake on a
+	// loaded runner
 	assert.Equal(t, int64(8), mock.PeakDownloads(), "8 at a time across packages")
-	// sequential: 16 x 100ms = 1.6s
-	assert.Less(t, elapsed, 1200*time.Millisecond)
 }
