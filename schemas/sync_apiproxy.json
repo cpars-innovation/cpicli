@@ -1,0 +1,8 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/sync_apiproxy.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The command has no result.",
+  "title": "cpictl sync apiproxy result",
+  "type": "null",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,119 @@
+{
+  "$defs": {
+    "cmd.snapshotResult": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/snapshot.Item"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "artifactsDownloaded": {
+          "type": "integer"
+        },
+        "artifactsSkipped": {
+          "type": "integer"
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "failed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "type": "integer"
+        },
+        "seconds": {
+          "type": "number"
+        },
+        "succeeded": {
+          "type": "integer"
+        },
+        "warnings": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifacts",
+        "artifactsDownloaded",
+        "artifactsSkipped",
+        "counts",
+        "packages",
+        "seconds",
+        "succeeded",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "snapshot.Item": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "artifact": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        },
+        "orphanParameters": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "package": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "warning": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "artifact",
+        "package",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/snapshot.json",
+  "$ref": "#/$defs/cmd.snapshotResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl snapshot.",
+  "title": "cpictl snapshot result",
+  "x-schemaVersion": 1
+}

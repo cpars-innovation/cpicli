@@ -167,6 +167,19 @@ func InstallTestTools(ctx context.Context, exe *httpclnt.HTTPExecuter, opts Test
 	return res, batchError(failed, len(arts))
 }
 
+// TestToolsPackage returns the package of the test tooling: the package of
+// the tools already installed, else testtools.PackageID, created when
+// missing.
+func TestToolsPackage(exe *httpclnt.HTTPExecuter) (string, error) {
+	pkgID, _, err := testToolsPackage(exe, "")
+	if err != nil {
+		return "", err
+	}
+	_, err = CreatePackage(exe, PackageRequest{ID: pkgID, Name: testtools.PackageName, ShortText: testtools.PackageShortText,
+		Description: "Test tooling installed by cpictl. Development tenants only; do not transport."})
+	return pkgID, err
+}
+
 var reRole = regexp.MustCompile(`^[A-Za-z0-9_.\-]+$`)
 
 // configuredRole is the role parameter of an installed tool, "" when it is

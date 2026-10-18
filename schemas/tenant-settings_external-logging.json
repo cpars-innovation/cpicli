@@ -1,0 +1,16 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/tenant-settings_external-logging.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl tenant-settings external-logging.",
+  "properties": {
+    "externalLogging": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "externalLogging"
+  ],
+  "title": "cpictl tenant-settings external-logging result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

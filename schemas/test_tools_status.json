@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "ops.TestToolStatus": {
+      "properties": {
+        "deployed": {
+          "type": "boolean"
+        },
+        "designtimeVersion": {
+          "type": "string"
+        },
+        "endpoints": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "role": {
+          "type": "string"
+        },
+        "roleParameter": {
+          "type": "string"
+        },
+        "runtimeStatus": {
+          "type": "string"
+        },
+        "runtimeVersion": {
+          "type": "string"
+        },
+        "stubUrl": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "upToDate": {
+          "type": "boolean"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployed",
+        "id",
+        "installed",
+        "roleParameter",
+        "tool",
+        "upToDate",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/test_tools_status.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl test tools status.",
+  "properties": {
+    "tools": {
+      "items": {
+        "$ref": "#/$defs/ops.TestToolStatus"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "title": "cpictl test tools status result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

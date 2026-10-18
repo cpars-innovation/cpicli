@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "cpi.DataStoreEntry": {
+      "properties": {
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "dataStore": {
+          "type": "string"
+        },
+        "dueAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "integrationFlow": {
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "retainUntil": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dataStore",
+        "id"
+      ],
+      "type": "object"
+    },
+    "ops.DataStoreEntryList": {
+      "properties": {
+        "entries": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.DataStoreEntry"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "entries",
+        "total"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/datastore_entries.json",
+  "$ref": "#/$defs/ops.DataStoreEntryList",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl datastore entries.",
+  "title": "cpictl datastore entries result",
+  "x-schemaVersion": 1
+}

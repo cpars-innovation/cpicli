@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "scripttest.Function": {
+      "properties": {
+        "line": {
+          "type": "integer"
+        },
+        "lineCoverage": {
+          "type": "number"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "testFiles": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tests": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "line",
+        "name",
+        "status"
+      ],
+      "type": "object"
+    },
+    "scripttest.Result": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "errors": {
+          "type": "integer"
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "passed": {
+          "type": "integer"
+        },
+        "scripts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/scripttest.Script"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skipped": {
+          "type": "integer"
+        },
+        "tests": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/scripttest.TestCase"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "durationMs",
+        "errors",
+        "exitCode",
+        "failed",
+        "passed",
+        "scripts",
+        "skipped",
+        "tests"
+      ],
+      "type": "object"
+    },
+    "scripttest.Script": {
+      "properties": {
+        "collection": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "functions": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/scripttest.Function"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lineCoverage": {
+          "type": "number"
+        },
+        "package": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "collection",
+        "file",
+        "functions",
+        "package"
+      ],
+      "type": "object"
+    },
+    "scripttest.TestCase": {
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "durationMs",
+        "name",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/test_scripts.json",
+  "$ref": "#/$defs/scripttest.Result",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl test scripts.",
+  "title": "cpictl test scripts result",
+  "x-schemaVersion": 1
+}

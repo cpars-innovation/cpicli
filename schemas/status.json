@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "ops.RuntimeStatus": {
+      "properties": {
+        "deployed": {
+          "type": "boolean"
+        },
+        "deployedBy": {
+          "type": "string"
+        },
+        "deployedOn": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "errorInfo": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployed",
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/status.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl status.",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ops.RuntimeStatus"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "artifacts"
+  ],
+  "title": "cpictl status result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

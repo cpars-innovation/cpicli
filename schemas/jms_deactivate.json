@@ -1,0 +1,28 @@
+{
+  "$defs": {
+    "ops.QueueStateResult": {
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "queue": {
+          "type": "string"
+        },
+        "response": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "active",
+        "queue"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/jms_deactivate.json",
+  "$ref": "#/$defs/ops.QueueStateResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl jms deactivate.",
+  "title": "cpictl jms deactivate result",
+  "x-schemaVersion": 1
+}

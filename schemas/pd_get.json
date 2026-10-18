@@ -1,0 +1,293 @@
+{
+  "$defs": {
+    "ops.Content": {
+      "properties": {
+        "base64": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.PDBinary": {
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/ops.Content"
+        },
+        "contentType": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "inspection": {
+          "$ref": "#/$defs/ops.PDInspection"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contentType",
+        "id",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.PDCertificate": {
+      "properties": {
+        "daysLeft": {
+          "type": "integer"
+        },
+        "dnsNames": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "emailAddresses": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "expired": {
+          "type": "boolean"
+        },
+        "ipAddresses": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "isCA": {
+          "type": "boolean"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "keyAlgorithm": {
+          "type": "string"
+        },
+        "keyBits": {
+          "type": "integer"
+        },
+        "notAfter": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "notBefore": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "selfSigned": {
+          "type": "boolean"
+        },
+        "serialNumber": {
+          "type": "string"
+        },
+        "sha1": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "signatureAlgorithm": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "uris": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "daysLeft",
+        "expired",
+        "issuer",
+        "keyAlgorithm",
+        "notAfter",
+        "notBefore",
+        "serialNumber",
+        "sha1",
+        "sha256",
+        "signatureAlgorithm",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "ops.PDInspection": {
+      "properties": {
+        "certificates": {
+          "items": {
+            "$ref": "#/$defs/ops.PDCertificate"
+          },
+          "type": "array"
+        },
+        "declaredType": {
+          "type": "string"
+        },
+        "detectedType": {
+          "type": "string"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/ops.PDZipEntry"
+          },
+          "type": "array"
+        },
+        "entriesTruncated": {
+          "type": "boolean"
+        },
+        "entry": {
+          "$ref": "#/$defs/ops.PDInspection"
+        },
+        "inner": {
+          "$ref": "#/$defs/ops.PDInspection"
+        },
+        "mismatch": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "textTruncated": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "detectedType",
+        "mismatch",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.PDParameters": {
+      "properties": {
+        "binaries": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.PDBinary"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "missing": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pid": {
+          "type": "string"
+        },
+        "strings": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.PDString"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "binaries",
+        "pid",
+        "strings"
+      ],
+      "type": "object"
+    },
+    "ops.PDString": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ops.PDZipEntry": {
+      "properties": {
+        "compressedSize": {
+          "type": "integer"
+        },
+        "dir": {
+          "type": "boolean"
+        },
+        "modified": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "compressedSize",
+        "name",
+        "size"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_get.json",
+  "$ref": "#/$defs/ops.PDParameters",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd get.",
+  "title": "cpictl pd get result",
+  "x-schemaVersion": 1
+}

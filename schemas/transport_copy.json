@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "ops.CopiedItem": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "path"
+      ],
+      "type": "object"
+    },
+    "ops.CopyResult": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.CopiedItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "artifacts"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/transport_copy.json",
+  "$ref": "#/$defs/ops.CopyResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl transport copy.",
+  "title": "cpictl transport copy result",
+  "x-schemaVersion": 1
+}

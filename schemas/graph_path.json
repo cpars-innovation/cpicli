@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "ops.GraphEdge": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ops.GraphNode": {
+      "properties": {
+        "attrs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ops.GraphPathResult": {
+      "properties": {
+        "edges": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.GraphEdge"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "found": {
+          "type": "boolean"
+        },
+        "nodes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.GraphNode"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "edges",
+        "found",
+        "nodes"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/graph_path.json",
+  "$ref": "#/$defs/ops.GraphPathResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl graph path.",
+  "title": "cpictl graph path result",
+  "x-schemaVersion": 1
+}

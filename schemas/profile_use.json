@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "cmd.ProfileInfo": {
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "tmnHost": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "active",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/profile_use.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/cmd.ProfileInfo"
+    },
+    {
+      "properties": {
+        "active": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "active"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl profile use.",
+  "title": "cpictl profile use result",
+  "x-schemaVersion": 1
+}

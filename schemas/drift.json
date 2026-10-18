@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "ops.DriftItem": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "designtimeVersion": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "localVersion": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "runtimeOutdated": {
+          "type": "boolean"
+        },
+        "runtimeVersion": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "path",
+        "state",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ops.DriftResult": {
+      "properties": {
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.DriftItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "summary"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/drift.json",
+  "$ref": "#/$defs/ops.DriftResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl drift.",
+  "title": "cpictl drift result",
+  "x-schemaVersion": 1
+}

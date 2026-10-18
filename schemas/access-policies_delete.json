@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "ops.AccessPolicyResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/access-policies_delete.json",
+  "$ref": "#/$defs/ops.AccessPolicyResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl access-policies delete.",
+  "title": "cpictl access-policies delete result",
+  "x-schemaVersion": 1
+}

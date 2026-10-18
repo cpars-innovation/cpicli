@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "cpi.PgpKey": {
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "createdTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "keyLength": {
+          "type": "integer"
+        },
+        "primaryUserId": {
+          "type": "string"
+        },
+        "subKeys": {
+          "items": {
+            "$ref": "#/$defs/cpi.PgpKey"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "string"
+        },
+        "userIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "validUntil": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "validity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "keyId"
+      ],
+      "type": "object"
+    },
+    "cpi.PgpKeyring": {
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "lastModifiedBy": {
+          "type": "string"
+        },
+        "lastModifiedTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ops.PGPOverview": {
+      "properties": {
+        "keyrings": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.PgpKeyring"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publicKeys": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.PgpKey"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secretKeys": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.PgpKey"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "keyrings",
+        "publicKeys",
+        "secretKeys"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pgp_list.json",
+  "$ref": "#/$defs/ops.PGPOverview",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pgp list.",
+  "title": "cpictl pgp list result",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,42 @@
+{
+  "$defs": {
+    "ops.Package": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/packages.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl packages.",
+  "properties": {
+    "packages": {
+      "items": {
+        "$ref": "#/$defs/ops.Package"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "packages"
+  ],
+  "title": "cpictl packages result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

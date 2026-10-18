@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "ops.GraphStats": {
+      "properties": {
+        "edgeTypes": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "edges": {
+          "type": "integer"
+        },
+        "nodeTypes": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nodes": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "edgeTypes",
+        "edges",
+        "nodeTypes",
+        "nodes"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/graph_build.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl graph build.",
+  "properties": {
+    "file": {
+      "type": "string"
+    },
+    "stats": {
+      "$ref": "#/$defs/ops.GraphStats"
+    }
+  },
+  "required": [
+    "file",
+    "stats"
+  ],
+  "title": "cpictl graph build result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

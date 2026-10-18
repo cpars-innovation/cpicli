@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "cpi.AuthorizedUser": {
+      "properties": {
+        "createdBy": {
+          "type": "string"
+        },
+        "createdTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "lastModifiedBy": {
+          "type": "string"
+        },
+        "lastModifiedTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "pid": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pid",
+        "user"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_authorized-users_list.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd authorized-users list.",
+  "properties": {
+    "authorizedUsers": {
+      "items": {
+        "$ref": "#/$defs/cpi.AuthorizedUser"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "authorizedUsers"
+  ],
+  "title": "cpictl pd authorized-users list result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

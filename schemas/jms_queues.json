@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "cpi.Queue": {
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "exclusive": {
+          "type": "boolean"
+        },
+        "flows": {
+          "items": {
+            "$ref": "#/$defs/cpi.QueueFlow"
+          },
+          "type": "array"
+        },
+        "messages": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "active",
+        "exclusive",
+        "messages",
+        "name"
+      ],
+      "type": "object"
+    },
+    "cpi.QueueFlow": {
+      "properties": {
+        "direction": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "direction",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/jms_queues.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl jms queues.",
+  "properties": {
+    "queues": {
+      "items": {
+        "$ref": "#/$defs/cpi.Queue"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "queues"
+  ],
+  "title": "cpictl jms queues result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

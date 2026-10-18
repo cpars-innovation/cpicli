@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "cpi.Broker": {
+      "properties": {
+        "capacity": {
+          "type": "integer"
+        },
+        "capacityError": {
+          "type": "integer"
+        },
+        "capacityOk": {
+          "type": "integer"
+        },
+        "capacityWarning": {
+          "type": "integer"
+        },
+        "consumersHigh": {
+          "type": "boolean"
+        },
+        "maxCapacity": {
+          "type": "integer"
+        },
+        "maxQueues": {
+          "type": "integer"
+        },
+        "producersHigh": {
+          "type": "boolean"
+        },
+        "queues": {
+          "type": "integer"
+        },
+        "transactedSessionsHigh": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "capacity",
+        "capacityError",
+        "capacityOk",
+        "capacityWarning",
+        "consumersHigh",
+        "maxCapacity",
+        "maxQueues",
+        "producersHigh",
+        "queues",
+        "transactedSessionsHigh"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/jms_broker.json",
+  "$ref": "#/$defs/cpi.Broker",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl jms broker.",
+  "title": "cpictl jms broker result",
+  "x-schemaVersion": 1
+}

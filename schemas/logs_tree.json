@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "ops.TraceFailure": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageGuid"
+      ],
+      "type": "object"
+    },
+    "ops.TraceHop": {
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "fromMessage": {
+          "type": "string"
+        },
+        "link": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "toMessage": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "fromMessage",
+        "link",
+        "to",
+        "toMessage"
+      ],
+      "type": "object"
+    },
+    "ops.TraceNode": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "children": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TraceNode"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "errorTruncated": {
+          "type": "boolean"
+        },
+        "logEnd": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "logStart": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "parentSpanId": {
+          "type": "string"
+        },
+        "spanId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "children",
+        "messageGuid",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.TraceTree": {
+      "properties": {
+        "correlationId": {
+          "type": "string"
+        },
+        "firstFailure": {
+          "$ref": "#/$defs/ops.TraceFailure"
+        },
+        "hops": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TraceHop"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keys": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "messages": {
+          "type": "integer"
+        },
+        "pathKey": {
+          "type": "string"
+        },
+        "roots": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TraceNode"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scanned": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "hops",
+        "messages",
+        "pathKey",
+        "roots",
+        "source"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_tree.json",
+  "$ref": "#/$defs/ops.TraceTree",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs tree.",
+  "title": "cpictl logs tree result",
+  "x-schemaVersion": 1
+}

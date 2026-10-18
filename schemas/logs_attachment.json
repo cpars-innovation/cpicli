@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "ops.DownloadedContent": {
+      "properties": {
+        "base64": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "size"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_attachment.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ops.DownloadedContent"
+    },
+    {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "size"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs attachment.",
+  "title": "cpictl logs attachment result",
+  "x-schemaVersion": 1
+}

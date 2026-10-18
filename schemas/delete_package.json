@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "ops.DeletePackageResult": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.DeleteResult"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "packageId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifacts",
+        "deleted",
+        "packageId"
+      ],
+      "type": "object"
+    },
+    "ops.DeleteResult": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string"
+        },
+        "undeployed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "deleted",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/delete_package.json",
+  "$ref": "#/$defs/ops.DeletePackageResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl delete package.",
+  "title": "cpictl delete package result",
+  "x-schemaVersion": 1
+}

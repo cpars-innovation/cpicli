@@ -54,7 +54,7 @@ var toolEffects = map[string]Effect{
 
 	"create_package": EffectTenant, "upload_artifact": EffectTenant, "upload_artifacts": EffectTenant, "set_parameters": EffectTenant,
 	"deploy": EffectTenant, "undeploy": EffectTenant, "pd_deploy": EffectTenant,
-	"send_test_message": EffectTenant, "run_tests": EffectTenant, "set_log_level": EffectTenant,
+	"send_test_message": EffectTenant, "run_tests": EffectTenant, "run_script_cases_online": EffectTenant, "set_log_level": EffectTenant,
 	"install_test_tools": EffectTenant, "set_stub_response": EffectTenant,
 	"generate_key_pair": EffectTenant, "upload_certificate_chain": EffectTenant, "delete_keystore_entry": EffectTenant,
 	"create_access_policy": EffectTenant, "add_artifact_reference": EffectTenant, "delete_access_policy": EffectTenant,
@@ -92,7 +92,7 @@ var tenantClasses = map[string]Class{
 	"create_access_policy": ClassWrite, "add_artifact_reference": ClassWrite, "create_alternative_partner": ClassWrite,
 	"create_authorized_user": ClassWrite, "set_stub_response": ClassWrite,
 
-	"deploy": ClassDeploy, "undeploy": ClassDeploy, "pd_deploy": ClassDeploy, "install_test_tools": ClassDeploy,
+	"deploy": ClassDeploy, "undeploy": ClassDeploy, "pd_deploy": ClassDeploy, "install_test_tools": ClassDeploy, "run_script_cases_online": ClassDeploy,
 
 	"send_test_message": ClassProcess, "run_tests": ClassProcess, "retry_jms_messages": ClassProcess, "move_jms_messages": ClassProcess, "set_jms_queue_state": ClassProcess,
 
@@ -346,7 +346,7 @@ var Toolsets = map[string][]string{
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifact", "upload_artifacts", "validate_artifact", "check_guidelines",
 		"deploy", "get_runtime_status", "list_runtimes", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors", "list_credentials",
 		"list_locks", "list_components", "list_value_mappings", "get_value_mapping", "set_value_mapping", "loop_start", "loop_status", "loop_end"},
-	"test": {"list_tests", "run_tests", "run_script_cases", "send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
+	"test": {"list_tests", "run_tests", "run_script_cases", "run_script_cases_online", "send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
 		"get_message_attachment", "get_message_store_entry", "get_trace_tree", "set_log_level", "get_message_trace",
 		"get_trace_message", "get_runtime_status", "install_test_tools", "set_stub_response", "loop_start", "loop_status", "loop_end"},
 	"monitor": {"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps", "get_message_attachment",

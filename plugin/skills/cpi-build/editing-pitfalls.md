@@ -64,7 +64,9 @@ before a ProcessDirect call to a flow that tests the header against null).
 
 - The version 2 `Message` (`com.sap.it.script.v2.api.Message`) is not the version 1 API. Read
   headers with `message.getHeaders().get('Name')` and convert explicitly
-  (`?.toString()?.trim()`); do not call the version 1 `getHeader(name, Class)`.
+  (`?.toString()?.trim()`); do not call the version 1 `getHeader(name, Class)`. It is not part of
+  the version 2 API. Today's runtime still accepts it (verified on a tenant 2026-10-18, through the
+  implementation class), but the local stand-ins refuse it and SAP may remove it.
 - The file starts with `package script.v2` (dots, not `script/v2`), lives in `script/v2/`, and the
   step references it as `v2/<File>.groovy` with `componentVersion` `2.0` and
   `GroovyScript/version::2.0.0`. A `v2/...` reference with the version 1 step (`1.1.2`) is invalid.

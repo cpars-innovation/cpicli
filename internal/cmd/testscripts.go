@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,8 +11,10 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/str"
 	"github.com/cpars-innovation/cpicli/pkg/lint"
+	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/cpars-innovation/cpicli/pkg/scripttest"
 	"github.com/cpars-innovation/cpicli/pkg/testrun"
+	"github.com/cpars-innovation/cpicli/pkg/testtools"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -124,7 +127,7 @@ never upload them.`,
 func newTestScriptCasesCommand() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "cases",
-		Short: "Run script cases (YAML) on the SAP script API stand-ins (offline)",
+		Short: "Run script cases (YAML) on the SAP script API stand-ins, or with --online on the tenant",
 		Long: `Run the script cases of <dir>: each calls one function of a script with a message
 and checks the outcome (body, headers, properties, return value, exception,
 message log). The format is shared with CPI Studio
@@ -136,13 +139,22 @@ message log). The format is shared with CPI Studio
 The scripts run on the stand-ins of 'cpictl test scripts init' through the
 Gradle task cpictlScriptCases of its build.gradle; the case's pd,
 value_mappings, secure and keystore are what SAP's services answer. Nothing is
-sent to a tenant. Exit code 5 when a case failed.`,
+sent to a tenant.
+
+--online runs the same cases on the tenant's runtime instead: per script and
+function, cpictl generates a test flow in the test tooling package (HTTPS ->
+the case's headers and properties -> the script -> the result as JSON),
+deploys it, sends the cases and deletes the flows afterwards (--keep keeps
+them). Cases with call.args, pd, value_mappings, secure, keystore, log or
+returns are skipped online (local only); max_duration is not checked.
+Refused on production tiers. Exit code 5 when a case failed.`,
 		Example: `  cpictl test scripts cases
   cpictl test scripts cases --flow Orders_In --case trims --junit scripts.xml
-  cpictl test scripts cases --flow 'Orders_*' --tag smoke`,
+  cpictl test scripts cases --flow 'Orders_*' --tag smoke
+  cpictl test scripts cases --online --flow Orders_In`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
-		Annotations:  map[string]string{annotationOffline: "true"},
+		Annotations:  map[string]string{annotationOffline: "!online"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f := testrun.Filter{Flows: nonEmpty(str.TrimSlice(config.GetStringSlice(cmd, "flow"))), Tags: nonEmpty(str.TrimSlice(config.GetStringSlice(cmd, "tag"))),
 				Cases: nonEmpty(str.TrimSlice(config.GetStringSlice(cmd, "case")))}
@@ -160,17 +172,39 @@ sent to a tenant. Exit code 5 when a case failed.`,
 					filepath.ToSlash(dir), filepath.ToSlash(dir), testrun.ScriptCollectionsDir)
 			}
 			ctx := cmd.Context()
-			opts := scripttest.CaseOptions{Project: project, Content: config.GetString(cmd, "content"), Command: strings.Fields(config.GetString(cmd, "command"))}
-			if config.GetString(cmd, "output") != "json" {
-				opts.Output = os.Stderr // the build's progress; JSON output keeps stdout clean
-			}
-			res, err := scripttest.RunCases(ctx, cases, opts)
-			if err != nil {
-				return err
-			}
-			for _, cr := range res.Cases {
-				output.Emit(ctx, output.EventItem, cr)
-				logCase(cr)
+			var res *testrun.Result
+			if config.GetBool(cmd, "online") {
+				timeout, err := parseDeployTimeout(config.GetString(cmd, "deploy-timeout"))
+				if err != nil {
+					return err
+				}
+				res, err = scripttest.RunCasesOnline(ctx, cases, scripttest.OnlineOptions{
+					Content: cmp.Or(config.GetString(cmd, "content"), filepath.Join(project, "packages")),
+					Exe:     tenantExecuter(cmd), NewExe: endpointExecuter(cmd),
+					Tier: config.GetString(cmd, "tier"), AllowProduction: config.GetBool(cmd, "allow-production"),
+					Keep: config.GetBool(cmd, "keep"), Role: config.GetString(cmd, "role"),
+					Deploy: ops.Options{Timeout: timeout},
+					Progress: func(cr testrun.CaseResult) {
+						output.Emit(ctx, output.EventItem, cr)
+						logCase(cr)
+					},
+				})
+				if err != nil {
+					return err
+				}
+			} else {
+				opts := scripttest.CaseOptions{Project: project, Content: config.GetString(cmd, "content"), Command: strings.Fields(config.GetString(cmd, "command"))}
+				if config.GetString(cmd, "output") != "json" {
+					opts.Output = os.Stderr // the build's progress; JSON output keeps stdout clean
+				}
+				res, err = scripttest.RunCases(ctx, cases, opts)
+				if err != nil {
+					return err
+				}
+				for _, cr := range res.Cases {
+					output.Emit(ctx, output.EventItem, cr)
+					logCase(cr)
+				}
 			}
 			output.SetResult(ctx, res)
 			logTestSummary(res)
@@ -199,6 +233,11 @@ sent to a tenant. Exit code 5 when a case failed.`,
 	c.Flags().StringSlice("tag", nil, "Only cases with one of these tags (repeatable)")
 	c.Flags().String("command", "", "Runner command (default ./gradlew -q cpictlScriptCases, or gradle without a wrapper); the plan and results files are appended as -P properties")
 	c.Flags().String("junit", "", "Write a JUnit XML report to this file")
+	c.Flags().Bool("online", false, "Run on the tenant's runtime: a generated test flow per script and function, deployed for the run")
+	c.Flags().Bool("keep", false, "With --online: keep the generated test flows deployed")
+	c.Flags().String("role", "", "With --online: user role the runtime client needs to call the test flows (default "+testtools.DefaultRole+")")
+	c.Flags().String("deploy-timeout", "10m", "With --online: how long the deployment of the test flows may take")
+	addRuntimeAuthFlags(c)
 	return c
 }
 

@@ -1,0 +1,347 @@
+{
+  "$defs": {
+    "cpi.ErrorInformation": {
+      "properties": {
+        "lastErrorModelStepId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "cpi.MessageAttachment": {
+      "properties": {
+        "contentType": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "timeStamp": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contentType",
+        "id",
+        "name",
+        "size",
+        "timeStamp"
+      ],
+      "type": "object"
+    },
+    "cpi.MessageStoreEntry": {
+      "properties": {
+        "hasAttachments": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "messageStoreId": {
+          "type": "string"
+        },
+        "timeStamp": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "timeStamp"
+      ],
+      "type": "object"
+    },
+    "cpi.NameValue": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "idoc.Control": {
+      "properties": {
+        "CIMTYP": {
+          "type": "string"
+        },
+        "DIRECT": {
+          "type": "string"
+        },
+        "DOCNUM": {
+          "type": "string"
+        },
+        "IDOCTYP": {
+          "type": "string"
+        },
+        "MESTYP": {
+          "type": "string"
+        },
+        "RCVPOR": {
+          "type": "string"
+        },
+        "RCVPRN": {
+          "type": "string"
+        },
+        "RCVPRT": {
+          "type": "string"
+        },
+        "SNDPOR": {
+          "type": "string"
+        },
+        "SNDPRN": {
+          "type": "string"
+        },
+        "SNDPRT": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ops.Content": {
+      "properties": {
+        "base64": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.MessageLogDetail": {
+      "properties": {
+        "adapterAttributes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.NameValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "applicationMessageId": {
+          "type": "string"
+        },
+        "applicationMessageType": {
+          "type": "string"
+        },
+        "artifactId": {
+          "type": "string"
+        },
+        "artifactName": {
+          "type": "string"
+        },
+        "attachments": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.MessageAttachment"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "correlationId": {
+          "type": "string"
+        },
+        "customHeaderProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.NameValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "customStatus": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "errorInformation": {
+          "$ref": "#/$defs/cpi.ErrorInformation"
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "errorTruncated": {
+          "type": "boolean"
+        },
+        "logEnd": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "logLevel": {
+          "type": "string"
+        },
+        "logStart": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "messageStoreEntries": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.MessageStoreEntry"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "packageName": {
+          "type": "string"
+        },
+        "predecessorMessageGuid": {
+          "type": "string"
+        },
+        "receiver": {
+          "type": "string"
+        },
+        "sender": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "webLink": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapterAttributes",
+        "attachments",
+        "customHeaderProperties",
+        "messageGuid",
+        "messageStoreEntries",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.SentMessage": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "correlationId": {
+          "type": "string"
+        },
+        "harness": {
+          "type": "string"
+        },
+        "harnessMessageGuid": {
+          "type": "string"
+        },
+        "httpStatus": {
+          "type": "integer"
+        },
+        "idocs": {
+          "items": {
+            "$ref": "#/$defs/idoc.Control"
+          },
+          "type": "array"
+        },
+        "log": {
+          "$ref": "#/$defs/ops.MessageLogDetail"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "processDirectAddress": {
+          "type": "string"
+        },
+        "response": {
+          "$ref": "#/$defs/ops.Content"
+        },
+        "responseContentType": {
+          "type": "string"
+        },
+        "responseHeaders": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "sentAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "httpStatus",
+        "response",
+        "sentAt",
+        "url"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/send.json",
+  "$ref": "#/$defs/ops.SentMessage",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl send.",
+  "title": "cpictl send result",
+  "x-schemaVersion": 1
+}

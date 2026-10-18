@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "cmd.statsResult": {
+      "properties": {
+        "commands": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/stats.Row"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "entries": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "reset": {
+          "type": "boolean"
+        },
+        "since": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commands",
+        "enabled",
+        "entries",
+        "path"
+      ],
+      "type": "object"
+    },
+    "stats.Row": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "lastUsed": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "maxMs": {
+          "type": "integer"
+        },
+        "p50Ms": {
+          "type": "integer"
+        },
+        "p95Ms": {
+          "type": "integer"
+        },
+        "runs": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string"
+        },
+        "totalMs": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "failed",
+        "lastUsed",
+        "maxMs",
+        "p50Ms",
+        "p95Ms",
+        "runs",
+        "source",
+        "totalMs"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/stats.json",
+  "$ref": "#/$defs/cmd.statsResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl stats.",
+  "title": "cpictl stats result",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,64 @@
+{
+  "$defs": {
+    "ops.GraphMatch": {
+      "properties": {
+        "attrs": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "degree": {
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "degree",
+        "id",
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ops.GraphSearchResult": {
+      "properties": {
+        "matches": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.GraphMatch"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "matches",
+        "total"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/graph_search.json",
+  "$ref": "#/$defs/ops.GraphSearchResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl graph search.",
+  "title": "cpictl graph search result",
+  "x-schemaVersion": 1
+}

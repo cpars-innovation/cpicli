@@ -1,0 +1,308 @@
+{
+  "$defs": {
+    "iflow.ElementChange": {
+      "properties": {
+        "change": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "moved": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/iflow.PropertyChange"
+          },
+          "type": "array"
+        },
+        "renamed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "change",
+        "id",
+        "type"
+      ],
+      "type": "object"
+    },
+    "iflow.FlowChange": {
+      "properties": {
+        "change": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "moved": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/iflow.PropertyChange"
+          },
+          "type": "array"
+        },
+        "renamed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "change",
+        "id",
+        "source",
+        "target"
+      ],
+      "type": "object"
+    },
+    "iflow.ModelDiff": {
+      "properties": {
+        "collaboration": {
+          "items": {
+            "$ref": "#/$defs/iflow.PropertyChange"
+          },
+          "type": "array"
+        },
+        "elements": {
+          "items": {
+            "$ref": "#/$defs/iflow.ElementChange"
+          },
+          "type": "array"
+        },
+        "flows": {
+          "items": {
+            "$ref": "#/$defs/iflow.FlowChange"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "iflow.PropertyChange": {
+      "properties": {
+        "a": {
+          "type": "string"
+        },
+        "b": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "change",
+        "key"
+      ],
+      "type": "object"
+    },
+    "ops.CompareItem": {
+      "properties": {
+        "a": {
+          "$ref": "#/$defs/ops.CompareSideInfo"
+        },
+        "artifact": {
+          "type": "string"
+        },
+        "b": {
+          "$ref": "#/$defs/ops.CompareSideInfo"
+        },
+        "differences": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/ops.FileChange"
+          },
+          "type": "array"
+        },
+        "package": {
+          "type": "string"
+        },
+        "parameters": {
+          "items": {
+            "$ref": "#/$defs/ops.ParameterChange"
+          },
+          "type": "array"
+        },
+        "status": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "versionA": {
+          "type": "string"
+        },
+        "versionB": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "package",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.CompareResult": {
+      "properties": {
+        "a": {
+          "type": "string"
+        },
+        "b": {
+          "type": "string"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.CompareItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "a",
+        "b",
+        "items",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "ops.CompareSideInfo": {
+      "properties": {
+        "designtime": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "modifiedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "modifiedBy": {
+          "type": "string"
+        },
+        "running": {
+          "type": "string"
+        },
+        "runtimeStatus": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ops.FileChange": {
+      "properties": {
+        "change": {
+          "type": "string"
+        },
+        "diff": {
+          "type": "string"
+        },
+        "model": {
+          "$ref": "#/$defs/iflow.ModelDiff"
+        },
+        "modelError": {
+          "type": "string"
+        },
+        "noDiff": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "change",
+        "path"
+      ],
+      "type": "object"
+    },
+    "ops.ParameterChange": {
+      "properties": {
+        "a": {
+          "type": "string"
+        },
+        "b": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "change",
+        "key"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/compare.json",
+  "$ref": "#/$defs/ops.CompareResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl compare.",
+  "title": "cpictl compare result",
+  "x-schemaVersion": 1
+}

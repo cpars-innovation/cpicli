@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "cpi.IdempotentEntry": {
+      "properties": {
+        "component": {
+          "type": "string"
+        },
+        "creationTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "entry": {
+          "type": "string"
+        },
+        "expirationTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry",
+        "source"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/idempotent.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl idempotent.",
+  "properties": {
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/cpi.IdempotentEntry"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "entries"
+  ],
+  "title": "cpictl idempotent result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

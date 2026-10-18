@@ -321,6 +321,10 @@ type Tenant struct {
 	// command (request body as received).
 	LogLevels map[string]map[string]string
 
+	// ScriptRunner plays the script under test of a generated script test
+	// flow (cpictl test scripts cases --online) in Live mode.
+	ScriptRunner func(ScriptRun) ScriptRunResult
+
 	// Inbound configures runtime endpoints (paths starting with /http/,
 	// /cxf/ or /gw/odata/, as in ServiceEndpoints URLs) that receive test
 	// messages.
@@ -816,6 +820,10 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 	}
 	if a := m.Artifacts[in.Artifact]; m.Live && a != nil && a.running() && in.Artifact == testtools.XSLTID {
 		m.handleXSLT(w, r, in, body)
+		return
+	}
+	if a := m.Artifacts[in.Artifact]; m.Live && a != nil && a.running() && isScriptFlow(in.Artifact) {
+		m.handleScriptFlow(w, r, in, body)
 		return
 	}
 	switch in.Kind {

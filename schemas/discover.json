@@ -1,0 +1,9 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/discover.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl discover.",
+  "title": "cpictl discover result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

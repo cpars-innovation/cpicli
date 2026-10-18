@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "cpi.Variable": {
+      "properties": {
+        "integrationFlow": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "retainUntil": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/variables.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl variables.",
+  "properties": {
+    "variables": {
+      "items": {
+        "$ref": "#/$defs/cpi.Variable"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "variables"
+  ],
+  "title": "cpictl variables result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

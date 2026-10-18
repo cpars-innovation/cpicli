@@ -1,0 +1,77 @@
+{
+  "$defs": {
+    "ops.PDDiffItem": {
+      "properties": {
+        "change": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "change",
+        "id",
+        "kind",
+        "pid"
+      ],
+      "type": "object"
+    },
+    "ops.PDDiffResult": {
+      "properties": {
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.PDDiffItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "items",
+        "summary"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_diff.json",
+  "$ref": "#/$defs/ops.PDDiffResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd diff.",
+  "title": "cpictl pd diff result",
+  "x-schemaVersion": 1
+}

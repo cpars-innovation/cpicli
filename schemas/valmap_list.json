@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "cpi.ValueMappingInfo": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/valmap_list.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl valmap list.",
+  "properties": {
+    "valueMappings": {
+      "items": {
+        "$ref": "#/$defs/cpi.ValueMappingInfo"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "valueMappings"
+  ],
+  "title": "cpictl valmap list result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

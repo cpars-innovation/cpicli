@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "ops.Parameter": {
+      "properties": {
+        "dataType": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/params_get.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl params get.",
+  "properties": {
+    "artifactId": {
+      "type": "string"
+    },
+    "parameters": {
+      "items": {
+        "$ref": "#/$defs/ops.Parameter"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "artifactId",
+    "parameters"
+  ],
+  "title": "cpictl params get result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

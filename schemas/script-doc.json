@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "ops.ScriptDocIssue": {
+      "properties": {
+        "function": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "message"
+      ],
+      "type": "object"
+    },
+    "ops.ScriptDocReport": {
+      "properties": {
+        "collection": {
+          "type": "boolean"
+        },
+        "docStatus": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "functions": {
+          "items": {
+            "$ref": "#/$defs/ops.ScriptFunction"
+          },
+          "type": "array"
+        },
+        "issues": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.ScriptDocIssue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keywords": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reads": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "writes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "collection",
+        "docStatus",
+        "file",
+        "issues"
+      ],
+      "type": "object"
+    },
+    "ops.ScriptFunction": {
+      "properties": {
+        "doc": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "params": {
+          "type": "string"
+        },
+        "private": {
+          "type": "boolean"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tags": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "line",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/script-doc.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl script-doc.",
+  "properties": {
+    "scripts": {
+      "items": {
+        "$ref": "#/$defs/ops.ScriptDocReport"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "scripts"
+  ],
+  "title": "cpictl script-doc result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

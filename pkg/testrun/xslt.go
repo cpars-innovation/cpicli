@@ -420,6 +420,12 @@ var (
 	xsltLogInterval = time.Second
 )
 
+// FailedMessageError is the error text of a failed message's log, waiting
+// a few seconds for it to be written ("" if there is none).
+func FailedMessageError(ctx context.Context, exe *httpclnt.HTTPExecuter, guid string) string {
+	return failedMessageError(ctx, exe, guid)
+}
+
 // failedMessageError is the error text of a failed message's log. A tenant
 // answers a failed transformation with HTTP 500 and no body: the reason
 // (Saxon's message) is only in the log, written a moment later.

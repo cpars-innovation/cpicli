@@ -1,0 +1,182 @@
+{
+  "$defs": {
+    "ops.MatrixCell": {
+      "properties": {
+        "deployedBy": {
+          "type": "string"
+        },
+        "deployedOn": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "designtime": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "modifiedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "modifiedBy": {
+          "type": "string"
+        },
+        "running": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ops.MatrixRow": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "behind": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cells": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.MatrixTierCell"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "differs": {
+          "type": "boolean"
+        },
+        "git": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "tiers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/ops.MatrixCell"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "cells",
+        "differs",
+        "package",
+        "tiers"
+      ],
+      "type": "object"
+    },
+    "ops.MatrixTierCell": {
+      "properties": {
+        "deployedBy": {
+          "type": "string"
+        },
+        "deployedOn": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "designtime": {
+          "type": "string"
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "modifiedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "modifiedBy": {
+          "type": "string"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "running": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "tier": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "present",
+        "tier"
+      ],
+      "type": "object"
+    },
+    "ops.VersionMatrix": {
+      "properties": {
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.MatrixRow"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tiers": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "rows",
+        "tiers"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/matrix.json",
+  "$ref": "#/$defs/ops.VersionMatrix",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl matrix.",
+  "title": "cpictl matrix result",
+  "x-schemaVersion": 1
+}

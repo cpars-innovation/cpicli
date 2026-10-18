@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "ops.AddressChange": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "new": {
+          "type": "string"
+        },
+        "old": {
+          "type": "string"
+        },
+        "where": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter",
+        "old",
+        "where"
+      ],
+      "type": "object"
+    },
+    "ops.IFlowCopyResult": {
+      "properties": {
+        "addresses": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.AddressChange"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dir": {
+          "type": "string"
+        },
+        "files": {
+          "type": "integer"
+        },
+        "from": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "remaining": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sourceId": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "addresses",
+        "changes",
+        "dir",
+        "files",
+        "from",
+        "id",
+        "name",
+        "sourceId",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/iflow_copy.json",
+  "$ref": "#/$defs/ops.IFlowCopyResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl iflow copy.",
+  "title": "cpictl iflow copy result",
+  "x-schemaVersion": 1
+}

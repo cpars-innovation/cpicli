@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "ops.DesigntimeArtifact": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "isDraft": {
+          "type": "boolean"
+        },
+        "modifiedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "modifiedBy": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "isDraft",
+        "name",
+        "type",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/artifacts.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl artifacts.",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ops.DesigntimeArtifact"
+      },
+      "type": "array"
+    },
+    "packageId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "artifacts",
+    "packageId"
+  ],
+  "title": "cpictl artifacts result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,225 @@
+{
+  "$defs": {
+    "cpi.ErrorInformation": {
+      "properties": {
+        "lastErrorModelStepId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "cpi.MessageAttachment": {
+      "properties": {
+        "contentType": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "timeStamp": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "contentType",
+        "id",
+        "name",
+        "size",
+        "timeStamp"
+      ],
+      "type": "object"
+    },
+    "cpi.MessageStoreEntry": {
+      "properties": {
+        "hasAttachments": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "messageStoreId": {
+          "type": "string"
+        },
+        "timeStamp": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "timeStamp"
+      ],
+      "type": "object"
+    },
+    "cpi.NameValue": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ops.MessageLogDetail": {
+      "properties": {
+        "adapterAttributes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.NameValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "applicationMessageId": {
+          "type": "string"
+        },
+        "applicationMessageType": {
+          "type": "string"
+        },
+        "artifactId": {
+          "type": "string"
+        },
+        "artifactName": {
+          "type": "string"
+        },
+        "attachments": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.MessageAttachment"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "correlationId": {
+          "type": "string"
+        },
+        "customHeaderProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.NameValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "customStatus": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "errorInformation": {
+          "$ref": "#/$defs/cpi.ErrorInformation"
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "errorTruncated": {
+          "type": "boolean"
+        },
+        "logEnd": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "logLevel": {
+          "type": "string"
+        },
+        "logStart": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "messageStoreEntries": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.MessageStoreEntry"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "packageName": {
+          "type": "string"
+        },
+        "predecessorMessageGuid": {
+          "type": "string"
+        },
+        "receiver": {
+          "type": "string"
+        },
+        "sender": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "webLink": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapterAttributes",
+        "attachments",
+        "customHeaderProperties",
+        "messageGuid",
+        "messageStoreEntries",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_get.json",
+  "$ref": "#/$defs/ops.MessageLogDetail",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs get.",
+  "title": "cpictl logs get result",
+  "x-schemaVersion": 1
+}

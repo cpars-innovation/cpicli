@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "cpi.AuditLog": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "changeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "type": "string"
+        },
+        "objectName": {
+          "type": "string"
+        },
+        "objectType": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "userName": {
+          "type": "string"
+        },
+        "userType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "changeId",
+        "timestamp"
+      ],
+      "type": "object"
+    },
+    "ops.AuditLogResult": {
+      "properties": {
+        "entries": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.AuditLog"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hint": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "entries"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/audit-log.json",
+  "$ref": "#/$defs/ops.AuditLogResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl audit-log.",
+  "title": "cpictl audit-log result",
+  "x-schemaVersion": 1
+}

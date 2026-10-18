@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "cpi.LogFile": {
+      "properties": {
+        "application": {
+          "type": "string"
+        },
+        "contentType": {
+          "type": "string"
+        },
+        "lastModified": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "nodeScope": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "application",
+        "name",
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.LogFileList": {
+      "properties": {
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.LogFile"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "files"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/log-files.json",
+  "$ref": "#/$defs/ops.LogFileList",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl log-files.",
+  "title": "cpictl log-files result",
+  "x-schemaVersion": 1
+}

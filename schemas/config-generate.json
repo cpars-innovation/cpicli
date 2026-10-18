@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "cmd.GenerationStats": {
+      "properties": {
+        "artifactsAdded": {
+          "type": "integer"
+        },
+        "artifactsFiltered": {
+          "type": "integer"
+        },
+        "artifactsNameExtracted": {
+          "type": "integer"
+        },
+        "artifactsNamePreserved": {
+          "type": "integer"
+        },
+        "artifactsPreserved": {
+          "type": "integer"
+        },
+        "artifactsRemoved": {
+          "type": "integer"
+        },
+        "artifactsTypeExtracted": {
+          "type": "integer"
+        },
+        "artifactsTypePreserved": {
+          "type": "integer"
+        },
+        "packagePropertiesExtracted": {
+          "type": "integer"
+        },
+        "packagePropertiesPreserved": {
+          "type": "integer"
+        },
+        "packagesAdded": {
+          "type": "integer"
+        },
+        "packagesFiltered": {
+          "type": "integer"
+        },
+        "packagesPreserved": {
+          "type": "integer"
+        },
+        "packagesRemoved": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifactsAdded",
+        "artifactsFiltered",
+        "artifactsNameExtracted",
+        "artifactsNamePreserved",
+        "artifactsPreserved",
+        "artifactsRemoved",
+        "artifactsTypeExtracted",
+        "artifactsTypePreserved",
+        "packagePropertiesExtracted",
+        "packagePropertiesPreserved",
+        "packagesAdded",
+        "packagesFiltered",
+        "packagesPreserved",
+        "packagesRemoved"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/config-generate.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl config-generate.",
+  "properties": {
+    "outputFile": {
+      "type": "string"
+    },
+    "stats": {
+      "$ref": "#/$defs/cmd.GenerationStats"
+    }
+  },
+  "required": [
+    "outputFile",
+    "stats"
+  ],
+  "title": "cpictl config-generate result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

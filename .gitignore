@@ -46,4 +46,6 @@
 
 # Test tooling artifacts embedded in the binary (go:embed)
 !pkg/testtools/artifacts/**
+!pkg/testtools/scriptflow/**
+!schemas/**
 !pkg/scripttest/template/**

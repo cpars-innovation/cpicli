@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "cpi.PgpKey": {
+      "properties": {
+        "algorithm": {
+          "type": "string"
+        },
+        "createdTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "keyId": {
+          "type": "string"
+        },
+        "keyLength": {
+          "type": "integer"
+        },
+        "primaryUserId": {
+          "type": "string"
+        },
+        "subKeys": {
+          "items": {
+            "$ref": "#/$defs/cpi.PgpKey"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "string"
+        },
+        "userIds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "validUntil": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "validity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "keyId"
+      ],
+      "type": "object"
+    },
+    "ops.PGPImportResult": {
+      "properties": {
+        "bytes": {
+          "type": "integer"
+        },
+        "publicKeys": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.PgpKey"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "bytes",
+        "publicKeys"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pgp_import-public.json",
+  "$ref": "#/$defs/ops.PGPImportResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pgp import-public.",
+  "title": "cpictl pgp import-public result",
+  "x-schemaVersion": 1
+}

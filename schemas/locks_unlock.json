@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "cpi.DesigntimeLock": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "artifactName": {
+          "type": "string"
+        },
+        "artifactType": {
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "packageName": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "resourceId"
+      ],
+      "type": "object"
+    },
+    "ops.UnlockResult": {
+      "properties": {
+        "removed": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.DesigntimeLock"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "removed"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/locks_unlock.json",
+  "$ref": "#/$defs/ops.UnlockResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl locks unlock.",
+  "title": "cpictl locks unlock result",
+  "x-schemaVersion": 1
+}

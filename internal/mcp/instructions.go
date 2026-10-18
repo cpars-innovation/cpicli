@@ -37,7 +37,8 @@ them with run_tests (flow, case, tags; apply_config sets the flow's config.yaml 
 list_tests shows them. A failed case has its failures (expected vs actual) and diagnostics (failing step,
 error, message path); send_test_message is for exploring a single message by hand.
 Script cases (.cpi/tests/<FlowId>/scripts/<script>/<case>.yaml, .cpi/tests/collections/<Id>/<case>.yaml)
-test one script function locally on the SAP API stand-ins: run_script_cases (no tenant needed).`},
+test one script function locally on the SAP API stand-ins: run_script_cases (no tenant needed);
+run_script_cases_online runs the same cases on a development tenant's runtime (deploys a temporary test flow).`},
 	{[]string{"test"}, `Flows without an HTTP sender: ProcessDirect via send_test_message process_direct_address (test
 harness flow); timer, SFTP and other polling flows: see the triggers in discover_tenant and use
 list_message_logs with since and wait_seconds after triggering them. send_test_message

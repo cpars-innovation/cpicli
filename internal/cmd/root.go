@@ -343,9 +343,24 @@ const envPrefix = "CPICTL"
 // legacyEnvPrefix is the FlashPipe prefix, only used to warn about old settings.
 const legacyEnvPrefix = "FLASHPIPE"
 
-// annotationOffline marks commands that do not talk to a tenant: "true", or the
-// name of a flag that makes the command offline when set (e.g. discover --dir).
+// annotationOffline marks commands that do not talk to a tenant: "true", the
+// name of a flag that makes the command offline when set (e.g. discover --dir),
+// or "!" and the name of a flag that makes it talk to one (e.g. "!online").
 const annotationOffline = "cpicli/offline"
+
+// isOffline reports whether cmd runs without a tenant (annotationOffline).
+func isOffline(cmd *cobra.Command) bool {
+	a := cmd.Annotations[annotationOffline]
+	switch {
+	case a == "true":
+		return true
+	case a == "":
+		return false
+	case strings.HasPrefix(a, "!"):
+		return !config.GetBool(cmd, a[1:])
+	}
+	return config.GetString(cmd, a) != ""
+}
 
 // legacySettingsHint warns about FlashPipe-era settings that are no longer read.
 func legacySettingsHint(cfgFile string) string {
@@ -610,7 +625,7 @@ func initializeConfig(cmd *cobra.Command) error {
 	for _, f := range files {
 		log.Debug().Msgf("Config file %s", f.path)
 	}
-	if profile != "" && cmd.Annotations[annotationOffline] != "true" {
+	if profile != "" && !isOffline(cmd) {
 		log.Info().Msgf("Profile %s (%s)", profile, viper.GetString("tmn-host"))
 	}
 	if err := configPermissionError(files); err != nil {
@@ -624,7 +639,7 @@ func initializeConfig(cmd *cobra.Command) error {
 		log.Warn().Msg(legacy)
 	}
 
-	if offline := cmd.Annotations[annotationOffline]; offline != "true" && (offline == "" || config.GetString(cmd, offline) == "") {
+	if !isOffline(cmd) {
 		hasAuth := config.GetString(cmd, "oauth-host") != "" || config.GetString(cmd, "tmn-userid") != ""
 		switch {
 		case config.GetString(cmd, "tmn-host") == "" && !hasAuth:

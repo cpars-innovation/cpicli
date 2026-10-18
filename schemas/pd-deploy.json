@@ -1,0 +1,109 @@
+{
+  "$defs": {
+    "cpi.BatchResult": {
+      "properties": {
+        "created": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deleted": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "errors": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "unchanged": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "updated": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ops.PDDeployResult": {
+      "properties": {
+        "binary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cpi.BatchResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deleted": {
+          "$ref": "#/$defs/cpi.BatchResult"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "keys": {
+          "items": {
+            "$ref": "#/$defs/ops.PDKeyResult"
+          },
+          "type": "array"
+        },
+        "string": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cpi.BatchResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "binary",
+        "dryRun",
+        "string"
+      ],
+      "type": "object"
+    },
+    "ops.PDKeyResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "key",
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd-deploy.json",
+  "$ref": "#/$defs/ops.PDDeployResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd-deploy.",
+  "title": "cpictl pd-deploy result",
+  "x-schemaVersion": 1
+}

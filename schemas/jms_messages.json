@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "cpi.JMSMessage": {
+      "properties": {
+        "applicationId": {
+          "type": "string"
+        },
+        "correlationId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "customStatus": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "failed": {
+          "type": "boolean"
+        },
+        "jmsMessageId": {
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "messageType": {
+          "type": "string"
+        },
+        "nextRetry": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "overdueAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "queue": {
+          "type": "string"
+        },
+        "receiver": {
+          "type": "string"
+        },
+        "retryCount": {
+          "type": "integer"
+        },
+        "sender": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "failed",
+        "jmsMessageId",
+        "queue",
+        "retryCount"
+      ],
+      "type": "object"
+    },
+    "ops.QueueMessageList": {
+      "properties": {
+        "failed": {
+          "type": "integer"
+        },
+        "messages": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.JMSMessage"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "queue": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "failed",
+        "messages",
+        "queue",
+        "total"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/jms_messages.json",
+  "$ref": "#/$defs/ops.QueueMessageList",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl jms messages.",
+  "title": "cpictl jms messages result",
+  "x-schemaVersion": 1
+}

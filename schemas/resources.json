@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "cpi.Resource": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "referencedType": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number"
+        },
+        "sizeUnit": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/resources.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl resources.",
+  "properties": {
+    "artifactId": {
+      "type": "string"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/cpi.Resource"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "artifactId",
+    "resources"
+  ],
+  "title": "cpictl resources result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

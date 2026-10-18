@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "output.Envelope": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "errorCategory": {
+          "type": "string"
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "result": {},
+        "schemaVersion": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "durationMs",
+        "exitCode",
+        "ok",
+        "result",
+        "schemaVersion"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/envelope.json",
+  "$ref": "#/$defs/output.Envelope",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Every command writes one envelope to stdout with --output json; result is described per command (index.json).",
+  "title": "cpictl --output json envelope",
+  "x-schemaVersion": 1
+}

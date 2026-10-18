@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "cpi.Guideline": {
+      "properties": {
+        "actualKpi": {
+          "type": "string"
+        },
+        "applicability": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "compliance": {
+          "type": "string"
+        },
+        "expectedKpi": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "boolean"
+        },
+        "violatedComponents": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "compliance",
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ops.GuidelineReport": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "executionId": {
+          "type": "string"
+        },
+        "guidelines": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.Guideline"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "violations": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.Guideline"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "artifactId",
+        "executionId",
+        "guidelines",
+        "status",
+        "total",
+        "violations"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/guidelines.json",
+  "$ref": "#/$defs/ops.GuidelineReport",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl guidelines.",
+  "title": "cpictl guidelines result",
+  "x-schemaVersion": 1
+}

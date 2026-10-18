@@ -1,0 +1,11 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/datastore_delete.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {
+    "type": "string"
+  },
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl datastore delete.",
+  "title": "cpictl datastore delete result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "ops.DownloadResult": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "dir": {
+          "type": "string"
+        },
+        "files": {
+          "type": "integer"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "dir",
+        "files",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/download.json",
+  "$ref": "#/$defs/ops.DownloadResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl download.",
+  "title": "cpictl download result",
+  "x-schemaVersion": 1
+}

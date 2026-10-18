@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "cpi.EntryPoint": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    },
+    "cpi.ServiceEndpoint": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "entryPoints": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.EntryPoint"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "protocol": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "entryPoints",
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/endpoints.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl endpoints.",
+  "properties": {
+    "endpoints": {
+      "items": {
+        "$ref": "#/$defs/cpi.ServiceEndpoint"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "endpoints"
+  ],
+  "title": "cpictl endpoints result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "ops.BumpItem": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "new": {
+          "type": "string"
+        },
+        "old": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "since": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "old",
+        "path",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.BumpResult": {
+      "properties": {
+        "counts": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.BumpItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "counts",
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/version_bump.json",
+  "$ref": "#/$defs/ops.BumpResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl version bump.",
+  "title": "cpictl version bump result",
+  "x-schemaVersion": 1
+}

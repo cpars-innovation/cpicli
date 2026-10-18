@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "cpi.AlternativePartner": {
+      "properties": {
+        "agency": {
+          "type": "string"
+        },
+        "createdBy": {
+          "type": "string"
+        },
+        "createdTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lastModifiedBy": {
+          "type": "string"
+        },
+        "lastModifiedTime": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "pid": {
+          "type": "string"
+        },
+        "scheme": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agency",
+        "id",
+        "pid",
+        "scheme"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_alternative-partners_list.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd alternative-partners list.",
+  "properties": {
+    "alternativePartners": {
+      "items": {
+        "$ref": "#/$defs/cpi.AlternativePartner"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "alternativePartners"
+  ],
+  "title": "cpictl pd alternative-partners list result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

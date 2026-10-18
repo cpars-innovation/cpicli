@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "ops.PDDependencies": {
+      "properties": {
+        "dynamic": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.PDDynamicReference"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "references": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.PDReference"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unknownPids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "dynamic",
+        "references"
+      ],
+      "type": "object"
+    },
+    "ops.PDDynamicReference": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "expression": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "step": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "expression",
+        "file"
+      ],
+      "type": "object"
+    },
+    "ops.PDReference": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "string"
+        },
+        "step": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "file",
+        "id",
+        "pid"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_deps.json",
+  "$ref": "#/$defs/ops.PDDependencies",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd deps.",
+  "title": "cpictl pd deps result",
+  "x-schemaVersion": 1
+}

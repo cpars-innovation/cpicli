@@ -115,9 +115,10 @@ signatures are verified against SAP's javadoc and which are not, and how to exte
 - `Message` v1 (`com.sap.gateway.ip.core.customdev.util`) and v2 (`com.sap.it.script.v2.api`) are
   interfaces, as at SAP. A test creates `new MessageV1()` or `new MessageV2()` (`cpictl.standin`);
   Groovy's map constructor sets body, headers and properties: `new MessageV1(headers: [OrderNo: '4711'])`.
-- Version 2 scripts (`script/v2/`, `package script.v2`) have no `getHeader(...)` (version 1 only):
-  they read `message.getHeaders().get("name")`. The v2 stand-in lacks it too, so a test fails when a
-  version 2 script calls it.
+- The version 2 API (`script/v2/`, `package script.v2`) has no `getHeader(...)` (version 1 only):
+  scripts read `message.getHeaders().get("name")`. The v2 stand-in follows the API, so a local test
+  fails when a version 2 script calls it. The tenant's runtime still accepts the call today, so the
+  same case passes with `--online`.
 - Scripts reach the message log as the binding `messageLogFactory`: `new Services.LogFactory()`. What
   a script logged is `CaseContext.current().log`.
 - `ITApiFactory.getService(SecureStoreService | KeystoreService | PartnerDirectoryService |

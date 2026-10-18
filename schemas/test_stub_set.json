@@ -1,0 +1,24 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/test_stub_set.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl test stub set.",
+  "properties": {
+    "action": {
+      "type": "string"
+    },
+    "pid": {
+      "type": "string"
+    },
+    "rule": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "action",
+    "pid",
+    "rule"
+  ],
+  "title": "cpictl test stub set result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

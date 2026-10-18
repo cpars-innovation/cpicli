@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "cpi.MessageRunStep": {
+      "properties": {
+        "activity": {
+          "type": "string"
+        },
+        "branchId": {
+          "type": "string"
+        },
+        "childCount": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "modelStepId": {
+          "type": "string"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/cpi.NameValue"
+          },
+          "type": "array"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "stop": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "childCount",
+        "start",
+        "stepId",
+        "stop"
+      ],
+      "type": "object"
+    },
+    "cpi.NameValue": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ops.MessageRunWithSteps": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "logLevel": {
+          "type": "string"
+        },
+        "overallState": {
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.MessageRunStep"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stop": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "steps",
+        "stop"
+      ],
+      "type": "object"
+    },
+    "ops.MessageSteps": {
+      "properties": {
+        "failedStep": {
+          "$ref": "#/$defs/cpi.MessageRunStep"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "runs": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.MessageRunWithSteps"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "messageGuid",
+        "runs"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_steps.json",
+  "$ref": "#/$defs/ops.MessageSteps",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs steps.",
+  "title": "cpictl logs steps result",
+  "x-schemaVersion": 1
+}

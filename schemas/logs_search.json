@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "ops.MessageLog": {
+      "properties": {
+        "applicationMessageId": {
+          "type": "string"
+        },
+        "applicationMessageType": {
+          "type": "string"
+        },
+        "artifactId": {
+          "type": "string"
+        },
+        "artifactName": {
+          "type": "string"
+        },
+        "correlationId": {
+          "type": "string"
+        },
+        "customStatus": {
+          "type": "string"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "errorTruncated": {
+          "type": "boolean"
+        },
+        "logEnd": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "logLevel": {
+          "type": "string"
+        },
+        "logStart": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "packageName": {
+          "type": "string"
+        },
+        "predecessorMessageGuid": {
+          "type": "string"
+        },
+        "receiver": {
+          "type": "string"
+        },
+        "sender": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "webLink": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageGuid",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.MessageLogList": {
+      "properties": {
+        "filter": {
+          "type": "string"
+        },
+        "logs": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.MessageLog"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scanned": {
+          "type": "integer"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "logs",
+        "total"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_search.json",
+  "$ref": "#/$defs/ops.MessageLogList",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs search.",
+  "title": "cpictl logs search result",
+  "x-schemaVersion": 1
+}

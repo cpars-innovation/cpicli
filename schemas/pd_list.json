@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "ops.PDPartner": {
+      "properties": {
+        "alternativePartners": {
+          "type": "integer"
+        },
+        "authorizedUsers": {
+          "type": "integer"
+        },
+        "binaries": {
+          "type": "integer"
+        },
+        "binaryBytes": {
+          "type": "integer"
+        },
+        "contentTypes": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pid": {
+          "type": "string"
+        },
+        "strings": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "binaries",
+        "contentTypes",
+        "pid",
+        "strings"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_list.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd list.",
+  "properties": {
+    "partners": {
+      "items": {
+        "$ref": "#/$defs/ops.PDPartner"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "partners"
+  ],
+  "title": "cpictl pd list result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

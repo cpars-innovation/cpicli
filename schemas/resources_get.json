@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "ops.ResourceContent": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "base64": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "name",
+        "size",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/resources_get.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ops.ResourceContent"
+    },
+    {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "size"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl resources get.",
+  "title": "cpictl resources get result",
+  "x-schemaVersion": 1
+}

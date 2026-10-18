@@ -1,0 +1,765 @@
+{
+  "commands": [
+    {
+      "command": "access-policies add-reference",
+      "file": "access-policies_add-reference.json",
+      "typed": true
+    },
+    {
+      "command": "access-policies create",
+      "file": "access-policies_create.json",
+      "typed": true
+    },
+    {
+      "command": "access-policies delete",
+      "file": "access-policies_delete.json",
+      "typed": true
+    },
+    {
+      "command": "access-policies delete-reference",
+      "file": "access-policies_delete-reference.json",
+      "typed": true
+    },
+    {
+      "command": "access-policies list",
+      "file": "access-policies_list.json",
+      "typed": true
+    },
+    {
+      "command": "artifacts",
+      "file": "artifacts.json",
+      "typed": true
+    },
+    {
+      "command": "audit-log",
+      "file": "audit-log.json",
+      "typed": true
+    },
+    {
+      "command": "backup create",
+      "file": "backup_create.json",
+      "typed": true
+    },
+    {
+      "command": "backup diff",
+      "file": "backup_diff.json",
+      "typed": true
+    },
+    {
+      "command": "backup verify",
+      "file": "backup_verify.json",
+      "typed": true
+    },
+    {
+      "command": "compare",
+      "file": "compare.json",
+      "typed": true
+    },
+    {
+      "command": "components import",
+      "file": "components_import.json",
+      "typed": true
+    },
+    {
+      "command": "components learn",
+      "file": "components_learn.json",
+      "typed": true
+    },
+    {
+      "command": "components list",
+      "file": "components_list.json",
+      "typed": true
+    },
+    {
+      "command": "config-generate",
+      "file": "config-generate.json",
+      "typed": true
+    },
+    {
+      "command": "configure",
+      "file": "configure.json",
+      "typed": true
+    },
+    {
+      "command": "configure pull",
+      "file": "configure_pull.json",
+      "typed": true
+    },
+    {
+      "command": "connections",
+      "file": "connections.json",
+      "typed": true
+    },
+    {
+      "command": "credentials apply",
+      "file": "credentials_apply.json",
+      "typed": true
+    },
+    {
+      "command": "credentials delete",
+      "file": "credentials_delete.json",
+      "typed": true
+    },
+    {
+      "command": "credentials list",
+      "file": "credentials_list.json",
+      "typed": true
+    },
+    {
+      "command": "credentials set-oauth2",
+      "file": "credentials_set-oauth2.json",
+      "typed": true
+    },
+    {
+      "command": "credentials set-secure-param",
+      "file": "credentials_set-secure-param.json",
+      "typed": true
+    },
+    {
+      "command": "credentials set-user",
+      "file": "credentials_set-user.json",
+      "typed": true
+    },
+    {
+      "command": "datastore delete",
+      "file": "datastore_delete.json",
+      "typed": true
+    },
+    {
+      "command": "datastore entries",
+      "file": "datastore_entries.json",
+      "typed": true
+    },
+    {
+      "command": "datastore get",
+      "file": "datastore_get.json",
+      "typed": true
+    },
+    {
+      "command": "datastore list",
+      "file": "datastore_list.json",
+      "typed": true
+    },
+    {
+      "command": "delete artifact",
+      "file": "delete_artifact.json",
+      "typed": true
+    },
+    {
+      "command": "delete package",
+      "file": "delete_package.json",
+      "typed": true
+    },
+    {
+      "command": "deploy",
+      "file": "deploy.json",
+      "typed": true
+    },
+    {
+      "command": "discover",
+      "file": "discover.json",
+      "typed": true
+    },
+    {
+      "command": "doctor",
+      "file": "doctor.json",
+      "typed": true
+    },
+    {
+      "command": "download",
+      "file": "download.json",
+      "typed": true
+    },
+    {
+      "command": "drift",
+      "file": "drift.json",
+      "typed": true
+    },
+    {
+      "command": "endpoints",
+      "file": "endpoints.json",
+      "typed": true
+    },
+    {
+      "command": "graph build",
+      "file": "graph_build.json",
+      "typed": true
+    },
+    {
+      "command": "graph neighbors",
+      "file": "graph_neighbors.json",
+      "typed": true
+    },
+    {
+      "command": "graph path",
+      "file": "graph_path.json",
+      "typed": true
+    },
+    {
+      "command": "graph search",
+      "file": "graph_search.json",
+      "typed": true
+    },
+    {
+      "command": "guidelines",
+      "file": "guidelines.json",
+      "typed": true
+    },
+    {
+      "command": "id-mappings",
+      "file": "id-mappings.json",
+      "typed": true
+    },
+    {
+      "command": "idempotent",
+      "file": "idempotent.json",
+      "typed": true
+    },
+    {
+      "command": "idoc template",
+      "file": "idoc_template.json",
+      "typed": true
+    },
+    {
+      "command": "iflow copy",
+      "file": "iflow_copy.json",
+      "typed": true
+    },
+    {
+      "command": "iflow diagram",
+      "file": "iflow_diagram.json",
+      "typed": true
+    },
+    {
+      "command": "iflow layout",
+      "file": "iflow_layout.json",
+      "typed": true
+    },
+    {
+      "command": "jms activate",
+      "file": "jms_activate.json",
+      "typed": true
+    },
+    {
+      "command": "jms broker",
+      "file": "jms_broker.json",
+      "typed": true
+    },
+    {
+      "command": "jms deactivate",
+      "file": "jms_deactivate.json",
+      "typed": true
+    },
+    {
+      "command": "jms delete",
+      "file": "jms_delete.json",
+      "typed": true
+    },
+    {
+      "command": "jms messages",
+      "file": "jms_messages.json",
+      "typed": true
+    },
+    {
+      "command": "jms move",
+      "file": "jms_move.json",
+      "typed": true
+    },
+    {
+      "command": "jms queues",
+      "file": "jms_queues.json",
+      "typed": true
+    },
+    {
+      "command": "jms retry",
+      "file": "jms_retry.json",
+      "typed": true
+    },
+    {
+      "command": "keystore chain",
+      "file": "keystore_chain.json",
+      "typed": true
+    },
+    {
+      "command": "keystore csr",
+      "file": "keystore_csr.json",
+      "typed": true
+    },
+    {
+      "command": "keystore delete",
+      "file": "keystore_delete.json",
+      "typed": true
+    },
+    {
+      "command": "keystore export-cert",
+      "file": "keystore_export-cert.json",
+      "typed": true
+    },
+    {
+      "command": "keystore generate-key-pair",
+      "file": "keystore_generate-key-pair.json",
+      "typed": true
+    },
+    {
+      "command": "keystore generate-ssh-key",
+      "file": "keystore_generate-ssh-key.json",
+      "typed": true
+    },
+    {
+      "command": "keystore history",
+      "file": "keystore_history.json",
+      "typed": true
+    },
+    {
+      "command": "keystore import-cert",
+      "file": "keystore_import-cert.json",
+      "typed": true
+    },
+    {
+      "command": "keystore list",
+      "file": "keystore_list.json",
+      "typed": true
+    },
+    {
+      "command": "keystore ssh-public-key",
+      "file": "keystore_ssh-public-key.json",
+      "typed": true
+    },
+    {
+      "command": "keystore upload-chain",
+      "file": "keystore_upload-chain.json",
+      "typed": true
+    },
+    {
+      "command": "lint",
+      "file": "lint.json",
+      "typed": true
+    },
+    {
+      "command": "locks list",
+      "file": "locks_list.json",
+      "typed": true
+    },
+    {
+      "command": "locks unlock",
+      "file": "locks_unlock.json",
+      "typed": true
+    },
+    {
+      "command": "log-files",
+      "file": "log-files.json",
+      "typed": true
+    },
+    {
+      "command": "log-files archive",
+      "file": "log-files_archive.json",
+      "typed": true
+    },
+    {
+      "command": "log-files get",
+      "file": "log-files_get.json",
+      "typed": true
+    },
+    {
+      "command": "log-level",
+      "file": "log-level.json",
+      "typed": true
+    },
+    {
+      "command": "logs",
+      "file": "logs.json",
+      "typed": true
+    },
+    {
+      "command": "logs attachment",
+      "file": "logs_attachment.json",
+      "typed": true
+    },
+    {
+      "command": "logs get",
+      "file": "logs_get.json",
+      "typed": true
+    },
+    {
+      "command": "logs payload",
+      "file": "logs_payload.json",
+      "typed": true
+    },
+    {
+      "command": "logs search",
+      "file": "logs_search.json",
+      "typed": true
+    },
+    {
+      "command": "logs steps",
+      "file": "logs_steps.json",
+      "typed": true
+    },
+    {
+      "command": "logs summary",
+      "file": "logs_summary.json",
+      "typed": true
+    },
+    {
+      "command": "logs trace",
+      "file": "logs_trace.json",
+      "typed": true
+    },
+    {
+      "command": "logs trace-message",
+      "file": "logs_trace-message.json",
+      "typed": true
+    },
+    {
+      "command": "logs tree",
+      "file": "logs_tree.json",
+      "typed": true
+    },
+    {
+      "command": "matrix",
+      "file": "matrix.json",
+      "typed": true
+    },
+    {
+      "command": "mcp",
+      "file": "mcp.json",
+      "typed": true
+    },
+    {
+      "command": "mock-tenant",
+      "file": "mock-tenant.json",
+      "typed": true
+    },
+    {
+      "command": "number-ranges",
+      "file": "number-ranges.json",
+      "typed": true
+    },
+    {
+      "command": "orchestrator",
+      "file": "orchestrator.json",
+      "typed": true
+    },
+    {
+      "command": "packages",
+      "file": "packages.json",
+      "typed": true
+    },
+    {
+      "command": "packages create",
+      "file": "packages_create.json",
+      "typed": true
+    },
+    {
+      "command": "params get",
+      "file": "params_get.json",
+      "typed": true
+    },
+    {
+      "command": "params set",
+      "file": "params_set.json",
+      "typed": true
+    },
+    {
+      "command": "pd alternative-partners create",
+      "file": "pd_alternative-partners_create.json",
+      "typed": true
+    },
+    {
+      "command": "pd alternative-partners delete",
+      "file": "pd_alternative-partners_delete.json",
+      "typed": true
+    },
+    {
+      "command": "pd alternative-partners list",
+      "file": "pd_alternative-partners_list.json",
+      "typed": true
+    },
+    {
+      "command": "pd authorized-users create",
+      "file": "pd_authorized-users_create.json",
+      "typed": true
+    },
+    {
+      "command": "pd authorized-users delete",
+      "file": "pd_authorized-users_delete.json",
+      "typed": true
+    },
+    {
+      "command": "pd authorized-users list",
+      "file": "pd_authorized-users_list.json",
+      "typed": true
+    },
+    {
+      "command": "pd deps",
+      "file": "pd_deps.json",
+      "typed": true
+    },
+    {
+      "command": "pd diff",
+      "file": "pd_diff.json",
+      "typed": true
+    },
+    {
+      "command": "pd get",
+      "file": "pd_get.json",
+      "typed": true
+    },
+    {
+      "command": "pd list",
+      "file": "pd_list.json",
+      "typed": true
+    },
+    {
+      "command": "pd-deploy",
+      "file": "pd-deploy.json",
+      "typed": true
+    },
+    {
+      "command": "pd-snapshot",
+      "file": "pd-snapshot.json",
+      "typed": true
+    },
+    {
+      "command": "pgp export-public",
+      "file": "pgp_export-public.json",
+      "typed": true
+    },
+    {
+      "command": "pgp import-public",
+      "file": "pgp_import-public.json",
+      "typed": true
+    },
+    {
+      "command": "pgp list",
+      "file": "pgp_list.json",
+      "typed": true
+    },
+    {
+      "command": "profile current",
+      "file": "profile_current.json",
+      "typed": true
+    },
+    {
+      "command": "profile list",
+      "file": "profile_list.json",
+      "typed": true
+    },
+    {
+      "command": "profile use",
+      "file": "profile_use.json",
+      "typed": true
+    },
+    {
+      "command": "resources",
+      "file": "resources.json",
+      "typed": true
+    },
+    {
+      "command": "resources get",
+      "file": "resources_get.json",
+      "typed": true
+    },
+    {
+      "command": "runtimes",
+      "file": "runtimes.json",
+      "typed": true
+    },
+    {
+      "command": "runtimes watch",
+      "file": "runtimes_watch.json",
+      "typed": true
+    },
+    {
+      "command": "script-doc",
+      "file": "script-doc.json",
+      "typed": true
+    },
+    {
+      "command": "send",
+      "file": "send.json",
+      "typed": true
+    },
+    {
+      "command": "skills install",
+      "file": "skills_install.json",
+      "typed": true
+    },
+    {
+      "command": "skills list",
+      "file": "skills_list.json",
+      "typed": true
+    },
+    {
+      "command": "skills show",
+      "file": "skills_show.json",
+      "typed": true
+    },
+    {
+      "command": "snapshot",
+      "file": "snapshot.json",
+      "typed": true
+    },
+    {
+      "command": "snapshot restore",
+      "file": "snapshot_restore.json",
+      "typed": true
+    },
+    {
+      "command": "stats",
+      "file": "stats.json",
+      "typed": true
+    },
+    {
+      "command": "status",
+      "file": "status.json",
+      "typed": true
+    },
+    {
+      "command": "sync",
+      "file": "sync.json",
+      "typed": true
+    },
+    {
+      "command": "sync apiproduct",
+      "file": "sync_apiproduct.json",
+      "typed": true
+    },
+    {
+      "command": "sync apiproxy",
+      "file": "sync_apiproxy.json",
+      "typed": true
+    },
+    {
+      "command": "tenant-settings",
+      "file": "tenant-settings.json",
+      "typed": true
+    },
+    {
+      "command": "tenant-settings archiving",
+      "file": "tenant-settings_archiving.json",
+      "typed": true
+    },
+    {
+      "command": "tenant-settings external-logging",
+      "file": "tenant-settings_external-logging.json",
+      "typed": true
+    },
+    {
+      "command": "test list",
+      "file": "test_list.json",
+      "typed": true
+    },
+    {
+      "command": "test run",
+      "file": "test_run.json",
+      "typed": true
+    },
+    {
+      "command": "test scripts",
+      "file": "test_scripts.json",
+      "typed": true
+    },
+    {
+      "command": "test scripts cases",
+      "file": "test_scripts_cases.json",
+      "typed": true
+    },
+    {
+      "command": "test scripts init",
+      "file": "test_scripts_init.json",
+      "typed": true
+    },
+    {
+      "command": "test stub clear",
+      "file": "test_stub_clear.json",
+      "typed": true
+    },
+    {
+      "command": "test stub set",
+      "file": "test_stub_set.json",
+      "typed": true
+    },
+    {
+      "command": "test tools install",
+      "file": "test_tools_install.json",
+      "typed": true
+    },
+    {
+      "command": "test tools status",
+      "file": "test_tools_status.json",
+      "typed": true
+    },
+    {
+      "command": "test xslt",
+      "file": "test_xslt.json",
+      "typed": true
+    },
+    {
+      "command": "transport check",
+      "file": "transport_check.json",
+      "typed": true
+    },
+    {
+      "command": "transport copy",
+      "file": "transport_copy.json",
+      "typed": true
+    },
+    {
+      "command": "transport deps",
+      "file": "transport_deps.json",
+      "typed": true
+    },
+    {
+      "command": "undeploy",
+      "file": "undeploy.json",
+      "typed": true
+    },
+    {
+      "command": "update artifact",
+      "file": "update_artifact.json",
+      "typed": true
+    },
+    {
+      "command": "update package",
+      "file": "update_package.json",
+      "typed": true
+    },
+    {
+      "command": "validate",
+      "file": "validate.json",
+      "typed": true
+    },
+    {
+      "command": "valmap get",
+      "file": "valmap_get.json",
+      "typed": true
+    },
+    {
+      "command": "valmap list",
+      "file": "valmap_list.json",
+      "typed": true
+    },
+    {
+      "command": "valmap set",
+      "file": "valmap_set.json",
+      "typed": true
+    },
+    {
+      "command": "variables",
+      "file": "variables.json",
+      "typed": true
+    },
+    {
+      "command": "variables get",
+      "file": "variables_get.json",
+      "typed": true
+    },
+    {
+      "command": "version bump",
+      "file": "version_bump.json",
+      "typed": true
+    }
+  ],
+  "schemaVersion": 1
+}

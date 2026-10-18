@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "iflow.FileLayout": {
+      "properties": {
+        "added": {
+          "type": "integer"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "error": {
+          "type": "string"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/iflow.LayoutIssue"
+          },
+          "type": "array"
+        },
+        "moved": {
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "rerouted": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "changed",
+        "path"
+      ],
+      "type": "object"
+    },
+    "iflow.LayoutIssue": {
+      "properties": {
+        "element": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "element",
+        "kind",
+        "message"
+      ],
+      "type": "object"
+    },
+    "iflow.LayoutReport": {
+      "properties": {
+        "changed": {
+          "type": "integer"
+        },
+        "check": {
+          "type": "boolean"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/iflow.FileLayout"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issues": {
+          "type": "integer"
+        },
+        "mode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "changed",
+        "failed",
+        "files",
+        "issues",
+        "mode"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/iflow_layout.json",
+  "$ref": "#/$defs/iflow.LayoutReport",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl iflow layout.",
+  "title": "cpictl iflow layout result",
+  "x-schemaVersion": 1
+}

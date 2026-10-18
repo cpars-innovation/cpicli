@@ -1,0 +1,434 @@
+{
+  "$defs": {
+    "cpi.ErrorInformation": {
+      "properties": {
+        "lastErrorModelStepId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "cpi.MessageRunStep": {
+      "properties": {
+        "activity": {
+          "type": "string"
+        },
+        "branchId": {
+          "type": "string"
+        },
+        "childCount": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "modelStepId": {
+          "type": "string"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/cpi.NameValue"
+          },
+          "type": "array"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "stop": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "childCount",
+        "start",
+        "stepId",
+        "stop"
+      ],
+      "type": "object"
+    },
+    "cpi.NameValue": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ops.Content": {
+      "properties": {
+        "base64": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.TraceFailure": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageGuid"
+      ],
+      "type": "object"
+    },
+    "ops.TraceNode": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "children": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TraceNode"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "errorText": {
+          "type": "string"
+        },
+        "errorTruncated": {
+          "type": "boolean"
+        },
+        "logEnd": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "logStart": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "parentSpanId": {
+          "type": "string"
+        },
+        "spanId": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "children",
+        "messageGuid",
+        "status"
+      ],
+      "type": "object"
+    },
+    "testrun.CaseResult": {
+      "properties": {
+        "case": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/testrun.Diagnostics"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "errorCategory": {
+          "type": "string"
+        },
+        "failures": {
+          "items": {
+            "$ref": "#/$defs/testrun.Failure"
+          },
+          "type": "array"
+        },
+        "file": {
+          "type": "string"
+        },
+        "flow": {
+          "type": "string"
+        },
+        "httpStatus": {
+          "type": "integer"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "messageStatus": {
+          "type": "string"
+        },
+        "response": {
+          "$ref": "#/$defs/ops.Content"
+        },
+        "responseContentType": {
+          "type": "string"
+        },
+        "skipReason": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "case",
+        "durationMs",
+        "flow",
+        "status"
+      ],
+      "type": "object"
+    },
+    "testrun.ConfigChange": {
+      "properties": {
+        "applied": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deploys": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "flow": {
+          "type": "string"
+        },
+        "restoreError": {
+          "type": "string"
+        },
+        "restored": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unchanged": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "applied",
+        "deploys",
+        "flow",
+        "restored"
+      ],
+      "type": "object"
+    },
+    "testrun.Diagnostics": {
+      "properties": {
+        "errorInformation": {
+          "$ref": "#/$defs/cpi.ErrorInformation"
+        },
+        "failedStep": {
+          "$ref": "#/$defs/cpi.MessageRunStep"
+        },
+        "firstFailure": {
+          "$ref": "#/$defs/ops.TraceFailure"
+        },
+        "lastError": {
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "messageStatus": {
+          "type": "string"
+        },
+        "path": {
+          "items": {
+            "$ref": "#/$defs/testrun.PathStep"
+          },
+          "type": "array"
+        },
+        "traceRoot": {
+          "$ref": "#/$defs/ops.TraceNode"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "testrun.Failure": {
+      "properties": {
+        "actual": {
+          "type": "string"
+        },
+        "expectation": {
+          "type": "string"
+        },
+        "expected": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "actual",
+        "expectation",
+        "expected",
+        "message"
+      ],
+      "type": "object"
+    },
+    "testrun.PathStep": {
+      "properties": {
+        "activity": {
+          "type": "string"
+        },
+        "modelStepId": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelStepId",
+        "state"
+      ],
+      "type": "object"
+    },
+    "testrun.Result": {
+      "properties": {
+        "cases": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/testrun.CaseResult"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "config": {
+          "items": {
+            "$ref": "#/$defs/testrun.ConfigChange"
+          },
+          "type": "array"
+        },
+        "durationMs": {
+          "type": "integer"
+        },
+        "errors": {
+          "type": "integer"
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "passed": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        },
+        "startedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "cases",
+        "durationMs",
+        "errors",
+        "failed",
+        "passed",
+        "skipped",
+        "startedAt"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/test_xslt.json",
+  "$ref": "#/$defs/testrun.Result",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl test xslt.",
+  "title": "cpictl test xslt result",
+  "x-schemaVersion": 1
+}

@@ -31,6 +31,11 @@ func TestResultsMatchSchemas(t *testing.T) {
 	t.Setenv("CPICTL_PROFILE", "")
 	t.Setenv("CPICTL_CONFIG", "")
 	work := t.TempDir()
+	lintDir, err := filepath.Abs(filepath.Join("..", "cpitest", "landscapes", "demo", "packages"))
+	require.NoError(t, err)
+	schemas, err := filepath.Abs(filepath.Join("..", "..", "schemas"))
+	require.NoError(t, err)
+	t.Chdir(work) // commands write .cpi/ in the working directory
 
 	// the schema file name is the command path: the arguments up to the
 	// first flag
@@ -47,7 +52,7 @@ func TestResultsMatchSchemas(t *testing.T) {
 		{"doctor"},
 		{"discover", "--dir", work},
 		{"backup", "create", "--dir", work},
-		{"lint", "--dir", filepath.Join("..", "cpitest", "landscapes", "demo", "packages")},
+		{"lint", "--dir", lintDir},
 	}
 	ran := 0
 	for _, args := range commands {
@@ -58,7 +63,7 @@ func TestResultsMatchSchemas(t *testing.T) {
 			}
 			path = append(path, a)
 		}
-		schemaFile := filepath.Join("..", "..", "schemas", strings.Join(path, "_")+".json")
+		schemaFile := filepath.Join(schemas, strings.Join(path, "_")+".json")
 		data, err := os.ReadFile(schemaFile)
 		if !assert.NoError(t, err, "no schema for %v", args) {
 			continue

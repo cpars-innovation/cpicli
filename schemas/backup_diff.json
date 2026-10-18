@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "ops.BackupChange": {
+      "properties": {
+        "after": {
+          "type": "string"
+        },
+        "area": {
+          "type": "string"
+        },
+        "before": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "area",
+        "change",
+        "key"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/backup_diff.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl backup diff.",
+  "properties": {
+    "changes": {
+      "items": {
+        "$ref": "#/$defs/ops.BackupChange"
+      },
+      "type": "array"
+    },
+    "from": {
+      "type": "string"
+    },
+    "to": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "changes",
+    "from",
+    "to"
+  ],
+  "title": "cpictl backup diff result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

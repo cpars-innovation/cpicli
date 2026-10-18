@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "cpi.ValMap": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "srcValue": {
+          "type": "string"
+        },
+        "tgtValue": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "srcValue",
+        "tgtValue"
+      ],
+      "type": "object"
+    },
+    "ops.ValMapSchemaValues": {
+      "properties": {
+        "defaults": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.ValMap"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "srcAgency": {
+          "type": "string"
+        },
+        "srcId": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "tgtAgency": {
+          "type": "string"
+        },
+        "tgtId": {
+          "type": "string"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.ValMap"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "defaults",
+        "srcAgency",
+        "srcId",
+        "tgtAgency",
+        "tgtId",
+        "values"
+      ],
+      "type": "object"
+    },
+    "ops.ValueMapping": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "schemas": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.ValMapSchemaValues"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "schemas"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/valmap_get.json",
+  "$ref": "#/$defs/ops.ValueMapping",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl valmap get.",
+  "title": "cpictl valmap get result",
+  "x-schemaVersion": 1
+}

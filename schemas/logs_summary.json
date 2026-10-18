@@ -1,0 +1,245 @@
+{
+  "$defs": {
+    "ops.EdgeSummary": {
+      "properties": {
+        "failed": {
+          "type": "integer"
+        },
+        "from": {
+          "type": "string"
+        },
+        "messages": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "failed",
+        "from",
+        "messages",
+        "source",
+        "to"
+      ],
+      "type": "object"
+    },
+    "ops.ErrorGroup": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "buckets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "count": {
+          "type": "integer"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "first": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "last": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "occurrences": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.ErrorOccurrence"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sample": {
+          "type": "string"
+        },
+        "step": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "buckets",
+        "count",
+        "fingerprint",
+        "first",
+        "last",
+        "messageGuid",
+        "occurrences",
+        "sample"
+      ],
+      "type": "object"
+    },
+    "ops.ErrorOccurrence": {
+      "properties": {
+        "messageGuid": {
+          "type": "string"
+        },
+        "time": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "messageGuid",
+        "time"
+      ],
+      "type": "object"
+    },
+    "ops.FlowSummary": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "avgDurationMs": {
+          "type": "integer"
+        },
+        "byStatus": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failed": {
+          "type": "integer"
+        },
+        "lastFailure": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "maxDurationMs": {
+          "type": "integer"
+        },
+        "package": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifact",
+        "avgDurationMs",
+        "byStatus",
+        "failed",
+        "maxDurationMs",
+        "total"
+      ],
+      "type": "object"
+    },
+    "ops.MessageSummary": {
+      "properties": {
+        "bucketSeconds": {
+          "type": "integer"
+        },
+        "edges": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.EdgeSummary"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "errors": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.ErrorGroup"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "flows": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.FlowSummary"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scanned": {
+          "type": "integer"
+        },
+        "since": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "unsampledFailures": {
+          "type": "integer"
+        },
+        "until": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bucketSeconds",
+        "edges",
+        "errors",
+        "flows",
+        "scanned",
+        "since",
+        "until"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_summary.json",
+  "$ref": "#/$defs/ops.MessageSummary",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs summary.",
+  "title": "cpictl logs summary result",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,35 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/idoc_template.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "properties": {
+        "content": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "size"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl idoc template.",
+  "title": "cpictl idoc template result",
+  "x-schemaVersion": 1
+}

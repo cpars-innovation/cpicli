@@ -1,0 +1,9 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/skills_list.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl skills list.",
+  "title": "cpictl skills list result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

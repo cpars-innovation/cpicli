@@ -1,0 +1,396 @@
+{
+  "$defs": {
+    "cmd.orchestratorResult": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "properties": {
+                  "deploy": {
+                    "type": "string"
+                  },
+                  "designtime": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "localVersion": {
+                    "type": "string"
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "package",
+                  "status"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deployments": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.Result"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "type": "string"
+        },
+        "plan": {
+          "items": {
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "compared": {
+                "type": "string"
+              },
+              "deploy": {
+                "type": "boolean"
+              },
+              "designtime": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "package": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "running": {
+                "type": "string"
+              },
+              "runtimeStatus": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "upload": {
+                "type": "string"
+              },
+              "versionRule": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifact",
+              "deploy"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "stats": {
+          "anyOf": [
+            {
+              "properties": {
+                "artifactsChanged": {
+                  "type": "integer"
+                },
+                "artifactsDeployedFailed": {
+                  "type": "integer"
+                },
+                "artifactsDeployedSuccess": {
+                  "type": "integer"
+                },
+                "artifactsFiltered": {
+                  "type": "integer"
+                },
+                "artifactsSkippedDraft": {
+                  "type": "integer"
+                },
+                "artifactsTotal": {
+                  "type": "integer"
+                },
+                "artifactsUnchanged": {
+                  "type": "integer"
+                },
+                "comparedWithSnapshot": {
+                  "type": "integer"
+                },
+                "deployFailures": {
+                  "type": "integer"
+                },
+                "downloadedForComparison": {
+                  "type": "integer"
+                },
+                "failedArtifactDeploys": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "failedArtifactUpdates": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "failedPackageUpdates": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "packagesDeployed": {
+                  "type": "integer"
+                },
+                "packagesFailed": {
+                  "type": "integer"
+                },
+                "packagesFiltered": {
+                  "type": "integer"
+                },
+                "packagesUpdated": {
+                  "type": "integer"
+                },
+                "skippedDrafts": {
+                  "anyOf": [
+                    {
+                      "items": {
+                        "$ref": "#/$defs/ops.DraftSkip"
+                      },
+                      "type": "array"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "successfulArtifactDeploys": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "successfulArtifactUpdates": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "successfulPackageUpdates": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": {
+                        "type": "boolean"
+                      },
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updateFailures": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "artifactsChanged",
+                "artifactsDeployedFailed",
+                "artifactsDeployedSuccess",
+                "artifactsFiltered",
+                "artifactsSkippedDraft",
+                "artifactsTotal",
+                "artifactsUnchanged",
+                "comparedWithSnapshot",
+                "deployFailures",
+                "downloadedForComparison",
+                "failedArtifactDeploys",
+                "failedArtifactUpdates",
+                "failedPackageUpdates",
+                "packagesDeployed",
+                "packagesFailed",
+                "packagesFiltered",
+                "packagesUpdated",
+                "skippedDrafts",
+                "successfulArtifactDeploys",
+                "successfulArtifactUpdates",
+                "successfulPackageUpdates",
+                "updateFailures"
+              ],
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "artifacts",
+        "counts",
+        "deployments",
+        "mode",
+        "stats"
+      ],
+      "type": "object"
+    },
+    "ops.DraftSkip": {
+      "properties": {
+        "designtime": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "localVersion": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "running": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "package"
+      ],
+      "type": "object"
+    },
+    "ops.Result": {
+      "properties": {
+        "designtimeVersion": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "runtimeLocation": {
+          "type": "string"
+        },
+        "runtimeVersion": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "versioning": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/orchestrator.json",
+  "$ref": "#/$defs/cmd.orchestratorResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl orchestrator.",
+  "title": "cpictl orchestrator result",
+  "x-schemaVersion": 1
+}

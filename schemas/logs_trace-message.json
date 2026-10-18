@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "cpi.NameValue": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "ops.Content": {
+      "properties": {
+        "base64": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "size"
+      ],
+      "type": "object"
+    },
+    "ops.TraceMessageDetail": {
+      "properties": {
+        "exchangeProperties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.NameValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.NameValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hint": {
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ops.Content"
+        },
+        "status": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "exchangeProperties",
+        "headers",
+        "payload",
+        "traceId"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_trace-message.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ops.TraceMessageDetail"
+    },
+    {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "file",
+        "size"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs trace-message.",
+  "title": "cpictl logs trace-message result",
+  "x-schemaVersion": 1
+}

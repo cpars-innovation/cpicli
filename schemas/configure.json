@@ -1,0 +1,254 @@
+{
+  "$defs": {
+    "cmd.ConfigureStats": {
+      "properties": {
+        "artifactsConfigured": {
+          "type": "integer"
+        },
+        "artifactsDeployed": {
+          "type": "integer"
+        },
+        "artifactsFailed": {
+          "type": "integer"
+        },
+        "artifactsProcessed": {
+          "type": "integer"
+        },
+        "artifactsUnchanged": {
+          "type": "integer"
+        },
+        "batchRequestsExecuted": {
+          "type": "integer"
+        },
+        "deploymentTasksFailed": {
+          "type": "integer"
+        },
+        "deploymentTasksQueued": {
+          "type": "integer"
+        },
+        "deploymentTasksSuccessful": {
+          "type": "integer"
+        },
+        "individualRequestsUsed": {
+          "type": "integer"
+        },
+        "packagesProcessed": {
+          "type": "integer"
+        },
+        "packagesWithErrors": {
+          "type": "integer"
+        },
+        "parametersFailed": {
+          "type": "integer"
+        },
+        "parametersUnchanged": {
+          "type": "integer"
+        },
+        "parametersUpdated": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifactsConfigured",
+        "artifactsDeployed",
+        "artifactsFailed",
+        "artifactsProcessed",
+        "artifactsUnchanged",
+        "batchRequestsExecuted",
+        "deploymentTasksFailed",
+        "deploymentTasksQueued",
+        "deploymentTasksSuccessful",
+        "individualRequestsUsed",
+        "packagesProcessed",
+        "packagesWithErrors",
+        "parametersFailed",
+        "parametersUnchanged",
+        "parametersUpdated"
+      ],
+      "type": "object"
+    },
+    "cmd.configureResult": {
+      "properties": {
+        "deployments": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.Result"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diff": {
+          "items": {
+            "$ref": "#/$defs/ops.ConfigDiffItem"
+          },
+          "type": "array"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "plan": {
+          "items": {
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "compared": {
+                "type": "string"
+              },
+              "deploy": {
+                "type": "boolean"
+              },
+              "designtime": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              },
+              "package": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "running": {
+                "type": "string"
+              },
+              "runtimeStatus": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "upload": {
+                "type": "string"
+              },
+              "versionRule": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "artifact",
+              "deploy"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "stats": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cmd.ConfigureStats"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "deployments",
+        "dryRun",
+        "stats"
+      ],
+      "type": "object"
+    },
+    "ops.ConfigDiffItem": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "change": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "local": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "tenant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "change",
+        "key",
+        "local",
+        "packageId"
+      ],
+      "type": "object"
+    },
+    "ops.Result": {
+      "properties": {
+        "designtimeVersion": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "runtimeLocation": {
+          "type": "string"
+        },
+        "runtimeVersion": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "versioning": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/configure.json",
+  "$ref": "#/$defs/cmd.configureResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl configure.",
+  "title": "cpictl configure result",
+  "x-schemaVersion": 1
+}

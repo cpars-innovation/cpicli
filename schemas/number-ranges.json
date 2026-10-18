@@ -1,0 +1,60 @@
+{
+  "$defs": {
+    "cpi.NumberRange": {
+      "properties": {
+        "currentValue": {
+          "type": "string"
+        },
+        "deployedBy": {
+          "type": "string"
+        },
+        "deployedOn": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "fieldLength": {
+          "type": "string"
+        },
+        "maxValue": {
+          "type": "string"
+        },
+        "minValue": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "rotate": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "currentValue",
+        "maxValue",
+        "minValue",
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/number-ranges.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl number-ranges.",
+  "properties": {
+    "numberRanges": {
+      "items": {
+        "$ref": "#/$defs/cpi.NumberRange"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "numberRanges"
+  ],
+  "title": "cpictl number-ranges result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

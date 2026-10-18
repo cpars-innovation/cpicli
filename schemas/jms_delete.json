@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "ops.JMSActionResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "messageIds": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "queue": {
+          "type": "string"
+        },
+        "response": {
+          "type": "string"
+        },
+        "targetQueue": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "messageIds",
+        "queue"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/jms_delete.json",
+  "$ref": "#/$defs/ops.JMSActionResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl jms delete.",
+  "title": "cpictl jms delete result",
+  "x-schemaVersion": 1
+}

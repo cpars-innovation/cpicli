@@ -1,0 +1,181 @@
+{
+  "$defs": {
+    "catalog.Adapter": {
+      "properties": {
+        "adapterVersion": {
+          "type": "string"
+        },
+        "custom": {
+          "type": "boolean"
+        },
+        "direction": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "messageProtocol": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "transportProtocol": {
+          "type": "string"
+        },
+        "variantUri": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "direction",
+        "name",
+        "source",
+        "variantUri",
+        "version"
+      ],
+      "type": "object"
+    },
+    "catalog.DeployedAdapter": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "version"
+      ],
+      "type": "object"
+    },
+    "catalog.Step": {
+      "properties": {
+        "displayName": {
+          "type": "string"
+        },
+        "flavor": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "variantUri": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "variantUri"
+      ],
+      "type": "object"
+    },
+    "ops.ComponentList": {
+      "properties": {
+        "adapters": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/catalog.Adapter"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "deployedAdapters": {
+          "items": {
+            "$ref": "#/$defs/catalog.DeployedAdapter"
+          },
+          "type": "array"
+        },
+        "generatedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "sourceDates": {
+          "additionalProperties": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "sources": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/catalog.Step"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tenant": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapters",
+        "generatedAt",
+        "sources",
+        "steps"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/components_list.json",
+  "$ref": "#/$defs/ops.ComponentList",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl components list.",
+  "title": "cpictl components list result",
+  "x-schemaVersion": 1
+}

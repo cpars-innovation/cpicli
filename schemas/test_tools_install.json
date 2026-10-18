@@ -1,0 +1,207 @@
+{
+  "$defs": {
+    "ops.PackageResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ops.Result": {
+      "properties": {
+        "designtimeVersion": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "runtimeLocation": {
+          "type": "string"
+        },
+        "runtimeVersion": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "versioning": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.TestToolResult": {
+      "properties": {
+        "deploy": {
+          "$ref": "#/$defs/ops.Result"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "upload": {
+          "$ref": "#/$defs/ops.UploadResult"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tool",
+        "version"
+      ],
+      "type": "object"
+    },
+    "ops.TestToolsInstallResult": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TestToolResult"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "package": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ops.PackageResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "artifacts",
+        "package"
+      ],
+      "type": "object"
+    },
+    "ops.UploadResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "compareReason": {
+          "type": "string"
+        },
+        "compared": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "redeploy": {
+          "type": "boolean"
+        },
+        "runtimeUndeployed": {
+          "type": "boolean"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "versionReason": {
+          "type": "string"
+        },
+        "versionRule": {
+          "type": "string"
+        },
+        "versionSet": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "packageId"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/test_tools_install.json",
+  "$ref": "#/$defs/ops.TestToolsInstallResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl test tools install.",
+  "title": "cpictl test tools install result",
+  "x-schemaVersion": 1
+}

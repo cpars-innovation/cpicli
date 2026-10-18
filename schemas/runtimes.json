@@ -1,0 +1,85 @@
+{
+  "$defs": {
+    "ops.LocatedArtifactInfo": {
+      "properties": {
+        "deployState": {
+          "type": "string"
+        },
+        "deployedBy": {
+          "type": "string"
+        },
+        "deployedOn": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "workspaceProfile": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployState",
+        "id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.RuntimeInfo": {
+      "properties": {
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/ops.LocatedArtifactInfo"
+          },
+          "type": "array"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "typeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/runtimes.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl runtimes.",
+  "properties": {
+    "runtimes": {
+      "items": {
+        "$ref": "#/$defs/ops.RuntimeInfo"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "runtimes"
+  ],
+  "title": "cpictl runtimes result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

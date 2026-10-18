@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "cmd.doctorResult": {
+      "properties": {
+        "local": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.Check"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tenant": {
+          "$ref": "#/$defs/ops.DoctorResult"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "local",
+        "version"
+      ],
+      "type": "object"
+    },
+    "ops.Check": {
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "httpStatus": {
+          "type": "integer"
+        },
+        "ms": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "needed": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.DoctorResult": {
+      "properties": {
+        "checks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.Check"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "checks",
+        "ok"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/doctor.json",
+  "$ref": "#/$defs/cmd.doctorResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl doctor.",
+  "title": "cpictl doctor result",
+  "x-schemaVersion": 1
+}

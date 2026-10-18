@@ -297,9 +297,43 @@ expect: {returns: "00004711"}
 Run them with `cpictl test scripts cases` (MCP `run_script_cases`). They run on the SAP script API
 stand-ins of `cpictl test scripts init`, through the Gradle task `cpictlScriptCases` of its
 `build.gradle` (a JDK 17+ and Gradle needed; an older `build.gradle` needs `init --force`). Version 2
-scripts (`package script.v2`) get the version 2 message, which has no `getHeader`. A case in error
+scripts (`package script.v2`) get the version 2 message, which has no `getHeader` (not part of the
+version 2 API; the tenant's runtime still accepts it today, so such a case passes online). A case in error
 with `errorCategory` `unsupported` uses a part of SAP's API the stand-ins do not implement: test
 that part on the tenant. JavaScript scripts are not run locally.
+
+### Script cases on the tenant
+
+`cpictl test scripts cases --online` (MCP `run_script_cases_online`) runs the same case files on the
+tenant's runtime, with SAP's real classes, Camel and the tenant's keystore.
+
+```bash
+cpictl test scripts cases --online --flow Orders_In
+cpictl test scripts cases --online --keep        # leave the test flows deployed for a faster rerun
+```
+
+- **How:** cpictl generates one flow per script and function, `CPICTL_Test_Script_<hash>`, in the
+  test tooling package. The flow is: HTTPS `/cpictl/script/<hash>` -> set the case's headers and
+  properties -> the script under test -> the result as JSON.
+  - The flow holds a copy of the owner's `script/` and `lib/` files.
+  - cpictl deploys the flows (about a minute), sends each case and deletes the flows afterwards.
+  - Nothing runs that isn't in your repository: no script text is sent with the message.
+- **Same expectations as locally:** body, headers and properties after the call, and `throws`
+  (class and message from the message log).
+  - The result lists the headers and properties the case set or the script added or changed. What
+    the message held before, and what the runtime writes at every step, is left out.
+- **Skipped online (local only):**
+  - cases with `call.args` (a script step passes the message);
+  - `pd`, `value_mappings`, `secure`, `keystore` (test values are never written to a tenant);
+  - `log` and `returns` expectations.
+
+  `max_duration` is not checked (the time includes the HTTP round trip).
+- **Languages:** Groovy version 1 and 2 (`script/v2/`), and JavaScript, verified on a tenant.
+- **Guard:** refused on production tiers (`--tier`, `--allow-production`). The runtime client
+  needs the flows' role (`--role`, default `ESBMessaging.send`); runtime credentials as for
+  `send` (`--runtime-oauth-clientid`, ...).
+- **Local and online can differ, and that's the point.** For example, a version 2 script calling
+  `getHeader(name, Class)` fails locally (the v2 API has no such method) but runs on today's runtime.
 
 ## Script collection tests
 

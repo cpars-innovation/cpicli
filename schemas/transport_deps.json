@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "ops.TransportArtifact": {
+      "properties": {
+        "addedAsDependency": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "package",
+        "path",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ops.TransportDependency": {
+      "properties": {
+        "by": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "inSelection": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "local": {
+          "type": "boolean"
+        },
+        "package": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "ops.TransportSet": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TransportArtifact"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dependencies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TransportDependency"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dir": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifacts",
+        "dependencies",
+        "dir"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/transport_deps.json",
+  "$ref": "#/$defs/ops.TransportSet",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl transport deps.",
+  "title": "cpictl transport deps result",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "ops.DeleteResult": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string"
+        },
+        "undeployed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "deleted",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/delete_artifact.json",
+  "$ref": "#/$defs/ops.DeleteResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl delete artifact.",
+  "title": "cpictl delete artifact result",
+  "x-schemaVersion": 1
+}

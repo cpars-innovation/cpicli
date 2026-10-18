@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "testrun.CaseInfo": {
+      "properties": {
+        "case": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "skip": {
+          "type": "string"
+        },
+        "stubCalls": {
+          "type": "boolean"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "trigger": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "case",
+        "trigger"
+      ],
+      "type": "object"
+    },
+    "testrun.FlowListing": {
+      "properties": {
+        "cases": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/testrun.CaseInfo"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "configFlows": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": "object"
+        },
+        "configKeys": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "flow": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cases",
+        "flow"
+      ],
+      "type": "object"
+    },
+    "testrun.Listing": {
+      "properties": {
+        "cases": {
+          "type": "integer"
+        },
+        "flows": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/testrun.FlowListing"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cases",
+        "flows"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/test_list.json",
+  "$ref": "#/$defs/testrun.Listing",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl test list.",
+  "title": "cpictl test list result",
+  "x-schemaVersion": 1
+}

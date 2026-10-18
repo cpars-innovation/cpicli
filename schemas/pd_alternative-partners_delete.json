@@ -1,0 +1,29 @@
+{
+  "$defs": {
+    "ops.PDEntryResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "key",
+        "pid"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/pd_alternative-partners_delete.json",
+  "$ref": "#/$defs/ops.PDEntryResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl pd alternative-partners delete.",
+  "title": "cpictl pd alternative-partners delete result",
+  "x-schemaVersion": 1
+}

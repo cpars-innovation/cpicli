@@ -1,0 +1,298 @@
+{
+  "$defs": {
+    "cmd.lintResult": {
+      "properties": {
+        "artifacts": {
+          "type": "integer"
+        },
+        "baseline": {
+          "type": "string"
+        },
+        "byRule": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checked": {
+          "type": "integer"
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dir": {
+          "type": "string"
+        },
+        "failOn": {
+          "type": "string"
+        },
+        "findings": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/lint.Finding"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fix": {
+          "$ref": "#/$defs/lint.FixResult"
+        },
+        "new": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skippedVendor": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifacts",
+        "byRule",
+        "checked",
+        "counts",
+        "dir",
+        "findings",
+        "new"
+      ],
+      "type": "object"
+    },
+    "lint.Finding": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "baseline": {
+          "type": "boolean"
+        },
+        "element": {
+          "type": "string"
+        },
+        "elementName": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "fixable": {
+          "type": "boolean"
+        },
+        "group": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "related": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "suggestion": {
+          "type": "string"
+        },
+        "vendor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "fingerprint",
+        "group",
+        "message",
+        "path",
+        "rule",
+        "severity"
+      ],
+      "type": "object"
+    },
+    "lint.FixChange": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "artifact": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "artifact",
+        "path",
+        "rule"
+      ],
+      "type": "object"
+    },
+    "lint.FixResult": {
+      "properties": {
+        "changed": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "changes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/lint.FixChange"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "collections": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "nextSteps": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "changed",
+        "changes",
+        "collections",
+        "nextSteps"
+      ],
+      "type": "object"
+    },
+    "lint.RuleInfo": {
+      "properties": {
+        "fixable": {
+          "type": "boolean"
+        },
+        "group": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "severity": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "id",
+        "severity",
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/lint.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/cmd.lintResult"
+    },
+    {
+      "properties": {
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/lint.RuleInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rules"
+      ],
+      "type": "object"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl lint.",
+  "title": "cpictl lint result",
+  "x-schemaVersion": 1
+}

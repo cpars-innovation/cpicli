@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Script cases on the tenant: `cpictl test scripts cases --online` (#13).** The same case files
+  as the local run, on the tenant's runtime ([docs/testing.md](docs/testing.md#script-cases-on-the-tenant)).
+  - Per script and function a test flow is generated in the test tooling package, deployed,
+    called once per case and deleted (`--keep` keeps it).
+  - Groovy v1 and v2 and JavaScript, verified on a real tenant. Cases that need local-only values
+    (`call.args`, `pd`, `secure`, ...) are skipped with the reason.
+  - Refused on production tiers. MCP: `run_script_cases_online`. Go: `scripttest.RunCasesOnline`,
+    `testtools.ScriptFlow`.
+- **Corrected:** our docs said a version 2 script's `getHeader(name, Class)` fails on the runtime. It
+  doesn't: today's runtime accepts it (verified on a tenant). It is still not part of the v2 API,
+  and the stand-ins still refuse it.
+
 - **JSON schemas of all results (#32):** `schemas/` has a JSON Schema (2020-12) for the
   `--output json` envelope and for the `result` of every command, generated from the Go types the
   commands return. `schemas/index.json` lists them, and releases attach

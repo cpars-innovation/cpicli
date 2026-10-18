@@ -1,0 +1,16 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/tenant-settings_archiving.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl tenant-settings archiving.",
+  "properties": {
+    "archiving": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "archiving"
+  ],
+  "title": "cpictl tenant-settings archiving result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

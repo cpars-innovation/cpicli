@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "ops.TransportArtifact": {
+      "properties": {
+        "addedAsDependency": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "package",
+        "path",
+        "type"
+      ],
+      "type": "object"
+    },
+    "ops.TransportCheck": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "check": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "check",
+        "message",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ops.TransportCheckResult": {
+      "properties": {
+        "artifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TransportArtifact"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TransportCheck"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dependencies": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.TransportDependency"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dir": {
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "artifacts",
+        "checks",
+        "dependencies",
+        "dir",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "ops.TransportDependency": {
+      "properties": {
+        "by": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "inSelection": {
+          "type": "boolean"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "local": {
+          "type": "boolean"
+        },
+        "package": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "by",
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/transport_check.json",
+  "$ref": "#/$defs/ops.TransportCheckResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl transport check.",
+  "title": "cpictl transport check result",
+  "x-schemaVersion": 1
+}

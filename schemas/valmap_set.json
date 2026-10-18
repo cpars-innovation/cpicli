@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "cpi.ValMapSchema": {
+      "properties": {
+        "srcAgency": {
+          "type": "string"
+        },
+        "srcId": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "tgtAgency": {
+          "type": "string"
+        },
+        "tgtId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "srcAgency",
+        "srcId",
+        "tgtAgency",
+        "tgtId"
+      ],
+      "type": "object"
+    },
+    "ops.SetValueMappingResult": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "previous": {
+          "type": "string"
+        },
+        "schema": {
+          "$ref": "#/$defs/cpi.ValMapSchema"
+        },
+        "srcValue": {
+          "type": "string"
+        },
+        "tgtValue": {
+          "type": "string"
+        },
+        "valMapId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "id",
+        "schema",
+        "srcValue",
+        "tgtValue"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/valmap_set.json",
+  "$ref": "#/$defs/ops.SetValueMappingResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl valmap set.",
+  "title": "cpictl valmap set result",
+  "x-schemaVersion": 1
+}

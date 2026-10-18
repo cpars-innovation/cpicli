@@ -1,0 +1,35 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/components_learn.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl components learn.",
+  "properties": {
+    "adapters": {
+      "type": "integer"
+    },
+    "file": {
+      "type": "string"
+    },
+    "iflows": {
+      "type": "integer"
+    },
+    "sources": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "adapters",
+    "file",
+    "iflows",
+    "sources",
+    "steps"
+  ],
+  "title": "cpictl components learn result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

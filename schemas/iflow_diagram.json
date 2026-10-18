@@ -1,0 +1,292 @@
+{
+  "$defs": {
+    "iflow.Diagram": {
+      "properties": {
+        "edges": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "$ref": "#/$defs/iflow.Point"
+                },
+                "type": "array"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lanes": {
+          "items": {
+            "$ref": "#/$defs/iflow.Lane"
+          },
+          "type": "array"
+        },
+        "messageFlows": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/iflow.DiagramFlow"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nodes": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/iflow.DiagramNode"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pools": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/iflow.Pool"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequenceFlows": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/iflow.DiagramFlow"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shapes": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/iflow.Rect"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "undrawn": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "edges",
+        "messageFlows",
+        "nodes",
+        "pools",
+        "sequenceFlows",
+        "shapes"
+      ],
+      "type": "object"
+    },
+    "iflow.DiagramFlow": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "cmdVariantUri": {
+          "type": "string"
+        },
+        "condition": {
+          "type": "string"
+        },
+        "container": {
+          "type": "string"
+        },
+        "direction": {
+          "type": "string"
+        },
+        "drawn": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "drawn",
+        "id",
+        "source",
+        "target"
+      ],
+      "type": "object"
+    },
+    "iflow.DiagramNode": {
+      "properties": {
+        "activityType": {
+          "type": "string"
+        },
+        "cmdVariantUri": {
+          "type": "string"
+        },
+        "container": {
+          "type": "string"
+        },
+        "drawn": {
+          "type": "boolean"
+        },
+        "eventSubProcess": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "container",
+        "drawn",
+        "id",
+        "kind",
+        "type"
+      ],
+      "type": "object"
+    },
+    "iflow.Lane": {
+      "properties": {
+        "bounds": {
+          "$ref": "#/$defs/iflow.Rect"
+        },
+        "drawn": {
+          "type": "boolean"
+        },
+        "flowNodes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "process": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "drawn",
+        "id",
+        "process"
+      ],
+      "type": "object"
+    },
+    "iflow.Point": {
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "iflow.Pool": {
+      "properties": {
+        "bounds": {
+          "$ref": "#/$defs/iflow.Rect"
+        },
+        "drawn": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "processRef": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "drawn",
+        "id"
+      ],
+      "type": "object"
+    },
+    "iflow.Rect": {
+      "properties": {
+        "height": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "height",
+        "width",
+        "x",
+        "y"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/iflow_diagram.json",
+  "$ref": "#/$defs/iflow.Diagram",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl iflow diagram.",
+  "title": "cpictl iflow diagram result",
+  "x-schemaVersion": 1
+}

@@ -1,0 +1,86 @@
+{
+  "$defs": {
+    "cpi.AccessPolicyDetail": {
+      "properties": {
+        "artifactReferences": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.ArtifactReference"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "roleName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactReferences",
+        "id",
+        "roleName"
+      ],
+      "type": "object"
+    },
+    "cpi.ArtifactReference": {
+      "properties": {
+        "conditionAttribute": {
+          "type": "string"
+        },
+        "conditionType": {
+          "type": "string"
+        },
+        "conditionValue": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "conditionAttribute",
+        "conditionType",
+        "conditionValue",
+        "name",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/access-policies_list.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl access-policies list.",
+  "properties": {
+    "accessPolicies": {
+      "items": {
+        "$ref": "#/$defs/cpi.AccessPolicyDetail"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "accessPolicies"
+  ],
+  "title": "cpictl access-policies list result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

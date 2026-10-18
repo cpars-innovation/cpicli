@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "ops.ConfigurationUpdate": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "failed": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.ParameterFailure"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notFound": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unchanged": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "artifactId",
+        "dryRun",
+        "failed",
+        "notFound",
+        "unchanged",
+        "updated"
+      ],
+      "type": "object"
+    },
+    "ops.ParameterFailure": {
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "error",
+        "key"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/params_set.json",
+  "$ref": "#/$defs/ops.ConfigurationUpdate",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl params set.",
+  "title": "cpictl params set result",
+  "x-schemaVersion": 1
+}

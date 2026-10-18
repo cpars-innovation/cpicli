@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "cpi.ArchivingRun": {
+      "properties": {
+        "archivedUntil": {
+          "type": "string"
+        },
+        "mplsArchived": {
+          "type": "integer"
+        },
+        "mplsArchivingFailed": {
+          "type": "integer"
+        },
+        "mplsToBeArchived": {
+          "type": "integer"
+        },
+        "runFailedPhase": {
+          "type": "string"
+        },
+        "runMinutes": {
+          "type": "integer"
+        },
+        "runStart": {
+          "type": "string"
+        },
+        "runStatus": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mplsArchived",
+        "mplsArchivingFailed",
+        "mplsToBeArchived",
+        "runMinutes",
+        "runStart",
+        "runStatus"
+      ],
+      "type": "object"
+    },
+    "ops.TenantSettingsResult": {
+      "properties": {
+        "archiving": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "archivingRuns": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.ArchivingRun"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalLogging": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "archiving",
+        "archivingRuns",
+        "externalLogging"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/tenant-settings.json",
+  "$ref": "#/$defs/ops.TenantSettingsResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl tenant-settings.",
+  "title": "cpictl tenant-settings result",
+  "x-schemaVersion": 1
+}

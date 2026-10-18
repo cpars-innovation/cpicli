@@ -1,0 +1,158 @@
+{
+  "$defs": {
+    "cmd.artifactResults": {
+      "properties": {
+        "results": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.Result"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "results"
+      ],
+      "type": "object"
+    },
+    "cmd.planResult": {
+      "properties": {
+        "plan": {
+          "anyOf": [
+            {
+              "items": {
+                "properties": {
+                  "artifact": {
+                    "type": "string"
+                  },
+                  "compared": {
+                    "type": "string"
+                  },
+                  "deploy": {
+                    "type": "boolean"
+                  },
+                  "designtime": {
+                    "type": "string"
+                  },
+                  "error": {
+                    "type": "string"
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "running": {
+                    "type": "string"
+                  },
+                  "runtimeStatus": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "upload": {
+                    "type": "string"
+                  },
+                  "versionRule": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "artifact",
+                  "deploy"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "plan"
+      ],
+      "type": "object"
+    },
+    "ops.Result": {
+      "properties": {
+        "designtimeVersion": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "packageId": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "runtimeLocation": {
+          "type": "string"
+        },
+        "runtimeVersion": {
+          "type": "string"
+        },
+        "skipped": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "versioning": {
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/deploy.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/cmd.artifactResults"
+    },
+    {
+      "$ref": "#/$defs/cmd.planResult"
+    }
+  ],
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl deploy.",
+  "title": "cpictl deploy result",
+  "x-schemaVersion": 1
+}

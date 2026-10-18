@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "cpi.NameValue": {
+      "properties": {
+        "adapter": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "type": "object"
+    },
+    "cpi.TraceMessage": {
+      "properties": {
+        "mimeType": {
+          "type": "string"
+        },
+        "modelStepId": {
+          "type": "string"
+        },
+        "payloadSize": {
+          "type": "integer"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "payloadSize",
+        "traceId"
+      ],
+      "type": "object"
+    },
+    "ops.MessageTrace": {
+      "properties": {
+        "hint": {
+          "type": "string"
+        },
+        "messageGuid": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.StepTrace"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "messageGuid",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "ops.StepTrace": {
+      "properties": {
+        "activity": {
+          "type": "string"
+        },
+        "branchId": {
+          "type": "string"
+        },
+        "childCount": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "modelStepId": {
+          "type": "string"
+        },
+        "properties": {
+          "items": {
+            "$ref": "#/$defs/cpi.NameValue"
+          },
+          "type": "array"
+        },
+        "runId": {
+          "type": "string"
+        },
+        "start": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stepId": {
+          "type": "string"
+        },
+        "stop": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "traces": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.TraceMessage"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "childCount",
+        "start",
+        "stepId",
+        "stop",
+        "traces"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_trace.json",
+  "$ref": "#/$defs/ops.MessageTrace",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs trace.",
+  "title": "cpictl logs trace result",
+  "x-schemaVersion": 1
+}

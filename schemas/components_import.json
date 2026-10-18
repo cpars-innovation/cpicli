@@ -1,0 +1,39 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/components_import.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl components import.",
+  "properties": {
+    "adapters": {
+      "type": "integer"
+    },
+    "file": {
+      "type": "string"
+    },
+    "sourceDates": {
+      "additionalProperties": {
+        "format": "date-time",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "sources": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "adapters",
+    "file",
+    "sourceDates",
+    "sources",
+    "steps"
+  ],
+  "title": "cpictl components import result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

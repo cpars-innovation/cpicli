@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "cpi.IntegrationConnFlow": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "receiverHostType": {
+          "type": "string"
+        },
+        "senderHostType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "cpi.IntegrationConnection": {
+      "properties": {
+        "flows": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.IntegrationConnFlow"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "id": {
+          "type": "integer"
+        },
+        "receiverHost": {
+          "type": "string"
+        },
+        "resolved": {
+          "type": "boolean"
+        },
+        "senderHost": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "flows",
+        "id",
+        "receiverHost",
+        "resolved",
+        "senderHost"
+      ],
+      "type": "object"
+    },
+    "ops.ConnectionList": {
+      "properties": {
+        "connections": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cpi.IntegrationConnection"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hosts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "connections",
+        "hosts"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/connections.json",
+  "$ref": "#/$defs/ops.ConnectionList",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl connections.",
+  "title": "cpictl connections result",
+  "x-schemaVersion": 1
+}
