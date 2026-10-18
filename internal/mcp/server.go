@@ -34,6 +34,9 @@ type Tool struct {
 	Annotations map[string]any `json:"annotations,omitempty"`
 	// Handler executes the tool. args are the raw "arguments" object.
 	Handler func(ctx context.Context, args json.RawMessage) (any, error) `json:"-"`
+	// Deprecated names the tool that replaces this one: the tool is not
+	// listed any more, but calls still work (with a notice in the result).
+	Deprecated string `json:"-"`
 }
 
 // Server is an MCP server.
@@ -265,7 +268,9 @@ type ToolResult struct {
 	Error         string `json:"error,omitempty"`
 	// DurationMs is the time the tool call took, in milliseconds.
 	DurationMs int64 `json:"durationMs"`
-	Result     any   `json:"result"`
+	// Notice is set when the tool is deprecated: which tool to use instead.
+	Notice string `json:"notice,omitempty"`
+	Result any    `json:"result"`
 }
 
 // Category returns the error category name of an exit code (the same names
@@ -328,6 +333,10 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 	code := output.ExitCode(err)
 	stats.Record(p.Name, stats.SourceMCP, code, elapsed)
 	res := ToolResult{OK: err == nil, ExitCode: code, DurationMs: elapsed.Milliseconds(), Result: value}
+	if r := s.tools[idx].Deprecated; r != "" {
+		res.Notice = fmt.Sprintf("%s is deprecated and no longer listed: use %s", p.Name, r)
+		log.Warn().Str("tool", p.Name).Msg(res.Notice)
+	}
 	if s.Redactor != nil {
 		res.Result = s.Redactor.Apply(p.Name, value)
 	}

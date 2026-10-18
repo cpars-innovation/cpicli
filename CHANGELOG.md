@@ -5,6 +5,31 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Smaller MCP tool list (from the review in #37).**
+  - **Seven tools are now covered by others** of the same kind (read or tenant change) and no
+    longer listed. They still work when called, and the result's `notice` names the
+    replacement:
+
+    | Deprecated | Use instead |
+    |---|---|
+    | `get_message_steps` | `get_message_log` with `include_steps` (error and failing step in one call) |
+    | `get_message_attachment`, `get_message_store_entry` | `get_message_content` with `attachment_id` or `store_entry_id` |
+    | `get_trace_message` | `get_message_trace` with `trace_id` |
+    | `get_runtime_status` | `list_runtime_artifacts` with `artifact_ids` |
+    | `upload_artifact` | `upload_artifacts` (one or several) |
+    | `get_variable` | `list_variables` with `name` |
+  - **Payload redaction** (`--redact-payloads`) covers the replacements.
+  - **With `--toolset`, the instructions are only those of the toolsets** (about half the size).
+  - **The example configurations for Codex, Cursor, OpenCode and Gemini CLI use `--toolset`**:
+    `build,test` for development, `inspect,monitor` read-only. That's about 12–17k tokens instead
+    of about 28k on every prompt. Claude Code loads tool definitions on demand itself.
+  - Skills, the reviewer agent and the docs use the new forms.
+- **Windows:**
+  - In the MCP server, a rooted path without a drive (`\x`) and a drive-relative one (`D:x`) are
+    refused instead of being mapped below the root.
+  - The test suite is portable (home directory, symbolic links, file modes). CI runs it on
+    Windows too, as a report for now.
+
 ## 0.24.0
 
 - **Script cases on the tenant: `cpictl test scripts cases --online` (#13).** The same case files

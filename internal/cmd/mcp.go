@@ -164,9 +164,17 @@ CPICTL_* environment variables.`,
 				help.ActiveToolsets = func() []string { return server.EnabledToolsets() }
 			}
 			tools = append(tools, mcp.HelpTool(help))
-			instructions := mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
+			var instructions string
 			if len(toolsets) > 0 && !dynamic {
-				instructions += "\n\nToolset: " + strings.Join(toolsets, ", ") + ". Only the tools of these tasks are available; call help to see them."
+				// only the parts of these toolsets, and no list of the many
+				// tools they leave out: smaller, and nothing to plan around
+				instructions = mcp.ToolsetInstructions(toolsets) + help.ServerInstructions +
+					"\n\nToolset: " + strings.Join(toolsets, ", ") + ". Only the tools of these tasks are available; call help to see them."
+				if readOnly {
+					instructions += " This server is read-only: it cannot change the tenant or send messages; ask the user to make changes."
+				}
+			} else {
+				instructions = mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
 			}
 			if dynamic {
 				instructions += mcp.DynamicInstructions()

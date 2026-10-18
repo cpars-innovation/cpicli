@@ -5,7 +5,7 @@ Apply `.cpi/conventions.md` first; its "Review checklist additions" are mandator
 ## Tenant checks
 - `validate_artifact` PASSED.
 - `check_guidelines`: every violation is fixed or justified.
-- Deployed version equals the reviewed version (`get_runtime_status`), status STARTED.
+- Deployed version equals the reviewed version (`list_runtime_artifacts` with `artifact_ids`), status STARTED.
 - `lint`: no `component-newer-than-tenant` (a step or adapter newer than the target tenant
   offers); new steps use the current versions from `list_components`, Groovy scripts version 2.
 - Nobody holds an edit lock on the flow (`list_locks`).

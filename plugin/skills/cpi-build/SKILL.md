@@ -97,7 +97,7 @@ user the summary (`.cpi/loops/<loop_id>.md`). Call `loop_end` as well when the f
    right-angled lines). Do not compute or edit coordinates yourself; a new element only needs a
    `BPMNShape` / `BPMNEdge` (without bounds is fine), `layout_iflow` places it.
 2. New package? `create_package` (never changes an existing one).
-3. `upload_artifact` (action UNCHANGED means the tenant already has exactly these files).
+3. `upload_artifacts` (action UNCHANGED means the tenant already has exactly these files).
 4. `validate_artifact`. On FAILED read the details, fix, go back to 1. Then `check_guidelines`:
    fix violations the conventions care about now; list the others for the review.
 5. `deploy`. On FAILED the result's `error` is the runtime error (for example a missing

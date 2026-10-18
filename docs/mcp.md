@@ -242,7 +242,7 @@ For approvals, `help` also reports a finer **class** per tool (the effect `read`
 ```json
 "cpi-qa":   { "command": "cpictl", "args": ["mcp", "--root", ".", "--read-only"] },
 "cpi-dev":  { "command": "cpictl", "args": ["mcp", "--root", ".", "--disable-tools", "undeploy,pd_deploy"] },
-"cpi-logs": { "command": "cpictl", "args": ["mcp", "--tools", "list_message_logs,get_message_*,get_runtime_status"] }
+"cpi-logs": { "command": "cpictl", "args": ["mcp", "--tools", "list_message_logs,get_message_*,list_runtime_artifacts"] }
 ```
 
 The settings can also come from the environment (`CPICTL_READ_ONLY=true`,
@@ -279,6 +279,14 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 
 ## Tools
 
+**Deprecated tools.** Since v0.25.0 some tools are covered by another tool of the same kind
+(read or tenant change): `get_message_steps`, `get_message_attachment`, `get_message_store_entry`,
+`get_trace_message`, `get_runtime_status`, `upload_artifact` and `get_variable`. They are no
+longer listed, which keeps every prompt smaller, but calls still work: the result has a `notice`
+naming the replacement. Read tools are only merged with read tools and tenant tools with tenant
+tools, so approving a tool still means one kind of effect. A server that offers only the old
+name (e.g. `--tools get_message_steps`) keeps listing it.
+
 | Tool | Changes | Purpose |
 |------|---------|---------|
 | `help` | | What this server offers: tools after mode and filters, the cpi skills (with their instructions), the CLI commands, and which tools and skill fit common tasks. `topic` for one tool, skill, skill file or command; `topic: "instructions"` with `toolsets` for the server instructions of those toolsets. Always available. See [Finding your way](#finding-your-way) |
@@ -291,8 +299,8 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 | `download_artifact` | local files | Extract an artifact into a directory inside `--root` (empty unless `overwrite`) |
 | `copy_iflow` | local files | Copy a flow (tenant or local) under a new ID, name, description and sender addresses; refuses unchanged sender addresses unless `keep_addresses`. See [new-flows.md](new-flows.md) |
 | `bump_versions` | local files | Raise `Bundle-Version` of changed artifacts (`changed: true`: since the Git commit that last set it) before a pull request. See [versioning.md](versioning.md) |
-| `upload_artifact` | designtime | Create or update an artifact from a local directory; `CREATED`, `UPDATED` or `UNCHANGED`. `dry_run`: only compare and report the action and version |
-| `upload_artifacts` | designtime | `upload_artifact` for several artifacts in one call, 8 at a time; one result per artifact; `dry_run` |
+| `upload_artifact` | designtime | **Deprecated**: not listed, still callable; use `upload_artifacts` |
+| `upload_artifacts` | designtime | Create or update one or several artifacts from local directories, 8 at a time; per artifact `CREATED`, `UPDATED` or `UNCHANGED`; `dry_run`: only compare and report the action and version |
 | `validate_artifact` | | Tenant check of an integration flow (like *Check* in the Web UI); `PASSED` / `FAILED` with details |
 | `check_guidelines` | | Run the activated design guidelines and wait; violations with violated components |
 | `get_parameters` | | Externalised parameters of an integration flow; `artifact_ids` for several flows in one call (8 at a time) |
@@ -306,20 +314,21 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 | `install_test_tools` | runtime | Upload the test tooling that ships with cpictl (test harness `CPICTL_Test_Harness`, receiver stub `CPICTL_Test_Stub`) into its package (`package_id`, default `CPICTLTesting`, created when missing); `only` harness or stub; `role` sets the user role a client needs to call them (default: keep the configured one, `ESBMessaging.send` on a first install); `deploy` deploys and waits. Refused on a production tier unless the server runs with `--allow-production`. See [testing.md](testing.md#test-tooling-harness-and-receiver-stub) |
 | `set_stub_response` | designtime | The receiver stub's answer for a rule (`status`, `content_type`, `body`, `headers`), stored as Partner Directory string parameter `CPICTL_Stub/<rule>`; `clear` removes it (the stub then answers 200 `{}`). Refused on a production tier like `install_test_tools` |
 | `idoc_template` | local files | IDoc XML skeleton for `send_test_message idoc`: EDI_DC40 with the standard fields (`idoc_type`, `message_type`, partners, ports, `docnum`) and a placeholder for the data segments, which you fill in; `path` also writes it inside `--root` |
-| `get_runtime_status` | | Runtime status, version, deployment time and error of given artifacts |
-| `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`) |
+| `get_runtime_status` | | **Deprecated**: not listed, still callable; use `list_runtime_artifacts` with `artifact_ids` |
+| `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`); `artifact_ids`: the state of those artifacts, deployed or not, with the tenant's error |
 | `list_service_endpoints` | | Callable URLs of deployed integration flows (where to send test messages) |
 | `list_message_logs` | | Message processing logs by artifact or package, status, time, IDs; error texts; `wait_seconds` for final status; `custom_header {name, value}` (as `find_messages_by_header`) |
 | `find_messages_by_header` | | Messages whose custom header property has a value (e.g. an order number), tenant-wide in one call; narrowed by flow, package, time, status. Tenants without the search are scanned (`scanned`/`truncated`) |
 | `message_summary` | | Volume and failures over a window: per flow (count per status, failures, durations), per connection between flows (predecessor links, or graph connections by correlation ID), failures grouped by error fingerprint with sample, count, first / last and newest GUID |
 | `get_trace_tree` | | Path across flows from a trace ID or a message GUID (correlation ID, optionally joined by key custom headers): tree, hops, `pathKey`, `firstFailure` |
-| `get_message_log` | | One message: error text, `errorInformation` (`lastErrorModelStepId`), custom header properties, adapter attributes, attachments, persisted messages |
-| `get_message_steps` | | Processing steps of a message and the first failing step (`modelStepId`); `properties: true` adds each step's properties |
-| `get_message_attachment` | | Content of a log attachment |
-| `get_message_store_entry` | | Payload persisted by a Persist step |
+| `get_message_log` | | One message: error text, `errorInformation` (`lastErrorModelStepId`), custom header properties, adapter attributes, attachments, persisted messages; `include_steps` adds the processing steps and the first failing step (`step_properties` each step's properties) |
+| `get_message_content` | | Content of a log attachment (`attachment_id`) or of a message a Persist step wrote (`store_entry_id`); text inline, binary base64, truncated to `max_bytes` |
+| `get_message_steps` | | **Deprecated**: not listed, still callable; use `get_message_log` with `include_steps` |
+| `get_message_attachment` | | **Deprecated**: not listed, still callable; use `get_message_content` with `attachment_id` |
+| `get_message_store_entry` | | **Deprecated**: not listed, still callable; use `get_message_content` with `store_entry_id` |
 | `set_log_level` | runtime setting | NONE / INFO / DEBUG / TRACE for a deployed flow; the server sets it back to INFO after `revert_after_minutes` (default 10 for TRACE and DEBUG) and on shutdown; result `revertsAt` |
-| `get_message_trace` | | Traced steps of a message with trace IDs; `status: "missing_role"` (ok) when the key may not read message content |
-| `get_trace_message` | | Payload, headers, exchange properties at one traced step (sensitive values masked) |
+| `get_message_trace` | | Traced steps of a message with trace IDs; with `trace_id` the payload, headers and exchange properties at that step (sensitive values masked); `status: "missing_role"` (ok) when the key may not read message content |
+| `get_trace_message` | | **Deprecated**: not listed, still callable; use `get_message_trace` with `trace_id` |
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
 | `delete_data_store_entry` | tenant, **destructive** | Delete one entry; requires `confirm: true` |
 | `list_locks` | | Artifacts open for editing in the Web UI: artifact, package, who holds the lock, since when |
@@ -334,7 +343,8 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 | `set_value_mapping` | designtime | Add a value pair to an existing schema or change the target value of a source value (`added`, `changed` with `previous`, `unchanged`); deploy with `artifact_type: ValueMapping` to use it; requires `confirm: true` |
 | `delete_artifact` | designtime, **destructive**, opt-in | Delete a designtime artifact of any type (type found on the tenant unless `artifact_type`); a deployed one is refused unless `undeploy_first`; requires `confirm: true` and `--opt-in delete_artifact` |
 | `delete_package` | designtime, **destructive**, opt-in | Delete a package; refused while it has artifacts unless `with_artifacts`, and while they are deployed unless `undeploy_first`; requires `confirm: true` and `--opt-in delete_package` |
-| `list_variables`, `get_variable` | | Global and flow variables, and a value |
+| `list_variables` | | Global and flow variables; `name` reads one variable's value |
+| `get_variable` | | **Deprecated**: not listed, still callable; use `list_variables` with `name` |
 | `list_jms_queues`, `get_jms_broker` | | Queues with message counts and the flows that use them; broker capacity and usage |
 | `list_jms_messages` | | Messages of a queue: JMS message ID, failed, retry count, next retry, message GUID of the last attempt |
 | `retry_jms_messages` | tenant | Process messages of a queue again now (ids or `all`); requires `confirm: true` |
@@ -379,7 +389,7 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 | `config_diff` | | Configure YAML vs tenant parameters: update / unchanged / unknown_key |
 | `pd_deploy` | Partner Directory, **destructive with full_sync** | Upload Partner Directory parameters; dry run unless `dry_run: false`; `keys: ["PID:ID"]` changes only those parameters |
 
-Content tools (`get_resource`, `get_message_attachment`, `get_message_store_entry`) return
+Content tools (`get_resource`, `get_message_content`) return
 `{size, text | base64, truncated}`; `max_bytes` (default 64 KB, max 1 MB) limits the size.
 
 Every tool has a JSON schema with `additionalProperties: false`: a misspelt argument is an
@@ -476,7 +486,7 @@ Every tool call returns the same structure, both as `structuredContent` and as J
 | `auth` | 3 | Credentials or roles: stop and ask the user |
 | `tenant_http` | 4 | Tenant error or unreachable: retry later |
 | `failed` | 5 | The tenant rejected the content: read `error`, fix the artifact |
-| `timeout` | 6 | Not finished in time: check `get_runtime_status` |
+| `timeout` | 6 | Not finished in time: check `list_runtime_artifacts` with `artifact_ids` |
 | `partial` | 7 | Some items failed: look at the per-item results |
 | `stopped` | 8 | A loop limit was reached: tenant changes are refused; call `loop_end` and report |
 | `loop_required` | 2 | The server runs with `--loop-required` and no loop is open: call `loop_start` first |
@@ -498,7 +508,7 @@ covered without their own code:
 
 - **Name/value lists**: in every object with a string `name` and `value` (custom header
   properties and adapter attributes of `get_message_log` and `send_test_message`'s log, step
-  properties of `get_message_steps`, headers and exchange properties of `get_trace_message`, …)
+  properties of `get_message_log include_steps`, headers and exchange properties of `get_message_trace trace_id`, …)
   the value is replaced by `***` when the name contains
   `authorization`, `cookie`, `password`, `passwd`, `secret`, `token`, `credential`, `apikey` or
   `api-key` (case-insensitive), or matches a `--mask-pattern`.
@@ -507,8 +517,8 @@ covered without their own code:
 - **Header search**: the `custom header <name> = "<value>"` filter text of
   `find_messages_by_header` gets `"***"` as value when the name is masked.
 - **Payloads** (only with `--redact-payloads`): the bodies returned by `send_test_message`
-  (response), `get_message_attachment`, `get_message_store_entry`, `get_trace_message`
-  (payload), `get_data_store_entry` and `get_variable` become `{"size": …, "text": "[redacted]",
+  (response), `get_message_content`, `get_message_trace` with `trace_id`
+  (payload), `get_data_store_entry` and `list_variables` with `name` (and the deprecated tools they replace) become `{"size": …, "text": "[redacted]",
   "sha256": "<hex>", "redacted": true}`; `size` is the full size, `sha256` is computed over the
   bytes the tool returned (the first `max_bytes` when `truncated`). Resources, scripts and
   Partner Directory values are content, not payloads, and stay readable.
@@ -524,7 +534,7 @@ ledger and the CLI see the original values.
 1. `download_artifact` once to get the iFlow into the local repository (inside `--root`),
    or start from files that are already there. New package: `create_package`.
 2. Edit the files; `layout_iflow` after changing an `.iflw` (the server lays out the diagram, the
-   agent does not place shapes); `upload_artifact`; `validate_artifact` (and `check_guidelines`).
+   agent does not place shapes); `upload_artifacts`; `validate_artifact` (and `check_guidelines`).
 3. `deploy`; on `failed`, read `error` (the tenant's runtime error), fix and go back to 2.
 4. `run_tests` (the cases in `.cpi/tests/<FlowId>/`, written by the agent from the plan's test
    list): every expectation checked, failures with expected and actual values and diagnostics.
@@ -532,9 +542,9 @@ ledger and the CLI see the original values.
    response and the final message log in one call. (For flows without an HTTP sender: trigger them otherwise and use
    `list_message_logs` with `since` and `wait_seconds`.)
 5. For a `FAILED` message the log contains `errorText`.
-6. `get_message_steps` shows the failing step (`modelStepId`, as in the `.iflw` BPMN);
-   `get_message_log` lists custom headers, attachments and persisted messages, which
-   `get_message_attachment` / `get_message_store_entry` download. Fix and go back to 2.
+6. `get_message_log` with `include_steps: true` shows the error, the failing step (`modelStepId`,
+   as in the `.iflw` BPMN), custom headers, attachments and persisted messages in one call;
+   `get_message_content` downloads an attachment or persisted message. Fix and go back to 2.
 7. `set_parameters` + `deploy` to change externalised configuration.
 
 Message logs, attachments and persisted messages contain business data. Error texts are

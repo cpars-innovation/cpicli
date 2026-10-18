@@ -4,11 +4,11 @@
 
 [mcp_servers.cpi-dev]
 command = "cpictl"
-args = ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop"]
+args = ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"]
 # deploy and send_test_message wait for the tenant
 tool_timeout_sec = 600
 
 [mcp_servers.cpi-qa]
 command = "cpictl"
-args = ["mcp", "--root", ".", "--profile", "qa", "--read-only"]
+args = ["mcp", "--root", ".", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"]
 tool_timeout_sec = 120

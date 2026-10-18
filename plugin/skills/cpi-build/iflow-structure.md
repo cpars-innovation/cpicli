@@ -1,6 +1,6 @@
 # Integration flow files
 
-What `download_artifact` extracts and `upload_artifact` expects:
+What `download_artifact` extracts and `upload_artifacts` expects:
 
 ```
 <FlowId>/
@@ -45,7 +45,7 @@ What `download_artifact` extracts and `upload_artifact` expects:
   coordinates: run `layout_iflow` (or `cpictl iflow layout`) after editing; it draws missing
   shapes and lines and changes nothing outside the diagram.
 - `{{Key}}` in a property value refers to an externalised parameter in parameters.prop.
-- `get_message_steps` returns `modelStepId`: the `id` attribute of the failing element.
+- `get_message_log` with `include_steps` returns `modelStepId`: the `id` attribute of the failing element.
 
 ## Editing safely
 

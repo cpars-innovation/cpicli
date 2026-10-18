@@ -104,7 +104,7 @@ func TestToolsets(t *testing.T) {
 	}
 	// destructive tools are offered only on request (--tools)
 	for name := range names {
-		if name == "undeploy" || name == "delete_data_store_entry" || slices.Contains(optInTools, name) || name == "doctor" {
+		if name == "undeploy" || name == "delete_data_store_entry" || slices.Contains(optInTools, name) || name == "doctor" || deprecatedTools[name] != "" {
 			continue
 		}
 		assert.True(t, inSome[name], "tool %s is in no toolset", name)

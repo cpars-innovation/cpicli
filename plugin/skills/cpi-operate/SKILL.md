@@ -51,11 +51,11 @@ agreed to, one change at a time, and say what you did. On a productive tenant ev
   flows handle it. An OData error from S/4HANA: the message log's error text carries the HTTP
   status and the service's message; the receiver system is in the flow's receiver channel.
 - A message GUID: `get_message_log` (status, error text, `errorInformation` with the last failed
-  model step, adapter attributes), `get_message_steps` (`properties: true` for step properties),
+  model step, adapter attributes; `include_steps: true` adds the steps, `step_properties: true` their properties),
   `get_trace_tree` (the path across flows: ProcessDirect, JMS, key headers).
-- Payload at a step: `get_message_attachment` / `get_message_store_entry`; still unclear and the
+- Payload at a step: `get_message_content` (an attachment or a persisted message); still unclear and the
   user agrees: `set_log_level` TRACE for that flow (it reverts on its own), reproduce,
-  `get_message_trace` / `get_trace_message`. Set TRACE only after a deployment has finished: a
+  `get_message_trace` (then with `trace_id` for the message at one step). Set TRACE only after a deployment has finished: a
   redeployment resets the level. A 403 on trace content means the service key lacks the role to
   read message content: report it, it is not a fault of the flow.
 - Payloads are business data: summarise them, never paste them into the answer.

@@ -3,13 +3,13 @@
   "mcp": {
     "cpi-dev": {
       "type": "local",
-      "command": ["cpictl", "mcp", "--root", ".", "--profile", "dev", "--mode", "develop"],
+      "command": ["cpictl", "mcp", "--root", ".", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"],
       "enabled": true,
       "timeout": 15000
     },
     "cpi-qa": {
       "type": "local",
-      "command": ["cpictl", "mcp", "--root", ".", "--profile", "qa", "--read-only"],
+      "command": ["cpictl", "mcp", "--root", ".", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"],
       "enabled": true,
       "timeout": 15000
     }

@@ -12,7 +12,7 @@ This repository holds SAP Cloud Integration content for the tenant(s) reached th
 - Use the skills `cpi-plan`, `cpi-build`, `cpi-test` and `cpi-review` for that work. Unsure
   which tool or skill fits? Call the MCP tool `help` (it can also return a skill's instructions).
   Auth or 403 errors: call `doctor` and report what it says instead of retrying.
-- Before uploading, run `drift` so tenant-only edits are not overwritten; `upload_artifact` and
+- Before uploading, run `drift` so tenant-only edits are not overwritten; `upload_artifacts` and
   `deploy` with `dry_run: true` show what would change and why.
 - Only change the development tenant. Never deploy, undeploy or send test messages to QA or
   production; ask the user instead.

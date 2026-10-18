@@ -27,11 +27,11 @@ artifact what differs between the tenant, a content tree and Git refs, with diff
 before a pull request bump_versions changed=true raises Bundle-Version of changed artifacts
 -> edit the files locally -> layout_iflow (tidy the diagram after
 editing an .iflw; never place shapes by hand) -> create_package (new
-package) -> upload_artifact (upload_artifacts for several, in parallel) -> validate_artifact -> deploy -> send_test_message (wait_seconds=60)
+package) -> upload_artifacts (one or several, in parallel) -> validate_artifact -> deploy -> send_test_message (wait_seconds=60)
 -> on failure get_trace_tree (traceId of the result: the call tree across flows and firstFailure),
-get_message_steps (failing step) and get_message_log / get_message_attachment /
-get_message_store_entry for payloads; for step-by-step payloads set_log_level TRACE, send again,
-get_message_trace and get_trace_message -> fix the local files and repeat.`},
+get_message_log include_steps=true (error and failing step in one call) and get_message_content for
+payloads; for step-by-step payloads set_log_level TRACE, send again, get_message_trace (then with
+trace_id for the message at one step) -> fix the local files and repeat.`},
 	{[]string{"test"}, `Tests: write cases as .cpi/tests/<FlowId>/<case>.yaml (request + expect, see the cpi-test skill) and run
 them with run_tests (flow, case, tags; apply_config sets the flow's config.yaml for the run and restores it);
 list_tests shows them. A failed case has its failures (expected vs actual) and diagnostics (failing step,
@@ -62,10 +62,10 @@ unused scripts and unconnected steps (local files; the cpi-improve skill plans a
 	{[]string{"inspect", "build"}, `Inspect: list_packages, list_artifacts (cached briefly; refresh=true re-reads), list_resources,
 get_resource (read without download). get_parameters artifact_ids reads several flows at once.`},
 	{[]string{"monitor"}, `Operate: message_summary (volume and failures per flow, connection and error fingerprint over a
-window: start here for "what is failing"), list_runtime_artifacts statuses=["ERROR"], get_runtime_status (Cloud Integration only:
+window: start here for "what is failing"), list_runtime_artifacts statuses=["ERROR"] or artifact_ids (Cloud Integration only:
 list_runtimes shows integration cells and what runs there), list_message_logs,
 list_service_endpoints; runtime data: list_data_stores, list_data_store_entries,
-get_data_store_entry, delete_data_store_entry (confirm), list_variables, get_variable,
+get_data_store_entry, delete_data_store_entry (confirm), list_variables (name: the value),
 list_jms_queues, get_jms_broker, list_number_ranges, list_log_files / get_log_file (adapter errors
 without a message log), list_idempotent_entries (skipped duplicates), list_id_mappings.`},
 	{[]string{"build", "improve"}, `Components: list_components gives the adapter and step variants (cmdVariantUri) and versions the

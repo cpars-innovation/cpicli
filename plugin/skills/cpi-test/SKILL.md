@@ -62,7 +62,7 @@ status`, `<runtime>/http/cpictl/stub/<rule>/...`, and set the answer per rule wi
 Each request is recorded in the stub's message log (`CPICTL_Test_Stub`): attachment
 `cpictl-stub-request` (method, path, query, headers without sensitive ones, body) and custom
 headers `CpictlStubRule` / `CpictlStubPath`; read it with `list_message_logs` (artifact
-`CPICTL_Test_Stub`, since) and `get_message_attachment`. In test cases, put the stub URL into the flow's
+`CPICTL_Test_Stub`, since) and `get_message_content`. In test cases, put the stub URL into the flow's
 `config.yaml` and check the calls with `stub_calls` (`run_tests` with `apply_config` sets and
 restores the addresses). By hand: set the receiver address back after the test unless the
 conventions keep it on the development tenant.
@@ -175,7 +175,7 @@ First the static checks, once per test run, on the version that is deployed:
   the flow is not ready: report it and fix it with the cpi-build loop before sending anything.
 - `check_guidelines` (the tenant's activated design guidelines). List every violation in the
   report; they do not stop the run, but each one must be fixed or justified before the review.
-- `get_runtime_status`: the flow is STARTED and the runtime version equals the version you test.
+- `list_runtime_artifacts` with `artifact_ids`: the flow is STARTED and the runtime version equals the version you test.
 
 Then `run_tests` with `flow` (and `case` or `tags` to narrow it; `parallel` for many cases). The
 result has `passed`, `failed`, `errors`, `skipped` and per case `status`, `httpStatus`,
@@ -188,12 +188,11 @@ fix that first.
 On a failed case:
 
 - Read `diagnostics` first; they usually name the failing step and the receiver's answer.
-- `get_message_log` / `get_message_attachment` / `get_message_store_entry` with the message GUID
-  for the payload at the logged points; `get_message_steps` with `properties: true` for each
-  step's properties.
+- `get_message_log` with the message GUID and `include_steps: true` (`step_properties: true` for
+  each step's properties); `get_message_content` for the payload at the logged points.
 - Still unclear what happens between the steps: `set_log_level` TRACE, run the case again
-  (`run_tests` with `case`) within 10 minutes, `get_message_trace` with the message GUID and
-  `get_trace_message` for payload and headers before and after the failing step. Set the level
+  (`run_tests` with `case`) within 10 minutes, `get_message_trace` with the message GUID, then with
+  `trace_id` for payload and headers before and after the failing step. Set the level
   back (`INFO`) afterwards if the conventions ask for it.
 - Decide whether the flow or the test is wrong. Fix the flow with the cpi-build loop, then run
   the cases again; never weaken an expectation just to make the test pass. Ask the user when the

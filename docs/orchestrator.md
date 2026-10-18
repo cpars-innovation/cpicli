@@ -168,7 +168,7 @@ cpictl orchestrator -d ./packages -c ./001-deploy-config.yml --plan --output jso
 Anything that would fail (a refused version, a missing `Bundle-Version` in `manifest` mode) is
 listed with `error` and gives exit code 5, so a pipeline can stop before changing the tenant.
 `configure --plan` (same as `--dry-run`) reports the same for parameters, and the MCP tools
-`upload_artifact` and `deploy` take `dry_run`.
+`upload_artifacts` and `deploy` take `dry_run`.
 
 ### Comparison without downloads
 

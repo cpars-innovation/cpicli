@@ -3,12 +3,12 @@
     "cpi-dev": {
       "type": "stdio",
       "command": "cpictl",
-      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "dev", "--mode", "develop"]
+      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"]
     },
     "cpi-qa": {
       "type": "stdio",
       "command": "cpictl",
-      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "qa", "--read-only"]
+      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"]
     }
   }
 }

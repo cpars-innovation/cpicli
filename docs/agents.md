@@ -32,6 +32,12 @@ Each server keeps its profile while it runs. Use `--mode` or `--read-only` to li
 agent can do ([mcp.md](mcp.md#modes)). `--root` confines local paths of tool calls to the content
 repository: use the repository path, or `.` when the agent starts servers in the repository.
 
+`--toolset` keeps the tool list small, which saves context on every prompt. With all tools, the
+definitions are about 100 KB; with `build,test` about 60 KB and `inspect,monitor` about 45 KB, and
+the instructions shrink to those toolsets too. The examples use `build,test` for development and
+`inspect,monitor` for the read-only server. `cpictl mcp --help` lists the toolsets. Claude Code
+loads tool definitions on demand itself, so its plugin starts all tools.
+
 ### Codex
 
 `.codex/config.toml` in the content repository (Codex reads it for trusted projects) or
@@ -40,12 +46,12 @@ repository: use the repository path, or `.` when the agent starts servers in the
 ```toml
 [mcp_servers.cpi-dev]
 command = "cpictl"
-args = ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop"]
+args = ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"]
 tool_timeout_sec = 600
 
 [mcp_servers.cpi-qa]
 command = "cpictl"
-args = ["mcp", "--root", ".", "--profile", "qa", "--read-only"]
+args = ["mcp", "--root", ".", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"]
 ```
 
 or from the shell: `codex mcp add cpi-dev -- cpictl mcp --root . --profile dev --mode develop`.
@@ -65,12 +71,12 @@ so that `--root .` is the repository, or put the absolute path in `--root` (alwa
     "cpi-dev": {
       "type": "stdio",
       "command": "cpictl",
-      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "dev", "--mode", "develop"]
+      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"]
     },
     "cpi-qa": {
       "type": "stdio",
       "command": "cpictl",
-      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "qa", "--read-only"]
+      "args": ["mcp", "--root", "${workspaceFolder}", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"]
     }
   }
 }
@@ -95,7 +101,7 @@ not committed) works too:
 "cpi-dev": {
   "type": "stdio",
   "command": "cpictl",
-  "args": ["mcp", "--root", "${workspaceFolder}", "--mode", "develop"],
+  "args": ["mcp", "--root", "${workspaceFolder}", "--mode", "develop", "--toolset", "build,test"],
   "env": {
     "CPICTL_TMN_HOST": "${env:CPI_DEV_TMN_HOST}",
     "CPICTL_OAUTH_HOST": "${env:CPI_DEV_OAUTH_HOST}",
@@ -119,13 +125,13 @@ all projects ([example](examples/agents/opencode.json)):
   "mcp": {
     "cpi-dev": {
       "type": "local",
-      "command": ["cpictl", "mcp", "--root", ".", "--profile", "dev", "--mode", "develop"],
+      "command": ["cpictl", "mcp", "--root", ".", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"],
       "enabled": true,
       "timeout": 15000
     },
     "cpi-qa": {
       "type": "local",
-      "command": ["cpictl", "mcp", "--root", ".", "--profile", "qa", "--read-only"],
+      "command": ["cpictl", "mcp", "--root", ".", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"],
       "enabled": true,
       "timeout": 15000
     }
@@ -147,7 +153,7 @@ Without profiles, OpenCode substitutes `{env:NAME}` ([example](examples/agents/o
 ```json
 "cpi-dev": {
   "type": "local",
-  "command": ["cpictl", "mcp", "--root", ".", "--mode", "develop"],
+  "command": ["cpictl", "mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"],
   "enabled": true,
   "environment": {
     "CPICTL_TMN_HOST": "{env:CPI_DEV_TMN_HOST}",
@@ -173,7 +179,7 @@ installed for Codex or Claude Code work as well. Project instructions: OpenCode 
   "mcpServers": {
     "cpi-dev": {
       "command": "cpictl",
-      "args": ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop"]
+      "args": ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"]
     }
   }
 }

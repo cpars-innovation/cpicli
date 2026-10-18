@@ -16,7 +16,7 @@ change the flow -> cpictl version bump --changed -> PR to dev -> pipeline (versi
 
 The mode is set per pipeline (or per branch) with `--versioning` or the environment variable
 `CPICTL_VERSIONING`. It applies to `update artifact`, `sync` (to the tenant), `snapshot restore`,
-`orchestrator`, `configure`, `deploy` and the MCP server (`upload_artifact`, `deploy`).
+`orchestrator`, `configure`, `deploy` and the MCP server (`upload_artifacts`, `deploy`).
 
 | Mode | Upload | Deploy (designtime version lower than running) |
 |------|--------|-----------------------------------------------|

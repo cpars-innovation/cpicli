@@ -47,7 +47,7 @@ var toolEffects = map[string]Effect{
 	"loop_status": EffectRead, "loop_start": EffectLocal, "loop_end": EffectLocal,
 	"list_keystore_history": EffectRead, "get_certificate_chain": EffectRead, "get_csr": EffectRead, "get_ssh_public_key": EffectRead,
 	"list_pgp_keys": EffectRead, "list_access_policies": EffectRead, "list_audit_logs": EffectRead, "list_pd_partners": EffectRead,
-	"list_alternative_partners": EffectRead, "list_authorized_users": EffectRead,
+	"list_alternative_partners": EffectRead, "list_authorized_users": EffectRead, "get_message_content": EffectRead,
 
 	"download_artifact": EffectLocal, "discover_tenant": EffectLocal, "copy_iflow": EffectLocal, "bump_versions": EffectLocal, "lint_fix": EffectLocal, "layout_iflow": EffectLocal,
 	"idoc_template": EffectLocal, "run_script_cases": EffectLocal,
@@ -339,29 +339,39 @@ func ModeInstructions(mode string) string {
 // task gets its toolset(s) (--toolset), combined with --tools and the mode.
 // doctor is in every toolset, help is always added.
 var Toolsets = map[string][]string{
-	"inspect": {"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "list_runtime_artifacts",
-		"get_runtime_status", "list_service_endpoints", "graph_search", "graph_neighbors", "graph_path", "discover_tenant", "drift", "compare",
+	"inspect": {
+		"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "list_runtime_artifacts",
+		"list_service_endpoints", "graph_search", "graph_neighbors", "graph_path", "discover_tenant", "drift", "compare",
 		"list_value_mappings", "get_value_mapping"},
-	"build": {"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "set_parameters", "download_artifact",
-		"copy_iflow", "layout_iflow", "create_package", "upload_artifact", "upload_artifacts", "validate_artifact", "check_guidelines",
-		"deploy", "get_runtime_status", "list_runtimes", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors", "list_credentials",
-		"list_locks", "list_components", "list_value_mappings", "get_value_mapping", "set_value_mapping", "loop_start", "loop_status", "loop_end"},
-	"test": {"list_tests", "run_tests", "run_script_cases", "run_script_cases_online", "send_test_message", "idoc_template", "list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps",
-		"get_message_attachment", "get_message_store_entry", "get_trace_tree", "set_log_level", "get_message_trace",
-		"get_trace_message", "get_runtime_status", "install_test_tools", "set_stub_response", "loop_start", "loop_status", "loop_end"},
-	"monitor": {"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_steps", "get_message_attachment",
-		"get_message_store_entry", "get_trace_tree", "get_message_trace", "get_trace_message", "set_log_level",
-		"list_runtime_artifacts", "list_runtimes", "get_runtime_status", "list_log_files", "get_log_file", "list_data_stores",
-		"list_data_store_entries", "get_data_store_entry", "list_variables", "get_variable", "list_jms_queues", "get_jms_broker",
-		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state", "list_number_ranges", "list_idempotent_entries", "list_id_mappings", "list_keystore", "list_audit_logs", "graph_neighbors",
+	"build": {
+		"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "set_parameters", "download_artifact",
+		"copy_iflow", "layout_iflow", "create_package", "upload_artifacts", "validate_artifact", "check_guidelines", "deploy",
+		"list_runtime_artifacts", "list_runtimes", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors",
+		"list_credentials", "list_locks", "list_components", "list_value_mappings", "get_value_mapping", "set_value_mapping",
+		"loop_start", "loop_status", "loop_end"},
+	"test": {
+		"list_tests", "run_tests", "run_script_cases", "run_script_cases_online", "send_test_message", "idoc_template",
+		"list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_content",
+		"get_trace_tree", "set_log_level", "get_message_trace", "list_runtime_artifacts", "install_test_tools", "set_stub_response",
+		"loop_start", "loop_status", "loop_end"},
+	"monitor": {
+		"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_content", "get_trace_tree",
+		"get_message_trace", "set_log_level", "list_runtime_artifacts", "list_runtimes", "list_log_files", "get_log_file",
+		"list_data_stores", "list_data_store_entries", "get_data_store_entry", "list_variables", "list_jms_queues", "get_jms_broker",
+		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state", "list_number_ranges",
+		"list_idempotent_entries", "list_id_mappings", "list_keystore", "list_audit_logs", "graph_neighbors",
 		"list_integration_connections", "get_tenant_settings", "download_log_archive"},
-	"promote": {"compare", "transport_check", "drift", "list_artifacts", "get_parameters", "config_diff", "list_credentials",
-		"list_keystore", "pd_dependencies", "pd_diff", "get_runtime_status", "list_runtime_artifacts", "graph_neighbors"},
-	"improve": {"list_components", "lint", "lint_fix", "layout_iflow", "graph_search", "graph_neighbors", "graph_path", "drift", "compare",
+	"promote": {
+		"compare", "transport_check", "drift", "list_artifacts", "get_parameters", "config_diff", "list_credentials", "list_keystore",
+		"pd_dependencies", "pd_diff", "list_runtime_artifacts", "graph_neighbors"},
+	"improve": {
+		"list_components", "lint", "lint_fix", "layout_iflow", "graph_search", "graph_neighbors", "graph_path", "drift", "compare",
 		"bump_versions", "list_artifacts", "get_resource"},
-	"partner-directory": {"list_pd_partners", "get_pd_parameters", "pd_diff", "pd_dependencies", "pd_deploy", "config_diff", "graph_search",
+	"partner-directory": {
+		"list_pd_partners", "get_pd_parameters", "pd_diff", "pd_dependencies", "pd_deploy", "config_diff", "graph_search",
 		"list_alternative_partners", "create_alternative_partner", "list_authorized_users", "create_authorized_user"},
-	"security": {"list_credentials", "list_keystore", "list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key",
+	"security": {
+		"list_credentials", "list_keystore", "list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key",
 		"generate_key_pair", "upload_certificate_chain", "list_pgp_keys", "list_access_policies", "create_access_policy",
 		"add_artifact_reference", "list_audit_logs"},
 }

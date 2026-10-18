@@ -3,7 +3,7 @@
     "cpi-dev": {
       "type": "stdio",
       "command": "cpictl",
-      "args": ["mcp", "--root", "${workspaceFolder}", "--mode", "develop"],
+      "args": ["mcp", "--root", "${workspaceFolder}", "--mode", "develop", "--toolset", "build,test"],
       "env": {
         "CPICTL_TMN_HOST": "${env:CPI_DEV_TMN_HOST}",
         "CPICTL_OAUTH_HOST": "${env:CPI_DEV_OAUTH_HOST}",

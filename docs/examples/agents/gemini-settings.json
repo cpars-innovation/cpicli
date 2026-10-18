@@ -2,11 +2,11 @@
   "mcpServers": {
     "cpi-dev": {
       "command": "cpictl",
-      "args": ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop"]
+      "args": ["mcp", "--root", ".", "--profile", "dev", "--mode", "develop", "--toolset", "build,test"]
     },
     "cpi-qa": {
       "command": "cpictl",
-      "args": ["mcp", "--root", ".", "--profile", "qa", "--read-only"]
+      "args": ["mcp", "--root", ".", "--profile", "qa", "--read-only", "--toolset", "inspect,monitor"]
     }
   }
 }

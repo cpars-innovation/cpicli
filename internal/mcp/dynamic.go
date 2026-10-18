@@ -81,7 +81,13 @@ func DynamicInstructions() string {
 // listedTools returns the tools of tools/list.
 func (s *Server) listedTools() []Tool {
 	if s.dynamic == nil {
-		return s.tools
+		out := []Tool{}
+		for _, t := range s.tools {
+			if !s.hidden(t) {
+				out = append(out, t)
+			}
+		}
+		return out
 	}
 	s.dynamic.mu.Lock()
 	defer s.dynamic.mu.Unlock()
@@ -96,7 +102,7 @@ func (s *Server) listedTools() []Tool {
 	}
 	out := []Tool{}
 	for _, t := range s.tools {
-		if listed[t.Name] {
+		if listed[t.Name] && !s.hidden(t) {
 			out = append(out, t)
 		}
 	}
@@ -206,4 +212,14 @@ func (s *Server) enableToolsetTool() Tool {
 			return map[string]any{"enabled": p.Toolsets, "addedTools": added}, nil
 		},
 	}
+}
+
+// hidden: t is deprecated and the tool that replaces it is on this server
+// (a filter that keeps only the old name keeps it listed).
+func (s *Server) hidden(t Tool) bool {
+	if t.Deprecated == "" {
+		return false
+	}
+	replacement, _, _ := strings.Cut(t.Deprecated, " ")
+	return slices.ContainsFunc(s.tools, func(o Tool) bool { return o.Name == replacement })
 }

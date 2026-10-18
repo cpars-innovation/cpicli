@@ -154,7 +154,7 @@ target folder is left as it was (removed again if `iflow copy` created it).
 2. Create the package if it is new: `cpictl packages create --package-id SDOrders`.
 3. Upload: `cpictl update artifact --artifact-id SD_Orders_S4_Sync --package-id SDOrders
    --dir-artifact content/SDOrders/SD_Orders_S4_Sync`. The display name comes from
-   `Bundle-Name` (MCP `upload_artifact` does the same when `name` is not given).
+   `Bundle-Name` (MCP `upload_artifacts` does the same when `name` is not given).
 4. `cpictl validate --artifact-id SD_Orders_S4_Sync`, then
    `cpictl deploy --artifact-ids SD_Orders_S4_Sync`. A deployment error such as a missing
    credential is in the output.

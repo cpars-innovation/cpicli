@@ -82,6 +82,7 @@ func Tools(cfg Config) []Tool {
 	reverter := cfg.LogLevels
 	cache := newReadCache(cfg.CacheTTL)
 	tools := slices.Concat(toolList(cfg, readOnly, tenant, endpoints, reverter, cache), storeTools(cfg, readOnly), lockTools(cfg, readOnly), componentTools(cfg, readOnly), platformTools(cfg, readOnly), designTools(cfg, readOnly), operateTools(cfg, readOnly), securityTools(cfg, readOnly), graphTools(cfg), testToolingTools(cfg), testTools(cfg, endpoints), scriptCaseTools(cfg, endpoints))
+	tools = consolidate(tools)
 	for i := range tools {
 		inner := tools[i].Handler
 		changesTenant := toolEffects[tools[i].Name] == EffectTenant

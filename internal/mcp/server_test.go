@@ -111,21 +111,20 @@ func TestProtocol(t *testing.T) {
 		names = append(names, tool.Name)
 		assert.Equal(t, "object", tool.InputSchema["type"], tool.Name)
 	}
-	assert.Equal(t, []string{"doctor", "list_packages", "list_artifacts", "get_runtime_status", "list_message_logs", "get_message_log",
-		"get_message_steps", "get_message_attachment", "get_message_store_entry", "set_log_level", "get_message_trace", "get_trace_message", "message_summary", "get_trace_tree",
+	assert.Equal(t, []string{"doctor", "list_packages", "list_artifacts", "list_message_logs", "get_message_log",
+		"set_log_level", "get_message_trace", "message_summary", "get_trace_tree",
 		"list_runtime_artifacts", "list_service_endpoints",
 		"validate_artifact", "check_guidelines", "list_resources", "get_resource", "download_artifact", "copy_iflow", "bump_versions", "lint", "lint_fix", "layout_iflow",
 		"list_credentials", "list_keystore",
-		"get_parameters", "set_parameters", "create_package", "upload_artifact", "upload_artifacts", "deploy", "send_test_message", "idoc_template", "undeploy", "pd_deploy",
+		"get_parameters", "set_parameters", "create_package", "upload_artifacts", "deploy", "send_test_message", "idoc_template", "undeploy", "pd_deploy",
 		"get_pd_parameters", "pd_diff", "pd_dependencies", "config_diff", "drift", "compare", "transport_check", "discover_tenant",
-		"list_data_stores", "list_data_store_entries", "get_data_store_entry", "delete_data_store_entry", "list_variables", "get_variable",
-		"list_jms_queues", "get_jms_broker", "list_number_ranges", "list_log_files", "get_log_file", "list_idempotent_entries", "list_id_mappings", "list_locks", "list_runtimes", "unlock_artifact", "list_components", "list_integration_connections", "get_tenant_settings", "download_log_archive", "list_value_mappings", "get_value_mapping", "set_value_mapping", "delete_artifact", "delete_package",
+		"list_data_stores", "list_data_store_entries", "get_data_store_entry", "delete_data_store_entry", "list_variables", "list_jms_queues", "get_jms_broker", "list_number_ranges", "list_log_files", "get_log_file", "list_idempotent_entries", "list_id_mappings", "list_locks", "list_runtimes", "unlock_artifact", "list_components", "list_integration_connections", "get_tenant_settings", "download_log_archive", "list_value_mappings", "get_value_mapping", "set_value_mapping", "delete_artifact", "delete_package",
 		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "delete_jms_messages", "set_jms_queue_state", "find_messages_by_header",
 		"list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key", "generate_key_pair", "upload_certificate_chain", "delete_keystore_entry",
 		"list_pgp_keys", "list_access_policies", "create_access_policy", "add_artifact_reference", "delete_access_policy", "delete_artifact_reference",
 		"list_audit_logs", "list_pd_partners", "list_alternative_partners", "create_alternative_partner", "delete_alternative_partner",
 		"list_authorized_users", "create_authorized_user", "delete_authorized_user", "graph_search", "graph_neighbors", "graph_path",
-		"install_test_tools", "set_stub_response", "list_tests", "run_tests", "run_script_cases", "run_script_cases_online"}, names)
+		"install_test_tools", "set_stub_response", "list_tests", "run_tests", "run_script_cases", "run_script_cases_online", "get_message_content"}, names)
 
 	assert.Nil(t, resp["3"].Error)
 	assert.Equal(t, codeMethodNotFound, resp["4"].Error.Code)

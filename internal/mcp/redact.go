@@ -43,7 +43,9 @@ const RedactedPayload = "[redacted]"
 
 // payloadTools return message bodies (redacted with RedactPayloads).
 var payloadTools = []string{"send_test_message", "get_message_attachment", "get_message_store_entry", "get_trace_message",
-	"get_data_store_entry", "get_variable", "run_tests", "run_script_cases_online"}
+	"get_data_store_entry", "get_variable", "run_tests", "run_script_cases_online",
+	// the tools that cover deprecated payload tools (consolidate)
+	"get_message_content", "get_message_trace", "list_variables"}
 
 // redactFailure blanks what a run_tests failure quotes from the message
 // (response excerpts, stub call bodies); the expectation and the expected

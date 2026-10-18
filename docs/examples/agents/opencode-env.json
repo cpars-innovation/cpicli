@@ -3,7 +3,7 @@
   "mcp": {
     "cpi-dev": {
       "type": "local",
-      "command": ["cpictl", "mcp", "--root", ".", "--mode", "develop"],
+      "command": ["cpictl", "mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"],
       "enabled": true,
       "timeout": 15000,
       "environment": {

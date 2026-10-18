@@ -27,7 +27,9 @@ func TestToolsAreDescribed(t *testing.T) {
 			desc, _ := p.(map[string]any)["description"].(string)
 			assert.NotEmpty(t, desc, "%s.%s has no description", tool.Name, name)
 		}
-		assert.Contains(t, Instructions, tool.Name, "instructions do not mention %s", tool.Name)
+		if tool.Deprecated == "" { // deprecated tools are not pointed to any more
+			assert.Contains(t, Instructions, tool.Name, "instructions do not mention %s", tool.Name)
+		}
 		_, hasReadOnly := tool.Annotations["readOnlyHint"]
 		assert.True(t, hasReadOnly, "%s: readOnlyHint missing", tool.Name)
 	}
