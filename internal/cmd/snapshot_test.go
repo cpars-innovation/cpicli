@@ -113,13 +113,11 @@ func TestSnapshotParallelArtifacts(t *testing.T) {
 	mock.Packages = []cpitest.Package{{ID: "Big"}, {ID: "S0"}, {ID: "S1"}, {ID: "S2"}, {ID: "S3"}}
 	mock.DownloadLatency = 100 * time.Millisecond
 
-	started := time.Now()
 	r := runMain(t, append([]string{"snapshot", "--dir-git-repo", t.TempDir(), "--dir-work", t.TempDir(), "--git-skip-commit",
 		"--sync-package-details=false", "--parallel", "8", "--output", "json"}, basicAuth(mock)...)...)
-	elapsed := time.Since(started)
 	require.Equal(t, 0, r.code, r.stderr)
 	assert.Contains(t, r.stdout, `"artifactsDownloaded": 28`)
+	// The peak proves the parallelism across packages;
+	// no wall-clock bound, which flakes on slow CI runners.
 	assert.Equal(t, int64(8), mock.PeakDownloads(), "8 downloads at a time, also within the large package")
-	// sequential: 28 x 100ms = 2.8s; per package in parallel the large package alone takes 2.4s
-	assert.Less(t, elapsed, 1500*time.Millisecond)
 }
