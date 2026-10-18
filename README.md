@@ -233,8 +233,8 @@ are not written, and reads, uploads and parameter reads run 8 at a time. Details
 | Area | Commands |
 |------|----------|
 | Inspect | `packages`, `artifacts`, `status`, `endpoints`, `resources`, `discover`, `graph`, `drift`, `compare` (tiers, Git refs, trees) |
-| Runtime data | `datastore`, `variables`, `jms`, `number-ranges`, `log-files`, `idempotent`, `id-mappings` |
-| Testing and monitoring | `send`, `log-level`, `logs`, `logs get`, `logs steps`, `logs trace`, `logs trace-message`, `logs attachment`, `logs payload` |
+| Runtime data | `datastore`, `variables`, `jms`, `number-ranges`, `logs files`, `idempotent`, `id-mappings` |
+| Testing and monitoring | `send`, `logs level`, `logs`, `logs get`, `logs steps`, `logs trace`, `logs trace-message`, `logs attachment`, `logs payload` |
 | Quality | `validate`, `guidelines`, `lint` (reuse, Partner Directory candidates, dead weight, best practices; `--fix`) |
 | Designtime | `download`, `iflow copy`, `iflow layout` (tidy the diagram), `packages create`, `update artifact`, `update package`, `version bump` |
 | Runtime | `deploy`, `undeploy` |
@@ -244,7 +244,7 @@ are not written, and reads, uploads and parameter reads run 8 at a time. Details
 | Development | `mock-tenant` (in-memory tenant with a demo landscape per tier) |
 | Git | `sync`, `snapshot`, `snapshot restore` |
 | API Management | `sync apiproxy`, `sync apiproduct` |
-| Partner Directory | `pd-snapshot`, `pd-deploy` |
+| Partner Directory | `pd snapshot`, `pd deploy` |
 | Security | `credentials` (list, set-user, set-oauth2, set-secure-param, apply, delete), `keystore` (list, export-cert, import-cert) |
 | AI agents | `mcp`, `skills` (list, show, install) |
 | Setup and local | `doctor` (connection and roles), `profile`, `stats` (usage statistics, kept on this machine only) |
@@ -494,7 +494,7 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 | [Monitoring and checks](docs/monitoring.md) | Message logs, steps, attachments, payloads, validation, guidelines |
 | [Configure](docs/configure.md) | Parameters from YAML (`configure`, `configure pull`) |
 | [Security material](docs/security.md) | Credentials, `credentials apply`, keystore and certificate expiry |
-| [Partner Directory](docs/partner-directory.md) | `pd-snapshot`, `pd-deploy`, full sync |
+| [Partner Directory](docs/partner-directory.md) | `pd snapshot`, `pd deploy`, full sync |
 | [CI/CD](docs/ci.md) | GitHub Actions, Azure Pipelines, the snapshot -> update -> configure -> deploy-once pipeline, job summary, exit codes |
 | [Examples](docs/examples) | Ready-to-copy configuration files |
 | [End-to-end test](docs/e2e.md) | Opt-in test of the pipeline on a development tenant, manual checks (drafts, layout) |

@@ -198,7 +198,7 @@ The runner is `pkg/testrun` (`Load`, `Run`, `WriteJUnit`), see [go-api.md](go-ap
 
 XSLT mappings stored as Partner Directory binary parameters (used with a dynamic `pd:` resource)
 are tested offline with Saxon. A case is `.cpi/tests/pd/<PID>/<ID>/<case>.yaml` and tests the
-parameter `<PID>/<ID>`; its stylesheet is the file `pd-snapshot` wrote
+parameter `<PID>/<ID>`; its stylesheet is the file `pd snapshot` wrote
 (`partner-directory/<PID>/Binary/<ID>.xsl`), or the case's `xslt`. Schema:
 [xslt-case.schema.json](xslt-case.schema.json).
 
@@ -592,7 +592,7 @@ run once on the development tenant, deploy, test, and set it back.
 With log level TRACE the tenant records payload and headers at every step:
 
 ```bash
-cpictl log-level --artifact-id Billing --level TRACE      # active for 10 minutes
+cpictl logs level --artifact-id Billing --level TRACE      # active for 10 minutes
 cpictl send --artifact-id Billing --process-direct /billing/in --body-file invoice.xml --wait 60s
 cpictl logs trace --message-guid <guid>                    # traced steps with trace IDs
 cpictl logs trace-message --id <trace-id>                  # payload, headers, exchange properties

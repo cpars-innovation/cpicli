@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "ops.LogLevelResult": {
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "revertsAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "until": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "level"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logs_level.json",
+  "$ref": "#/$defs/ops.LogLevelResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl logs level.",
+  "title": "cpictl logs level result",
+  "x-schemaVersion": 1
+}

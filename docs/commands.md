@@ -87,13 +87,15 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`locks`](#locks) | List the edit locks of artifacts, remove one (unlock) |
 | [`locks list`](#locks-list) | List edit locks (who, since when) |
 | [`locks unlock`](#locks-unlock) | Remove the edit lock of an artifact (requires --confirm) |
-| [`log-files`](#log-files) | List system and HTTP log files of the runtime |
 | [`log-files archive`](#log-files-archive) | Download the latest log files of a type as one zip |
 | [`log-files get`](#log-files-get) | Print the end of a log file |
-| [`log-level`](#log-level) | Set the message processing log level of a deployed integration flow |
 | [`logs`](#logs) | Query message processing logs |
 | [`logs attachment`](#logs-attachment) | Download a log attachment (ID from 'logs get') |
+| [`logs files`](#logs-files) | List system and HTTP log files of the runtime |
+| [`logs files archive`](#logs-files-archive) | Download the latest log files of a type as one zip |
+| [`logs files get`](#logs-files-get) | Print the end of a log file |
 | [`logs get`](#logs-get) | Show one message: status, error text and step, custom headers, adapter attributes, attachments |
+| [`logs level`](#logs-level) | Set the message processing log level of a deployed integration flow |
 | [`logs payload`](#logs-payload) | Download a persisted message (message store entry ID from 'logs get') |
 | [`logs search`](#logs-search) | Find messages by a custom header property value (e.g. an order number) |
 | [`logs steps`](#logs-steps) | Show the processing steps of a message and the step that failed |
@@ -120,12 +122,12 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`pd authorized-users create`](#pd-authorized-users-create) | Authorize a user for a partner ID |
 | [`pd authorized-users delete`](#pd-authorized-users-delete) | Remove an authorized user (requires --confirm) |
 | [`pd authorized-users list`](#pd-authorized-users-list) | List authorized users |
+| [`pd deploy`](#pd-deploy) | Upload Partner Directory parameters from local files |
 | [`pd deps`](#pd-deps) | Show which flows read which Partner Directory parameters (local files) |
 | [`pd diff`](#pd-diff) | Compare local Partner Directory files with the tenant |
 | [`pd get`](#pd-get) | Show the Partner Directory parameters of a partner ID on the tenant |
 | [`pd list`](#pd-list) | List the partners of the Partner Directory with parameter counts and content types |
-| [`pd-deploy`](#pd-deploy) | Upload Partner Directory parameters from local files |
-| [`pd-snapshot`](#pd-snapshot) | Download Partner Directory parameters into local files |
+| [`pd snapshot`](#pd-snapshot) | Download Partner Directory parameters into local files |
 | [`pgp`](#pgp) | List PGP keyrings and keys, export or replace the public keyring |
 | [`pgp export-public`](#pgp-export-public) | Download the public keyring |
 | [`pgp import-public`](#pgp-import-public) | Replace the public keyring with a file of OpenPGP public keys (requires --confirm) |
@@ -2001,26 +2003,6 @@ Remove the edit lock of an artifact (requires --confirm)
       --confirm              Confirm: the editor holding the lock loses unsaved changes
 ```
 
-## log-files
-
-List system and HTTP log files of the runtime
-
-**Usage:** `cpictl log-files [flags]`
-
-**Flags:**
-
-```
-      --since string   Only files modified after this time (duration like 2h or RFC 3339)
-      --type string    Log file type, e.g. http or trace
-```
-
-**Examples:**
-
-```
-  cpictl log-files --type http --since 2h
-  cpictl log-files get --name http_access_2026-10-05.log --application it-cpi --tail-bytes 20000
-```
-
 ## log-files archive
 
 Download the latest log files of a type as one zip
@@ -2054,36 +2036,6 @@ Print the end of a log file
       --name string          Log file name
       --out string           Write the content to this file instead of stdout / the JSON result
       --tail-bytes int       Bytes from the end of the file (default 65536)
-```
-
-## log-level
-
-Set the message processing log level of a deployed integration flow
-
-```
-Set the log level of a deployed integration flow: NONE, INFO, DEBUG or TRACE.
-TRACE records payload and headers at every step for 10 minutes, then the tenant
-falls back to the previous level; read traces with 'logs trace'. Traces contain
-business data: use them on development tenants.
-
-Uses the operations command of the Web UI (there is no OData API for it).
-```
-
-**Usage:** `cpictl log-level [flags]`
-
-**Flags:**
-
-```
-      --artifact-id string           Integration flow ID (deployed)
-      --level string                 NONE, INFO, DEBUG or TRACE
-      --node-type string             Runtime node type (default "IFLMAP")
-      --runtime-location-id string   Runtime location (edge integration cells use their own) (default "cloudintegration")
-```
-
-**Examples:**
-
-```
-  cpictl log-level --artifact-id OrderIntake --level TRACE
 ```
 
 ## logs
@@ -2147,6 +2099,61 @@ Download a log attachment (ID from 'logs get')
       --out string      Write the content to this file instead of stdout / the JSON result
 ```
 
+## logs files
+
+List system and HTTP log files of the runtime
+
+**Usage:** `cpictl logs files [flags]`
+
+**Flags:**
+
+```
+      --since string   Only files modified after this time (duration like 2h or RFC 3339)
+      --type string    Log file type, e.g. http or trace
+```
+
+**Examples:**
+
+```
+  cpictl log-files --type http --since 2h
+  cpictl log-files get --name http_access_2026-10-05.log --application it-cpi --tail-bytes 20000
+```
+
+## logs files archive
+
+Download the latest log files of a type as one zip
+
+**Usage:** `cpictl logs files archive [flags]`
+
+**Flags:**
+
+```
+      --out string    Zip file to write
+      --type string   Log file type: http or trace (default "http")
+```
+
+**Examples:**
+
+```
+  cpictl log-files archive --type http --out logs/http.zip
+  cpictl log-files archive --type trace --out logs/trace.zip
+```
+
+## logs files get
+
+Print the end of a log file
+
+**Usage:** `cpictl logs files get [flags]`
+
+**Flags:**
+
+```
+      --application string   Application of the log file
+      --name string          Log file name
+      --out string           Write the content to this file instead of stdout / the JSON result
+      --tail-bytes int       Bytes from the end of the file (default 65536)
+```
+
 ## logs get
 
 Show one message: status, error text and step, custom headers, adapter attributes, attachments
@@ -2157,6 +2164,36 @@ Show one message: status, error text and step, custom headers, adapter attribute
 
 ```
       --message-guid string   Message GUID
+```
+
+## logs level
+
+Set the message processing log level of a deployed integration flow
+
+```
+Set the log level of a deployed integration flow: NONE, INFO, DEBUG or TRACE.
+TRACE records payload and headers at every step for 10 minutes, then the tenant
+falls back to the previous level; read traces with 'logs trace'. Traces contain
+business data: use them on development tenants.
+
+Uses the operations command of the Web UI (there is no OData API for it).
+```
+
+**Usage:** `cpictl logs level [flags]`
+
+**Flags:**
+
+```
+      --artifact-id string           Integration flow ID (deployed)
+      --level string                 NONE, INFO, DEBUG or TRACE
+      --node-type string             Runtime node type (default "IFLMAP")
+      --runtime-location-id string   Runtime location (edge integration cells use their own) (default "cloudintegration")
+```
+
+**Examples:**
+
+```
+  cpictl log-level --artifact-id OrderIntake --level TRACE
 ```
 
 ## logs payload
@@ -2817,6 +2854,62 @@ List authorized users
       --pid string   Only those of this partner ID
 ```
 
+## pd deploy
+
+Upload Partner Directory parameters from local files
+
+```
+Upload all partner directory parameters from local files to SAP CPI.
+
+This command reads partner directory parameters from a local directory structure
+and uploads them to the SAP CPI Partner Directory:
+
+  {PID}/
+    String.properties    - String parameters as key=value pairs
+    Binary/              - Binary parameters as individual files
+      {ParamId}.{ext}    - Binary parameter files
+      _metadata.json     - Content type metadata
+
+The deploy operation supports several modes:
+  - Replace mode (default): Updates existing parameters with local values
+  - Add-only mode: Only creates new parameters, skips existing ones
+  - Full sync mode: Deletes remote parameters not present locally (local is source of truth)
+
+See docs/partner-directory.md for the file format and full sync safety rules.
+```
+
+**Usage:** `cpictl pd deploy [flags]`
+
+**Flags:**
+
+```
+      --dry-run                 Show what would be changed without making changes
+      --full-sync               Delete remote parameters not present locally (local is source of truth)
+      --keys strings            Deploy only these parameters, PID:ID (create or update, never delete; not with --full-sync)
+      --pids strings            Comma separated list of Partner IDs to deploy (e.g., 'PID1,PID2')
+      --replace                 Replace existing values (false = add only missing values) (default true)
+      --resources-path string   Path to partner directory parameters (default "./partner-directory")
+```
+
+**Examples:**
+
+```
+  # Deploy in add-only mode (don't update existing parameters)
+  cpictl pd-deploy --replace=false
+
+  # Deploy with full sync (delete remote parameters not in local)
+  cpictl pd-deploy --full-sync
+
+  # Deploy only specific PIDs
+  cpictl pd-deploy --pids "SAP_SYSTEM_001,CUSTOMER_API"
+
+  # Dry run to see what would be changed
+  cpictl pd-deploy --dry-run
+
+  # Only one mapping (no other parameter is touched)
+  cpictl pd-deploy --keys ONE_OMS:now_email
+```
+
 ## pd deps
 
 Show which flows read which Partner Directory parameters (local files)
@@ -2923,63 +3016,7 @@ not downloaded; --sizes reads the binaries to add their total size.
   cpictl pd list --pid ACME --sizes
 ```
 
-## pd-deploy
-
-Upload Partner Directory parameters from local files
-
-```
-Upload all partner directory parameters from local files to SAP CPI.
-
-This command reads partner directory parameters from a local directory structure
-and uploads them to the SAP CPI Partner Directory:
-
-  {PID}/
-    String.properties    - String parameters as key=value pairs
-    Binary/              - Binary parameters as individual files
-      {ParamId}.{ext}    - Binary parameter files
-      _metadata.json     - Content type metadata
-
-The deploy operation supports several modes:
-  - Replace mode (default): Updates existing parameters with local values
-  - Add-only mode: Only creates new parameters, skips existing ones
-  - Full sync mode: Deletes remote parameters not present locally (local is source of truth)
-
-See docs/partner-directory.md for the file format and full sync safety rules.
-```
-
-**Usage:** `cpictl pd-deploy [flags]`
-
-**Flags:**
-
-```
-      --dry-run                 Show what would be changed without making changes
-      --full-sync               Delete remote parameters not present locally (local is source of truth)
-      --keys strings            Deploy only these parameters, PID:ID (create or update, never delete; not with --full-sync)
-      --pids strings            Comma separated list of Partner IDs to deploy (e.g., 'PID1,PID2')
-      --replace                 Replace existing values (false = add only missing values) (default true)
-      --resources-path string   Path to partner directory parameters (default "./partner-directory")
-```
-
-**Examples:**
-
-```
-  # Deploy in add-only mode (don't update existing parameters)
-  cpictl pd-deploy --replace=false
-
-  # Deploy with full sync (delete remote parameters not in local)
-  cpictl pd-deploy --full-sync
-
-  # Deploy only specific PIDs
-  cpictl pd-deploy --pids "SAP_SYSTEM_001,CUSTOMER_API"
-
-  # Dry run to see what would be changed
-  cpictl pd-deploy --dry-run
-
-  # Only one mapping (no other parameter is touched)
-  cpictl pd-deploy --keys ONE_OMS:now_email
-```
-
-## pd-snapshot
+## pd snapshot
 
 Download Partner Directory parameters into local files
 
@@ -3002,7 +3039,7 @@ The snapshot operation supports two modes:
 See docs/partner-directory.md for the file format and full sync safety rules.
 ```
 
-**Usage:** `cpictl pd-snapshot [flags]`
+**Usage:** `cpictl pd snapshot [flags]`
 
 **Flags:**
 

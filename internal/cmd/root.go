@@ -91,7 +91,9 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewDeployCommand())
 	rootCmd.AddCommand(NewUndeployCommand())
 	rootCmd.AddCommand(NewStatusCommand())
-	rootCmd.AddCommand(NewLogsCommand())
+	logsCmd := NewLogsCommand()
+	logsCmd.AddCommand(renamed(NewLogLevelCommand(), "level"), renamed(NewLogFilesCommand(), "files"))
+	rootCmd.AddCommand(logsCmd)
 	rootCmd.AddCommand(NewValidateCommand())
 	rootCmd.AddCommand(NewScriptDocCommand())
 	rootCmd.AddCommand(NewBackupCommand())
@@ -107,7 +109,7 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewSendCommand())
 	rootCmd.AddCommand(NewTestCommand())
 	rootCmd.AddCommand(NewIDocCommand())
-	rootCmd.AddCommand(NewLogLevelCommand())
+	rootCmd.AddCommand(legacyName(NewLogLevelCommand(), "logs level"))
 	rootCmd.AddCommand(NewDiscoverCommand())
 	rootCmd.AddCommand(NewGraphCommand())
 	rootCmd.AddCommand(NewIFlowCommand())
@@ -128,7 +130,7 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewVariablesCommand())
 	rootCmd.AddCommand(NewJMSCommand())
 	rootCmd.AddCommand(NewNumberRangesCommand())
-	rootCmd.AddCommand(NewLogFilesCommand())
+	rootCmd.AddCommand(legacyName(NewLogFilesCommand(), "logs files"))
 	rootCmd.AddCommand(NewIdempotentCommand())
 	rootCmd.AddCommand(NewIDMappingsCommand())
 	rootCmd.AddCommand(NewProfileCommand())
@@ -151,9 +153,11 @@ func NewCLI(version string) *cobra.Command {
 	snapshotCmd := NewSnapshotCommand()
 	snapshotCmd.AddCommand(NewRestoreCommand())
 	rootCmd.AddCommand(snapshotCmd)
-	rootCmd.AddCommand(NewPDSnapshotCommand())
-	rootCmd.AddCommand(NewPDDeployCommand())
-	rootCmd.AddCommand(NewPDCommand())
+	rootCmd.AddCommand(legacyName(NewPDSnapshotCommand(), "pd snapshot"))
+	rootCmd.AddCommand(legacyName(NewPDDeployCommand(), "pd deploy"))
+	pdCmd := NewPDCommand()
+	pdCmd.AddCommand(renamed(NewPDSnapshotCommand(), "snapshot"), renamed(NewPDDeployCommand(), "deploy"))
+	rootCmd.AddCommand(pdCmd)
 	rootCmd.AddCommand(NewConfigGenerateCommand())
 	rootCmd.AddCommand(NewOrchestratorCommand())
 	rootCmd.AddCommand(NewConfigureCommand())
@@ -342,6 +346,30 @@ const envPrefix = "CPICTL"
 
 // legacyEnvPrefix is the FlashPipe prefix, only used to warn about old settings.
 const legacyEnvPrefix = "FLASHPIPE"
+
+// renamed gives a command (built by its constructor, so with the same flags
+// and config keys) a new name below another command.
+func renamed(c *cobra.Command, name string) *cobra.Command {
+	_, args, _ := strings.Cut(c.Use, " ")
+	c.Use = strings.TrimSpace(name + " " + args)
+	c.Example = renameExamples(c.Example, c.Name(), name)
+	return c
+}
+
+// legacyName keeps a command under its old top-level name: it works as
+// before (flags, config keys, environment variables, output), but is no
+// longer listed. No notice is printed: stderr carries JSON log lines with
+// --output json, and pipelines keep running unchanged.
+func legacyName(c *cobra.Command, now string) *cobra.Command {
+	c.Hidden = true
+	c.Short = "Old name of '" + now + "'"
+	return c
+}
+
+// renameExamples rewrites "cpictl <old>" in examples.
+func renameExamples(examples, old, now string) string {
+	return strings.ReplaceAll(examples, "cpictl "+old, "cpictl "+now)
+}
 
 // annotationOffline marks commands that do not talk to a tenant: "true", the
 // name of a flag that makes the command offline when set (e.g. discover --dir),

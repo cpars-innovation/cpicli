@@ -96,7 +96,7 @@ log is not final in time. The message is processed like any other, including cal
 receivers. Credentials: [configuration.md](configuration.md#runtime-endpoints-test-messages).
 
 For flows without an HTTP sender (ProcessDirect, timers, polling adapters) see
-[testing.md](testing.md); it also covers tracing (`log-level`, `logs trace`).
+[testing.md](testing.md); it also covers tracing (`logs level`, `logs trace`).
 
 ## Message processing logs
 
@@ -211,8 +211,8 @@ cpictl jms delete --queue ORDERS_IN --id <jms-message-id> --confirm
 cpictl jms deactivate --queue ORDERS_IN                           # keep messages, stop consuming
 cpictl jms broker                                                 # capacity and usage
 cpictl number-ranges
-cpictl log-files --type http --since 2h                           # adapter errors without a message log
-cpictl log-files get --name <name> --application <app> --tail-bytes 20000
+cpictl logs files --type http --since 2h                           # adapter errors without a message log
+cpictl logs files get --name <name> --application <app> --tail-bytes 20000
 cpictl idempotent --id in/orders.csv --component SFTP             # skipped as duplicate?
 cpictl id-mappings --source-id <id>
 ```

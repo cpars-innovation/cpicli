@@ -200,7 +200,7 @@ pd-deploy:
 
 Sections used by the commands: `deploy`, `undeploy`, `configure` (and `configure.pull`),
 `orchestrator`, `update.artifact`, `update.package`, `sync`, `sync.apiproxy`,
-`sync.apiproduct`, `snapshot`, `restore`, `pd-snapshot`, `pd-deploy`.
+`sync.apiproduct`, `snapshot`, `restore`, `pd snapshot`, `pd deploy`.
 
 ## Defaults
 

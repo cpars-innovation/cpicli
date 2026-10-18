@@ -1,6 +1,6 @@
 # Partner Directory
 
-`pd-snapshot` downloads Partner Directory parameters into files, `pd-deploy` uploads them.
+`pd snapshot` downloads Partner Directory parameters into files, `pd deploy` uploads them.
 Keep the files in Git to version and promote Partner Directory content between tenants.
 
 ## File layout
@@ -33,26 +33,26 @@ partner-directory/                 # --resources-path (default ./partner-directo
 
   The type is taken from the file extension.
 - `_metadata.json` is only needed for content types with parameters, e.g.
-  `{"Mapping.xsl": "xsl; encoding=UTF-8"}` (key = file name). `pd-snapshot` writes it when needed.
+  `{"Mapping.xsl": "xsl; encoding=UTF-8"}` (key = file name). `pd snapshot` writes it when needed.
 
 A complete sample is in [examples/partner-directory/](examples/partner-directory).
 
-## pd-snapshot
+## pd snapshot
 
 ```bash
-cpictl pd-snapshot                                   # all PIDs into ./partner-directory
-cpictl pd-snapshot --resources-path ./pd --pids SAP_SYSTEM_001,CUSTOMER_API
-cpictl pd-snapshot --replace=false                   # keep existing local values, add new ones
+cpictl pd snapshot                                   # all PIDs into ./partner-directory
+cpictl pd snapshot --resources-path ./pd --pids SAP_SYSTEM_001,CUSTOMER_API
+cpictl pd snapshot --replace=false                   # keep existing local values, add new ones
 ```
 
-## pd-deploy
+## pd deploy
 
 ```bash
-cpictl pd-deploy --dry-run                           # show what would change
-cpictl pd-deploy                                     # create new, update changed parameters
-cpictl pd-deploy --replace=false                     # only create missing parameters
-cpictl pd-deploy --pids SAP_SYSTEM_001
-cpictl pd-deploy --full-sync --dry-run               # also show what would be deleted
+cpictl pd deploy --dry-run                           # show what would change
+cpictl pd deploy                                     # create new, update changed parameters
+cpictl pd deploy --replace=false                     # only create missing parameters
+cpictl pd deploy --pids SAP_SYSTEM_001
+cpictl pd deploy --full-sync --dry-run               # also show what would be deleted
 ```
 
 | Mode | Effect |
@@ -71,7 +71,7 @@ its remote parameters.
 
 ### Result and exit code
 
-Any failed parameter, deletion or local read makes `pd-deploy` exit with code 7 (partial
+Any failed parameter, deletion or local read makes `pd deploy` exit with code 7 (partial
 failure); `--output json` lists `created`, `updated`, `unchanged`, `deleted` and `errors`
 for string and binary parameters.
 
@@ -82,7 +82,7 @@ cpictl pd get --pid ONE_OMS                          # tenant values (binaries: 
 cpictl pd get --pid ONE_OMS --key now_email --content
 cpictl pd get --pid ONE_OMS --key partner_cert --inspect   # what the bytes are, certificate expiry
 cpictl pd diff --resources-path ./partner-directory  # create / update / unchanged / remote_only
-cpictl pd-deploy --keys ONE_OMS:now_email --dry-run  # then without --dry-run
+cpictl pd deploy --keys ONE_OMS:now_email --dry-run  # then without --dry-run
 ```
 
 - `pd get --inspect` looks inside binaries (Go: `ops.InspectPDBinary`, MCP: `get_pd_parameters`
@@ -94,10 +94,10 @@ cpictl pd-deploy --keys ONE_OMS:now_email --dry-run  # then without --dry-run
 
   It is bounded against zip bombs (16 MiB decompressed, 1000 entries, 3 levels of nesting) and
   writes nothing to disk.
-- `pd diff` shows what `pd-deploy` would change; `remote_only` parameters are the ones
+- `pd diff` shows what `pd deploy` would change; `remote_only` parameters are the ones
   `--full-sync` would delete. A PID whose local files cannot be read is an error (exit 7), never
   "empty".
-- `pd-deploy --keys PID:ID,...` creates or updates only those parameters and deletes nothing
+- `pd deploy --keys PID:ID,...` creates or updates only those parameters and deletes nothing
   (not combinable with `--full-sync` or `--pids`). The content type of a binary comes from
   `_metadata.json`, else from the extension (table above; `.xslt` → `xsl`); other extensions
   need a `_metadata.json` entry. The result lists `CREATED`, `UPDATED` or

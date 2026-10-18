@@ -376,8 +376,28 @@
       "typed": true
     },
     {
+      "command": "logs files",
+      "file": "logs_files.json",
+      "typed": true
+    },
+    {
+      "command": "logs files archive",
+      "file": "logs_files_archive.json",
+      "typed": true
+    },
+    {
+      "command": "logs files get",
+      "file": "logs_files_get.json",
+      "typed": true
+    },
+    {
       "command": "logs get",
       "file": "logs_get.json",
+      "typed": true
+    },
+    {
+      "command": "logs level",
+      "file": "logs_level.json",
       "typed": true
     },
     {
@@ -491,6 +511,11 @@
       "typed": true
     },
     {
+      "command": "pd deploy",
+      "file": "pd_deploy.json",
+      "typed": true
+    },
+    {
       "command": "pd deps",
       "file": "pd_deps.json",
       "typed": true
@@ -508,6 +533,11 @@
     {
       "command": "pd list",
       "file": "pd_list.json",
+      "typed": true
+    },
+    {
+      "command": "pd snapshot",
+      "file": "pd_snapshot.json",
       "typed": true
     },
     {

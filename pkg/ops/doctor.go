@@ -64,9 +64,9 @@ var apiProbes = []apiProbe{
 	{"message logs", "/api/v1/MessageProcessingLogs?$top=1", "logs, send (wait), test loops", false},
 	{"security material", "/api/v1/UserCredentials", "credentials list/apply", false},
 	{"keystore", "/api/v1/KeystoreEntries?keystoreName=system", "keystore list, expiring certificates", false},
-	{"partner directory", "/api/v1/StringParameters?$top=1", "pd-snapshot, pd-deploy, pd_diff", false},
+	{"partner directory", "/api/v1/StringParameters?$top=1", "pd snapshot, pd deploy, pd_diff", false},
 	{"data stores", "/api/v1/DataStores", "datastore commands", false},
-	{"log files", "/api/v1/LogFiles", "log-files", false},
+	{"log files", "/api/v1/LogFiles", "logs files", false},
 	{"audit log", "/api/v1/AuditLogs?$top=1", "audit-log (who changed what)", false},
 }
 

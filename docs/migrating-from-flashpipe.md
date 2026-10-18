@@ -98,8 +98,8 @@ grep -rl 'flashpipe ' .github/ azure-pipelines*.yml | xargs sed -i 's/flashpipe 
 
 ### Partner Directory
 
-- `pd-deploy` exits non-zero when any parameter fails (FlashPipe exited 0 with warnings).
-- `pd-deploy --full-sync` skips a partner ID whose local files cannot be read and reports an
+- `pd deploy` exits non-zero when any parameter fails (FlashPipe exited 0 with warnings).
+- `pd deploy --full-sync` skips a partner ID whose local files cannot be read and reports an
   error. FlashPipe treated such a partner as empty and **deleted all of its remote
   parameters**. Unreadable binary files are errors instead of being skipped (which also
   caused remote deletions).
@@ -122,5 +122,5 @@ and refreshes it automatically when the tenant reports it as expired.
 
 - Command names, flags (except `config-generate --output`) and config file keys.
 - Deployment config (`001-deploy-config.yml`) and `configure` YAML formats.
-- Directory layouts written by `snapshot`, `sync` and `pd-snapshot`.
+- Directory layouts written by `snapshot`, `sync` and `pd snapshot`.
 - Deployment prefix rules of `configure` and `orchestrator`.

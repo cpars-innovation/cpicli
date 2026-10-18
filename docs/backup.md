@@ -19,7 +19,7 @@ cpictl backup diff backups/daily/<today>.tar.gz              # against the tenan
 | Integration packages | `packages/<pkg>/package.json` | yes; packages from Discover (`mode` READ_ONLY) are copied from Discover again |
 | Artifacts (flows, script collections, message and value mappings) | `packages/<pkg>/<id>.zip`, as the tenant exports them | yes |
 | Externalised parameters | `packages/<pkg>/<id>.parameters.json` | yes |
-| Partner Directory (string and binary parameters) | `partner-directory/` (the pd-snapshot layout) | yes |
+| Partner Directory (string and binary parameters) | `partner-directory/` (the pd snapshot layout) | yes |
 | What is deployed, in which version and status (with `--cells` also on integration cells) | `runtime/deployed.json` | yes: deploy again what was running |
 | Credentials (user, OAuth2, secure parameters) | `security/credentials.yml`: metadata and one environment variable per secret | **the secrets come from your vault** (below) |
 | Keystore | `security/keystore.json` (metadata), `security/certs/*.pem` (certificates) | certificates yes; key pairs **regenerated** (below); `sap_*` entries are SAP's |
@@ -179,7 +179,7 @@ Azure lifecycle management policy:
 restore uses the existing commands:
 1. `update artifact` / `snapshot restore` from the unpacked zips.
 2. `configure` with the parameters.
-3. `pd-deploy` from `partner-directory/`.
+3. `pd deploy` from `partner-directory/`.
 4. `credentials apply`.
 5. `keystore import-cert`.
 6. `deploy` of what `runtime/deployed.json` lists.

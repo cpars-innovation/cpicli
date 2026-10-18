@@ -5,6 +5,21 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **CLI: grouped names for four commands (from the review in #37).**
+
+  | Now | Before (still works) |
+  |---|---|
+  | `pd snapshot` | `pd-snapshot` |
+  | `pd deploy` | `pd-deploy` |
+  | `logs level` | `log-level` |
+  | `logs files` | `log-files` |
+
+  - The old names keep working exactly as before and are no longer listed. Nothing is printed
+    for them, so stderr stays JSON lines with `--output json`.
+  - Flags, config keys (`pd-deploy.*` in `cpictl.yaml`), environment variables and output are
+    unchanged. The envelope's `command` is the name you used.
+  - No pipeline needs to change. The docs use the new names.
+
 - **Smaller MCP tool list (from the review in #37).**
   - **Seven tools are now covered by others** of the same kind (read or tenant change) and no
     longer listed. They still work when called, and the result's `notice` names the

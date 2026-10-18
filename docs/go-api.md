@@ -87,12 +87,12 @@ The versioning modes of docs/versioning.md: `Mode` with `Unset`, `Manifest`, `Ke
 ## Partner Directory files (`pkg/pdrepo`, `pkg/ops`)
 
 `pdrepo.New(resourcesPath)` is the local Partner Directory (`<PID>/String.properties`,
-`<PID>/Binary/`, docs/partner-directory.md), as `pd-snapshot`, `pd-deploy` and `pd-diff` use it.
+`<PID>/Binary/`, docs/partner-directory.md), as `pd snapshot`, `pd deploy` and `pd diff` use it.
 
 ```go
 api, local := cpi.NewPartnerDirectory(exe), pdrepo.New("partner-directory")
-snap, err := ops.PDSnapshot(api, local, true, nil)      // pd-snapshot
-diff, err := ops.PDDiff(api, local, []string{"ONE_OMS"}) // pd-diff
+snap, err := ops.PDSnapshot(api, local, true, nil)      // pd snapshot
+diff, err := ops.PDDiff(api, local, []string{"ONE_OMS"}) // pd diff
 res, err := ops.PDDeploy(api, local, ops.PDDeployOptions{DryRun: true})
 ```
 

@@ -62,7 +62,8 @@ func Generate(moduleDir string, root *cobra.Command, schemaVersion int) (Files, 
 		for _, sub := range c.Commands() {
 			walk(sub)
 		}
-		if c.RunE == nil || c.Hidden || c == root {
+		// hidden commands are old names that still work: they keep their schemas
+		if c.RunE == nil || c == root {
 			return
 		}
 		path := strings.TrimPrefix(c.CommandPath(), root.Name()+" ")
