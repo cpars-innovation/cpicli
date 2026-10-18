@@ -32,7 +32,7 @@ func testTools(cfg Config, endpoints ops.EndpointExecuterFunc) []Tool {
 		return cases, nil
 	}
 	rel := func(file string) string {
-		root, err := filepath.Abs(cfg.Root)
+		root, err := resolvePath(cfg.Root, ".") // as the case files: links resolved
 		if err != nil {
 			return file
 		}

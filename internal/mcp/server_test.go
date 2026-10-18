@@ -568,3 +568,18 @@ func TestServeRefusesOversizedRequest(t *testing.T) {
 	assert.Contains(t, out.String(), "request larger than 64 bytes")
 	assert.Contains(t, out.String(), `"id":1`, "the next request is still answered")
 }
+
+// A path that does not exist yet resolves like an existing one when the
+// root's path goes through a symbolic link (macOS /var, Windows 8.3 names).
+func TestResolvePathNewFileBelowLinkedRoot(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "root")
+	cpitest.Symlink(t, real, link)
+	got, err := resolvePath(link, filepath.Join("new", "file.txt"))
+	require.NoError(t, err)
+	want, err := filepath.EvalSymlinks(real)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(want, "new", "file.txt"), got)
+	_, err = resolvePath(link, filepath.Join("..", "outside"))
+	assert.Error(t, err)
+}

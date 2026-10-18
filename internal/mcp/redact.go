@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -242,6 +243,11 @@ func (r *Redactor) relativeText(s string) string {
 	for _, root := range r.rootPaths() {
 		s = strings.ReplaceAll(s, root+string(os.PathSeparator), "")
 		s = strings.ReplaceAll(s, `"`+root+`"`, `"."`)
+		// %q doubles the backslashes of Windows paths
+		if quoted := strconv.Quote(root); quoted != `"`+root+`"` {
+			s = strings.ReplaceAll(s, strings.TrimSuffix(quoted, `"`)+strings.Trim(strconv.Quote(string(os.PathSeparator)), `"`), `"`)
+			s = strings.ReplaceAll(s, quoted, `"."`)
+		}
 	}
 	return s
 }

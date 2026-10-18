@@ -1874,10 +1874,7 @@ func resolvePath(root, p string) (string, error) {
 		}
 		target = filepath.Join(absRoot, target)
 	}
-	target = filepath.Clean(target)
-	if resolved, err := filepath.EvalSymlinks(target); err == nil {
-		target = resolved
-	}
+	target = evalExisting(filepath.Clean(target))
 	if resolvedRoot, err := filepath.EvalSymlinks(absRoot); err == nil {
 		absRoot = resolvedRoot
 	}
@@ -1886,6 +1883,25 @@ func resolvePath(root, p string) (string, error) {
 		return "", output.Usagef("path %q is outside the server root %q", p, absRoot)
 	}
 	return target, nil
+}
+
+// evalExisting resolves symbolic links (and on Windows short 8.3 names) in
+// the longest existing part of p and appends the rest: a file that does not
+// exist yet must compare with the resolved root like an existing one
+// (macOS /var -> /private/var, Windows RUNNER~1 -> runneradmin).
+func evalExisting(p string) string {
+	rest := ""
+	for dir := p; ; {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
+		dir = parent
+	}
 }
 
 type props = map[string]any

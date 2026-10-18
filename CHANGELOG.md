@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Fixed (macOS and Windows): MCP tools refused new files below the server root** ("outside the
+  server root") when the root's path goes through a symbolic link (macOS `/var` -> `/private/var`)
+  or an 8.3 short name (Windows). Examples: `discover_tenant`'s `.cpi/`, a new `download_artifact`
+  directory. Error texts with Windows paths are made root-relative too.
 - **Fixed:** with a zero status interval, deploy and undeploy could reuse the previous runtime
   list on a coarse clock (Windows) and time out early. They now read it fresh every time.
 - **Windows:** the repository checks out with LF line endings (`.gitattributes` `eol=lf`), so
