@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.26.0
+
+- **Announcement: the seven MCP tool names deprecated in 0.25.0 are removed in 0.27.0**
+  (`get_message_steps`, `get_message_attachment`, `get_message_store_entry`, `get_trace_message`,
+  `get_runtime_status`, `upload_artifact`, `get_variable`).
+  - Switch to the replacements listed under 0.25.0 before upgrading to 0.27.0.
+  - In 0.27.0 a call to an old name fails with `errorCategory: usage` naming the replacement.
+  - The old CLI names (`pd-deploy`, `log-level`, ...) stay.
+- **CI runs the test suite on Windows as a required check.**
+
 - **Fixed (macOS and Windows): MCP tools refused new files below the server root** ("outside the
   server root") when the root's path goes through a symbolic link (macOS `/var` -> `/private/var`)
   or an 8.3 short name (Windows). Examples: `discover_tenant`'s `.cpi/`, a new `download_artifact`

@@ -48,11 +48,9 @@ jobs:
       - name: build
         run: make build && ./bin/cpictl --version
 
-  # The suite on Windows (release binaries are built for it). Reports only
-  # until it is clean there; then drop continue-on-error.
+  # The suite on Windows (release binaries are built for it).
   windows:
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
