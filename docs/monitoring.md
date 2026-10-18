@@ -15,9 +15,16 @@ Reads the message processing logs of the window (newest first, at most `--max-me
 - **per connection between flows**: messages and failures, linked by the logs' predecessor, or for
   the connections of the [content graph](graph.md) (`.cpi/graph.json`, `--graph`) by shared
   correlation ID;
-- **per error fingerprint**: failures with the same cause grouped (the error text without IDs,
-  timestamps and long numbers), with a sample, count, first and last occurrence and the newest
-  message GUID. Error texts are read for at most `--error-samples` failures (default 50).
+- **per error fingerprint**: failures with the same cause grouped (the flow, the failing step
+  as the tenant's error information names it, and the error text without IDs, timestamps and
+  long numbers), with:
+  - a sample, the count, the first and last occurrence and the newest message GUID;
+  - `occurrences`: time and message GUID of each failure, newest first (at most 100);
+  - `buckets`: failures per time bucket of the window (`--buckets`, default 24, each
+    `bucketSeconds` long), for sparklines.
+
+  Error texts are read for at most `--error-samples` failures (default 50); counts, occurrences
+  and buckets cover those.
 
 The MCP tool `message_summary` returns the same.
 

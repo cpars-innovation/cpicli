@@ -397,7 +397,7 @@ first and last occurrence. Reads at most --max-messages, newest first.`,
 				return output.Usagef("invalid --until: %v", err)
 			}
 			q := ops.MessageSummaryQuery{Since: since, Until: until, Artifacts: nonEmpty(config.GetStringSlice(cmd, "artifact")),
-				MaxMessages: config.GetInt(cmd, "max-messages"), ErrorSamples: config.GetInt(cmd, "error-samples")}
+				MaxMessages: config.GetInt(cmd, "max-messages"), ErrorSamples: config.GetInt(cmd, "error-samples"), Buckets: config.GetInt(cmd, "buckets")}
 			graphFile := config.GetString(cmd, "graph")
 			if graphFile == "" && fileExists(filepath.Join(".cpi", "graph.json")) {
 				graphFile = filepath.Join(".cpi", "graph.json")
@@ -423,7 +423,11 @@ first and last occurrence. Reads at most --max-messages, newest first.`,
 				log.Info().Msgf("%s -> %s: %d message(s), %d failed (%s)", e.From, e.To, e.Messages, e.Failed, e.Source)
 			}
 			for _, g := range res.Errors {
-				log.Warn().Msgf("%dx %s %s (last %s, %s)", g.Count, g.Artifact, firstLine(g.Sample), g.Last.Format(time.RFC3339), g.MessageGuid)
+				at := g.Artifact
+				if g.Step != "" {
+					at += " at " + g.Step
+				}
+				log.Warn().Msgf("%dx %s %s (last %s, %s)", g.Count, at, firstLine(g.Sample), g.Last.Format(time.RFC3339), g.MessageGuid)
 			}
 			trunc := ""
 			if res.Truncated {
@@ -437,9 +441,10 @@ first and last occurrence. Reads at most --max-messages, newest first.`,
 	sf.String("since", "1h", "Start of the window (duration like 1h or RFC 3339)")
 	sf.String("until", "", "End of the window (default: now)")
 	sf.StringSlice("artifact", nil, "Only these flows (IDs or patterns)")
+	sf.Int("buckets", 24, "Time buckets of the window for the error groups' counts")
 	sf.String("graph", "", "Content graph for connections without predecessor links (default: .cpi/graph.json if it exists)")
 	sf.Int("max-messages", 5000, "Messages read at most, newest first")
-	sf.Int("error-samples", 50, "Error texts read for fingerprints (one request each)")
+	sf.Int("error-samples", 50, "Error texts read for fingerprints (two requests each: text and failing step)")
 
 	c.AddCommand(get, search, steps, attachment, payload, trace, traceMessage, tree, summary)
 	return c

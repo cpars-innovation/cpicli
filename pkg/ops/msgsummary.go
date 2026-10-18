@@ -45,21 +45,43 @@ type MessageSummaryQuery struct {
 	// MaxMessages caps the messages read (0: 5000), ErrorSamples the error
 	// texts fetched for fingerprints (0: 50).
 	MaxMessages, ErrorSamples int
+	// Buckets splits the window into equal time buckets for the error
+	// groups' counts (0: 24).
+	Buckets int
 	// Graph adds the connections of the content graph (sends_to), counted
 	// by correlation ID when the logs have no predecessor.
 	Graph *Graph
 }
 
-// ErrorGroup is a group of failures with the same fingerprint.
+// ErrorGroup is a group of failures with the same fingerprint. Count,
+// Occurrences and Buckets cover the sampled failures (ErrorSamples).
 type ErrorGroup struct {
-	Fingerprint string    `json:"fingerprint"`
-	Artifact    string    `json:"artifact"`
+	Fingerprint string `json:"fingerprint"`
+	Artifact    string `json:"artifact"`
+	// Step is the model step (.iflw element ID) where the error happened,
+	// as the tenant's ErrorInformation reports it ("" if it doesn't).
+	Step        string    `json:"step,omitempty"`
 	Sample      string    `json:"sample"`
 	Count       int       `json:"count"`
 	First       time.Time `json:"first"`
 	Last        time.Time `json:"last"`
 	MessageGuid string    `json:"messageGuid"`
+	// Occurrences are the sampled failures, newest first (at most
+	// maxOccurrences).
+	Occurrences []ErrorOccurrence `json:"occurrences"`
+	// Buckets counts the failures per time bucket of the window, oldest
+	// first (MessageSummary.BucketSeconds each).
+	Buckets []int `json:"buckets"`
 }
+
+// ErrorOccurrence is one failure of an error group.
+type ErrorOccurrence struct {
+	Time        time.Time `json:"time"`
+	MessageGuid string    `json:"messageGuid"`
+}
+
+// maxOccurrences bounds ErrorGroup.Occurrences.
+const maxOccurrences = 100
 
 // FlowSummary is the message statistics of one flow.
 type FlowSummary struct {
@@ -96,6 +118,8 @@ type MessageSummary struct {
 	Flows     []FlowSummary `json:"flows"`
 	Edges     []EdgeSummary `json:"edges"`
 	Errors    []ErrorGroup  `json:"errors"`
+	// BucketSeconds is the length of one bucket of ErrorGroup.Buckets.
+	BucketSeconds int64 `json:"bucketSeconds"`
 	// UnsampledFailures were not fingerprinted (ErrorSamples reached).
 	UnsampledFailures int `json:"unsampledFailures,omitempty"`
 }
@@ -109,6 +133,9 @@ func SummarizeMessages(exe *httpclnt.HTTPExecuter, q MessageSummaryQuery) (*Mess
 	}
 	if q.ErrorSamples <= 0 {
 		q.ErrorSamples = 50
+	}
+	if q.Buckets <= 0 {
+		q.Buckets = 24
 	}
 	if q.Until.IsZero() {
 		q.Until = time.Now()
@@ -240,6 +267,11 @@ func SummarizeMessages(exe *httpclnt.HTTPExecuter, q MessageSummaryQuery) (*Mess
 	}
 
 	// error groups from up to ErrorSamples error texts, newest first
+	bucket := q.Until.Sub(q.Since) / time.Duration(q.Buckets)
+	if bucket <= 0 {
+		bucket = 1
+	}
+	res.BucketSeconds = int64(max(bucket.Seconds(), 1))
 	groups := map[string]*ErrorGroup{}
 	sampled := 0
 	for _, l := range logs {
@@ -255,14 +287,27 @@ func SummarizeMessages(exe *httpclnt.HTTPExecuter, q MessageSummaryQuery) (*Mess
 		if err != nil {
 			text = ""
 		}
-		fp := ErrorFingerprint(l.ArtifactId, "", text)
+		step := ""
+		if info, err := mpl.ErrorInformation(l.MessageGuid); err == nil && info != nil {
+			step = info.LastErrorModelStepID
+		}
+		fp := ErrorFingerprint(l.ArtifactId, step, text)
 		g := groups[fp]
 		if g == nil {
 			sample, _ := truncate(NormalizeError(text), 500)
-			g = &ErrorGroup{Fingerprint: fp, Artifact: l.ArtifactId, Sample: sample, First: l.LogStart, Last: l.LogStart, MessageGuid: l.MessageGuid}
+			g = &ErrorGroup{Fingerprint: fp, Artifact: l.ArtifactId, Step: step, Sample: sample, First: l.LogStart, Last: l.LogStart,
+				MessageGuid: l.MessageGuid, Occurrences: []ErrorOccurrence{}, Buckets: make([]int, q.Buckets)}
 			groups[fp] = g
 		}
 		g.Count++
+		if len(g.Occurrences) < maxOccurrences {
+			g.Occurrences = append(g.Occurrences, ErrorOccurrence{Time: l.LogStart, MessageGuid: l.MessageGuid})
+		}
+		if i := int(l.LogStart.Sub(q.Since) / bucket); i >= 0 && i < q.Buckets {
+			g.Buckets[i]++
+		} else if i >= q.Buckets {
+			g.Buckets[q.Buckets-1]++ // at Until
+		}
 		if l.LogStart.Before(g.First) {
 			g.First = l.LogStart
 		}
@@ -271,6 +316,7 @@ func SummarizeMessages(exe *httpclnt.HTTPExecuter, q MessageSummaryQuery) (*Mess
 		}
 	}
 	for _, g := range groups {
+		sort.SliceStable(g.Occurrences, func(i, j int) bool { return g.Occurrences[i].Time.After(g.Occurrences[j].Time) })
 		res.Errors = append(res.Errors, *g)
 	}
 	sort.Slice(res.Errors, func(i, j int) bool {

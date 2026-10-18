@@ -2241,7 +2241,8 @@ first and last occurrence. Reads at most --max-messages, newest first.
 
 ```
       --artifact strings    Only these flows (IDs or patterns)
-      --error-samples int   Error texts read for fingerprints (one request each) (default 50)
+      --buckets int         Time buckets of the window for the error groups' counts (default 24)
+      --error-samples int   Error texts read for fingerprints (two requests each: text and failing step) (default 50)
       --graph string        Content graph for connections without predecessor links (default: .cpi/graph.json if it exists)
       --max-messages int    Messages read at most, newest first (default 5000)
       --since string        Start of the window (duration like 1h or RFC 3339) (default "1h")

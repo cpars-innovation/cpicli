@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Error groups of `logs summary` / `message_summary` show when they happened (#27):**
+  - `occurrences` lists the time and message GUID per failure, and `buckets` counts them per time
+    bucket (`--buckets`, default 24).
+  - `step` names the failing model step from the tenant's error information.
+  - The step is part of the fingerprint now, so the same text at two steps makes two groups.
+    Fingerprints of errors with a known step change.
+
 ## 0.23.0
 
 - **Partner Directory binaries can be inspected: `pd get --inspect` (#30).**

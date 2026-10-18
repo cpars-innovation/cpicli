@@ -27,6 +27,9 @@ func TestSummarizeMessages(t *testing.T) {
 			ErrorText: "Connection refused to billing.example.com at 2026-10-05T08:00:01Z, order 1234567"},
 		{Guid: "m5", Artifact: "Billing", Status: "FAILED", CorrelationID: "c3", Start: at(10), End: at(10).Add(time.Second),
 			ErrorText: "Connection refused to billing.example.com at 2026-10-05T09:00:01Z, order 7654321"},
+		{Guid: "m8", Artifact: "Billing", Status: "FAILED", CorrelationID: "c5", Start: at(8), End: at(8).Add(time.Second),
+			ErrorText: "Connection refused to billing.example.com at 2026-10-05T09:02:01Z, order 7654322",
+			Steps:     []cpitest.Step{{StepID: "s1", ModelStepID: "CallActivity_7", Status: "FAILED", Error: "refused"}}},
 		{Guid: "m6", Artifact: "Stock", Status: "COMPLETED", CorrelationID: "c4", Start: at(5), End: at(5).Add(time.Second)},
 		{Guid: "m7", Artifact: "Invoices", Status: "COMPLETED", CorrelationID: "c4", Start: at(5), End: at(5).Add(time.Second)},
 	}
@@ -37,12 +40,12 @@ func TestSummarizeMessages(t *testing.T) {
 
 	s, err := SummarizeMessages(mock.Executer(), MessageSummaryQuery{Since: at(60), Until: now, Graph: g})
 	require.NoError(t, err)
-	assert.Equal(t, 7, s.Scanned)
+	assert.Equal(t, 8, s.Scanned)
 	assert.False(t, s.Truncated)
 	require.NotEmpty(t, s.Flows)
 	assert.Equal(t, "Billing", s.Flows[0].Artifact, "most failures first")
-	assert.Equal(t, 2, s.Flows[0].Failed)
-	assert.Equal(t, map[string]int{"COMPLETED": 1, "FAILED": 2}, s.Flows[0].ByStatus)
+	assert.Equal(t, 3, s.Flows[0].Failed)
+	assert.Equal(t, map[string]int{"COMPLETED": 1, "FAILED": 3}, s.Flows[0].ByStatus)
 	var orders FlowSummary
 	for _, f := range s.Flows {
 		if f.Artifact == "Orders" {
@@ -57,11 +60,21 @@ func TestSummarizeMessages(t *testing.T) {
 		{From: "Stock", To: "Invoices", Messages: 1, Source: "correlation", Via: "processdirect:/invoices"},
 	}, s.Edges)
 
-	require.Len(t, s.Errors, 1, "two failures, one cause")
-	assert.Equal(t, 2, s.Errors[0].Count)
-	assert.Equal(t, "Billing", s.Errors[0].Artifact)
-	assert.Contains(t, s.Errors[0].Sample, "Connection refused")
-	assert.Equal(t, "m5", s.Errors[0].MessageGuid, "the newest")
+	require.Len(t, s.Errors, 2, "the same text at another step is another group")
+	e := s.Errors[0]
+	assert.Equal(t, 2, e.Count)
+	assert.Equal(t, "Billing", e.Artifact)
+	assert.Empty(t, e.Step)
+	assert.Contains(t, e.Sample, "Connection refused")
+	assert.Equal(t, "m5", e.MessageGuid, "the newest")
+	assert.Equal(t, []ErrorOccurrence{{at(10), "m5"}, {at(20), "m4"}}, e.Occurrences)
+	assert.Equal(t, int64(150), s.BucketSeconds, "60 minutes in 24 buckets")
+	require.Len(t, e.Buckets, 24)
+	assert.Equal(t, 1, e.Buckets[16], "40 minutes after since")
+	assert.Equal(t, 1, e.Buckets[20], "50 minutes after since")
+	assert.Equal(t, 2, sum(e.Buckets))
+	assert.Equal(t, "CallActivity_7", s.Errors[1].Step)
+	assert.Equal(t, ErrorFingerprint("Billing", "CallActivity_7", "Connection refused to billing.example.com at 2026-01-01T00:00:00Z, order 9999999"), s.Errors[1].Fingerprint)
 
 	s, err = SummarizeMessages(mock.Executer(), MessageSummaryQuery{Since: at(60), Until: now, Artifacts: []string{"Orders"}, ErrorSamples: 1})
 	require.NoError(t, err)
@@ -69,4 +82,12 @@ func TestSummarizeMessages(t *testing.T) {
 
 	_, err = SummarizeMessages(mock.Executer(), MessageSummaryQuery{Since: now, Until: at(5)})
 	assert.Error(t, err)
+}
+
+func sum(xs []int) int {
+	n := 0
+	for _, x := range xs {
+		n += x
+	}
+	return n
 }

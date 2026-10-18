@@ -469,6 +469,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"artifacts":     strArray("Only these flows (IDs or patterns)"),
 				"max_messages":  integer("Messages read at most, newest first (default 5000)"),
 				"error_samples": integer("Error texts read for fingerprints (default 50)"),
+				"buckets":       integer("Time buckets of the window for each error group's counts (default 24)"),
 			}),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -478,6 +479,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					Artifacts    []string `json:"artifacts"`
 					MaxMessages  int      `json:"max_messages"`
 					ErrorSamples int      `json:"error_samples"`
+					Buckets      int      `json:"buckets"`
 				}
 				if err := decode(raw, &a); err != nil {
 					return nil, err
@@ -491,7 +493,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if err != nil {
 					return nil, output.Usagef("invalid until: %v", err)
 				}
-				q := ops.MessageSummaryQuery{Since: since, Until: until, Artifacts: a.Artifacts, MaxMessages: a.MaxMessages, ErrorSamples: a.ErrorSamples}
+				q := ops.MessageSummaryQuery{Since: since, Until: until, Artifacts: a.Artifacts, MaxMessages: a.MaxMessages, ErrorSamples: a.ErrorSamples, Buckets: a.Buckets}
 				if root, err := resolvePath(cfg.Root, "."); err == nil {
 					if g, err := ops.LoadGraph(filepath.Join(root, ".cpi", "graph.json")); err == nil {
 						q.Graph = g
