@@ -80,7 +80,7 @@ func testTools(cfg Config, endpoints ops.EndpointExecuterFunc) []Tool {
 				"(http_status, message_status, response_contains / not_contains / xpath / json, error_contains, custom_headers, steps_include, max_duration, stub_calls). " +
 				"Returns passed/failed/errors/skipped and per case the failures with expected and actual value; a failed case has diagnostics (messageGuid, lastError, failedStep, errorInformation, traceRoot). " +
 				"apply_config sets each flow's config.yaml values (e.g. receivers pointing at the stub), redeploys, runs the cases and restores the previous values (keys reported, never values). " +
-				"Triggers real processing, including receiver calls: use a development tenant. Write cases instead of sending by hand; on a failure read the diagnostics, then get_message_steps / get_trace_tree.",
+				"Triggers real processing, including receiver calls: use a development tenant. Write cases instead of sending by hand; on a failure read the diagnostics, then get_message_log with include_steps / get_trace_tree.",
 			InputSchema: object(props{
 				"dir":          dirSchema,
 				"flow":         str("Only the cases of this flow (name or pattern)"),

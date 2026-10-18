@@ -487,7 +487,7 @@ func messageHint(s *SentMessage) string {
 	if guid == "" {
 		return ""
 	}
-	return fmt.Sprintf(" (message %s, see get_message_log / get_message_steps)", guid)
+	return fmt.Sprintf(" (message %s, see get_message_log with include_steps)", guid)
 }
 
 // waitForMessage waits until the message log of s is final. Without a message

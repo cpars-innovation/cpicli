@@ -79,7 +79,7 @@ func TestLoopStopsOnRepeatedError(t *testing.T) {
 	assert.Equal(t, 2, e.mock.Count("POST /api/v1/DeployIntegrationDesigntimeArtifact"), "the third deploy never reached the tenant")
 
 	// read tools still work, and loop_end always works
-	assert.NotEqual(t, "stopped", e.call("get_runtime_status", map[string]any{"artifact_ids": []string{"Orders"}}).ErrorCategory)
+	assert.NotEqual(t, "stopped", e.call("list_runtime_artifacts", map[string]any{"artifact_ids": []string{"Orders"}}).ErrorCategory)
 	status := e.call("loop_status", map[string]any{"loop_id": id})
 	require.True(t, status.OK)
 	st := status.Result.(map[string]any)

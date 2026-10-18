@@ -215,7 +215,7 @@ when you need something else.
 | Retries of throttled reads (429, 502-504) | 3, backoff 2 s, 4 s, 8 s (`Retry-After` honoured); writes never | all commands and MCP (`read-retries`) |
 | Parameters per `$batch` request | 90 | `configure` (`batchSize`) |
 | Orchestrator comparison | with the snapshot state when one of this tenant is found, else download | `orchestrator` (`snapshotState`, `verifyDownload`) |
-| Artifacts in draft on the tenant | skipped and reported, not uploaded, not deployed (exit 0); `ERROR`: the run fails (exit 5) | `orchestrator` (`draftHandling`: `SKIP`, `ERROR`), MCP `upload_artifact` / `deploy` (always skipped) |
+| Artifacts in draft on the tenant | skipped and reported, not uploaded, not deployed (exit 0); `ERROR`: the run fails (exit 5) | `orchestrator` (`draftHandling`: `SKIP`, `ERROR`), MCP `upload_artifacts` / `deploy` (always skipped) |
 | Snapshot and local edits | artifacts edited locally since the last snapshot are skipped (`local-modified`); deleted artifacts are reported, not removed; deployment copies of the deploy config are not written | `snapshot` (`overwriteLocal`, `prune`, `includeDerived`) |
 | Snapshot of drafts and orphan parameters | drafts skipped (`ADD`: written with a numeric version); `parameters.prop` keys missing from `parameters.propdef` reported, not written | `snapshot` (`draftHandling`, `keepOrphanParameters`) |
 | Incremental snapshot | off (on once `ModifiedAt` is verified on your tenant, see [snapshot.md](snapshot.md)) | `snapshot` (`incremental`) |

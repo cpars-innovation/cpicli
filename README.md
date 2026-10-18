@@ -389,10 +389,9 @@ The runtime credentials are only needed for `send_test_message`
 ([configuration.md](docs/configuration.md#runtime-endpoints-test-messages)).
 
 Tools cover the whole loop: `doctor`, `create_package`, `download_artifact`, `drift`,
-`upload_artifact` / `upload_artifacts` (`dry_run`), `validate_artifact`, `check_guidelines`, `lint` / `lint_fix`, `layout_iflow`, `compare`, `transport_check`,
-`deploy` (`dry_run`: what would be deployed and why), `send_test_message`, `get_runtime_status`,
-`list_message_logs`, `get_message_log`, `get_message_steps`, `get_message_attachment`,
-`get_message_store_entry`, parameters, resources, `discover_tenant`, `graph_search`, `graph_neighbors`,
+`upload_artifacts` (`dry_run`), `validate_artifact`, `check_guidelines`, `lint` / `lint_fix`, `layout_iflow`, `compare`, `transport_check`,
+`deploy` (`dry_run`: what would be deployed and why), `send_test_message`, `list_runtime_artifacts`,
+`list_message_logs`, `get_message_log` (with the failing step), `get_message_content`, parameters, resources, `discover_tenant`, `graph_search`, `graph_neighbors`,
 `graph_path`, `list_credentials`,
 `list_keystore`, key pairs and CSRs, PGP keys, access policies, the audit log, Partner Directory
 partners, `undeploy` and `pd_deploy`. Secrets and private keys never pass through the agent.

@@ -111,7 +111,7 @@ server: [plugin.md](plugin.md).
 | `--tools` | all | Offer only these tools: names or patterns, e.g. `list_*,get_*,validate_artifact` |
 | `--disable-tools` | none | Do not offer these tools (names or patterns); wins over `--tools` |
 | `--opt-in` | none | Also offer these opt-in tools (exact names), without limiting the others |
-| `--versioning` | not set | Versioning mode of `upload_artifact` and `deploy` (`manifest`, `keep`, `tenant-bump`), see [versioning.md](versioning.md) |
+| `--versioning` | not set | Versioning mode of `upload_artifacts` and `deploy` (`manifest`, `keep`, `tenant-bump`), see [versioning.md](versioning.md) |
 | `--branch-policy` | not set | Policy file: refuse tenant tools (errorCategory `branch_readonly`) while a repository is on a read-only branch, see [Branch policy](#branch-policy) |
 | `--loop-required` | `false` | Refuse tenant tools (errorCategory `loop_required`) while no loop is open, see [Build loops](#build-loops) |
 | `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors`, `--loop-max-minutes` | `0` (no cap) | Highest `max_iterations`, `max_deploys`, `same_error_limit`, `wall_clock_minutes` that `loop_start` accepts; they also lower the defaults |
@@ -161,7 +161,7 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 | Toolset | For | Tools |
 |---------|-----|-------|
 | `inspect` | understanding content | list and read packages, artifacts, resources, parameters, runtime status, endpoints, graph, discovery, drift, compare |
-| `build` | changing flows on DEV | read tools, `download_artifact`, `copy_iflow`, `layout_iflow`, `create_package`, `upload_artifact(s)`, `validate_artifact`, `check_guidelines`, `set_parameters`, `deploy`, `bump_versions`, `lint`, loop tools |
+| `build` | changing flows on DEV | read tools, `download_artifact`, `copy_iflow`, `layout_iflow`, `create_package`, `upload_artifacts`, `validate_artifact`, `check_guidelines`, `set_parameters`, `deploy`, `bump_versions`, `lint`, loop tools |
 | `test` | testing and diagnosing | `list_tests`, `run_tests`, `send_test_message`, `idoc_template`, message logs, `find_messages_by_header`, steps, attachments, store entries, trace tree, `set_log_level`, traced messages, `install_test_tools`, `set_stub_response`, loop tools |
 | `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore, `list_audit_logs` |
 | `promote` | moving between tiers | `compare`, `transport_check`, `drift`, `config_diff`, parameters, credentials, keystore, Partner Directory dependencies and diff, runtime status |
@@ -224,7 +224,7 @@ leaves a tool enabled by accident.
 |------------|-------|---------------|
 | read | list_\*, get_\*, `validate_artifact`, `check_guidelines`, `pd_diff`, `pd_dependencies`, `config_diff`, `drift`, `compare`, `transport_check`, `lint`, `doctor`, `graph_*`, `loop_status`, runtime data tools (`list_tests` reads local case files only) | kept |
 | local files (inside `--root`) | `download_artifact`, `copy_iflow`, `bump_versions`, `lint_fix`, `layout_iflow`, `idoc_template`, `discover_tenant`, `loop_start`, `loop_end` | kept |
-| tenant changes / processing (classes below) | `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `run_tests`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
+| tenant changes / processing (classes below) | `create_package`, `upload_artifacts`, `set_parameters`, `deploy`, `undeploy`, `pd_deploy`, `send_test_message`, `run_tests`, `set_log_level`, `delete_data_store_entry`, `unlock_artifact`, `set_value_mapping`, `delete_artifact`, `delete_package`, `retry_jms_messages`, `move_jms_messages`, `delete_jms_messages`, `set_jms_queue_state`, `generate_key_pair`, `upload_certificate_chain`, `delete_keystore_entry`, `create_access_policy`, `add_artifact_reference`, `delete_access_policy`, `delete_artifact_reference`, `create_alternative_partner`, `delete_alternative_partner`, `create_authorized_user`, `delete_authorized_user` | removed |
 
 For approvals, `help` also reports a finer **class** per tool (the effect `read` / `local` /
 `tenant` stays the filter criterion):
@@ -233,7 +233,7 @@ For approvals, `help` also reports a finer **class** per tool (the effect `read`
 |-------|-------|
 | `read` | every read tool |
 | `local` | every local-files tool |
-| `write` | designtime content and configuration: `create_package`, `upload_artifact`, `upload_artifacts`, `set_parameters`, `set_value_mapping`, `generate_key_pair`, `upload_certificate_chain`, `create_access_policy`, `add_artifact_reference`, `create_alternative_partner`, `create_authorized_user` |
+| `write` | designtime content and configuration: `create_package`, `upload_artifacts`, `set_parameters`, `set_value_mapping`, `generate_key_pair`, `upload_certificate_chain`, `create_access_policy`, `add_artifact_reference`, `create_alternative_partner`, `create_authorized_user` |
 | `deploy` | `deploy`, `undeploy`, `pd_deploy` |
 | `process` | triggers processing: `send_test_message`, `run_tests`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state` |
 | `log` | `set_log_level` |
@@ -279,13 +279,18 @@ writableEnvironments: [dev]             # tiers (--tier) that may be changed at 
 
 ## Tools
 
-**Deprecated tools.** Since v0.25.0 some tools are covered by another tool of the same kind
-(read or tenant change): `get_message_steps`, `get_message_attachment`, `get_message_store_entry`,
-`get_trace_message`, `get_runtime_status`, `upload_artifact` and `get_variable`. They are no
-longer listed, which keeps every prompt smaller, but calls still work: the result has a `notice`
-naming the replacement. Read tools are only merged with read tools and tenant tools with tenant
-tools, so approving a tool still means one kind of effect. A server that offers only the old
-name (e.g. `--tools get_message_steps`) keeps listing it.
+**Removed tools.** Seven tools were covered by another tool of the same kind (read or tenant
+change) in v0.25.0 and removed in v0.27.0. A call to an old name fails with `errorCategory`
+`usage` and names the replacement:
+
+| Removed | Use instead |
+|---|---|
+| `get_message_steps` | `get_message_log` with `include_steps` |
+| `get_message_attachment`, `get_message_store_entry` | `get_message_content` with `attachment_id` or `store_entry_id` |
+| `get_trace_message` | `get_message_trace` with `trace_id` |
+| `get_runtime_status` | `list_runtime_artifacts` with `artifact_ids` |
+| `upload_artifact` | `upload_artifacts` (one or several) |
+| `get_variable` | `list_variables` with `name` |
 
 | Tool | Changes | Purpose |
 |------|---------|---------|
@@ -299,7 +304,6 @@ name (e.g. `--tools get_message_steps`) keeps listing it.
 | `download_artifact` | local files | Extract an artifact into a directory inside `--root` (empty unless `overwrite`) |
 | `copy_iflow` | local files | Copy a flow (tenant or local) under a new ID, name, description and sender addresses; refuses unchanged sender addresses unless `keep_addresses`. See [new-flows.md](new-flows.md) |
 | `bump_versions` | local files | Raise `Bundle-Version` of changed artifacts (`changed: true`: since the Git commit that last set it) before a pull request. See [versioning.md](versioning.md) |
-| `upload_artifact` | designtime | **Deprecated**: not listed, still callable; use `upload_artifacts` |
 | `upload_artifacts` | designtime | Create or update one or several artifacts from local directories, 8 at a time; per artifact `CREATED`, `UPDATED` or `UNCHANGED`; `dry_run`: only compare and report the action and version |
 | `validate_artifact` | | Tenant check of an integration flow (like *Check* in the Web UI); `PASSED` / `FAILED` with details |
 | `check_guidelines` | | Run the activated design guidelines and wait; violations with violated components |
@@ -314,7 +318,6 @@ name (e.g. `--tools get_message_steps`) keeps listing it.
 | `install_test_tools` | runtime | Upload the test tooling that ships with cpictl (test harness `CPICTL_Test_Harness`, receiver stub `CPICTL_Test_Stub`) into its package (`package_id`, default `CPICTLTesting`, created when missing); `only` harness or stub; `role` sets the user role a client needs to call them (default: keep the configured one, `ESBMessaging.send` on a first install); `deploy` deploys and waits. Refused on a production tier unless the server runs with `--allow-production`. See [testing.md](testing.md#test-tooling-harness-and-receiver-stub) |
 | `set_stub_response` | designtime | The receiver stub's answer for a rule (`status`, `content_type`, `body`, `headers`), stored as Partner Directory string parameter `CPICTL_Stub/<rule>`; `clear` removes it (the stub then answers 200 `{}`). Refused on a production tier like `install_test_tools` |
 | `idoc_template` | local files | IDoc XML skeleton for `send_test_message idoc`: EDI_DC40 with the standard fields (`idoc_type`, `message_type`, partners, ports, `docnum`) and a placeholder for the data segments, which you fill in; `path` also writes it inside `--root` |
-| `get_runtime_status` | | **Deprecated**: not listed, still callable; use `list_runtime_artifacts` with `artifact_ids` |
 | `list_runtime_artifacts` | | All deployed artifacts, filter by status (e.g. `ERROR`); `artifact_ids`: the state of those artifacts, deployed or not, with the tenant's error |
 | `list_service_endpoints` | | Callable URLs of deployed integration flows (where to send test messages) |
 | `list_message_logs` | | Message processing logs by artifact or package, status, time, IDs; error texts; `wait_seconds` for final status; `custom_header {name, value}` (as `find_messages_by_header`) |
@@ -323,12 +326,8 @@ name (e.g. `--tools get_message_steps`) keeps listing it.
 | `get_trace_tree` | | Path across flows from a trace ID or a message GUID (correlation ID, optionally joined by key custom headers): tree, hops, `pathKey`, `firstFailure` |
 | `get_message_log` | | One message: error text, `errorInformation` (`lastErrorModelStepId`), custom header properties, adapter attributes, attachments, persisted messages; `include_steps` adds the processing steps and the first failing step (`step_properties` each step's properties) |
 | `get_message_content` | | Content of a log attachment (`attachment_id`) or of a message a Persist step wrote (`store_entry_id`); text inline, binary base64, truncated to `max_bytes` |
-| `get_message_steps` | | **Deprecated**: not listed, still callable; use `get_message_log` with `include_steps` |
-| `get_message_attachment` | | **Deprecated**: not listed, still callable; use `get_message_content` with `attachment_id` |
-| `get_message_store_entry` | | **Deprecated**: not listed, still callable; use `get_message_content` with `store_entry_id` |
 | `set_log_level` | runtime setting | NONE / INFO / DEBUG / TRACE for a deployed flow; the server sets it back to INFO after `revert_after_minutes` (default 10 for TRACE and DEBUG) and on shutdown; result `revertsAt` |
 | `get_message_trace` | | Traced steps of a message with trace IDs; with `trace_id` the payload, headers and exchange properties at that step (sensitive values masked); `status: "missing_role"` (ok) when the key may not read message content |
-| `get_trace_message` | | **Deprecated**: not listed, still callable; use `get_message_trace` with `trace_id` |
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
 | `delete_data_store_entry` | tenant, **destructive** | Delete one entry; requires `confirm: true` |
 | `list_locks` | | Artifacts open for editing in the Web UI: artifact, package, who holds the lock, since when |
@@ -344,7 +343,6 @@ name (e.g. `--tools get_message_steps`) keeps listing it.
 | `delete_artifact` | designtime, **destructive**, opt-in | Delete a designtime artifact of any type (type found on the tenant unless `artifact_type`); a deployed one is refused unless `undeploy_first`; requires `confirm: true` and `--opt-in delete_artifact` |
 | `delete_package` | designtime, **destructive**, opt-in | Delete a package; refused while it has artifacts unless `with_artifacts`, and while they are deployed unless `undeploy_first`; requires `confirm: true` and `--opt-in delete_package` |
 | `list_variables` | | Global and flow variables; `name` reads one variable's value |
-| `get_variable` | | **Deprecated**: not listed, still callable; use `list_variables` with `name` |
 | `list_jms_queues`, `get_jms_broker` | | Queues with message counts and the flows that use them; broker capacity and usage |
 | `list_jms_messages` | | Messages of a queue: JMS message ID, failed, retry count, next retry, message GUID of the last attempt |
 | `retry_jms_messages` | tenant | Process messages of a queue again now (ids or `all`); requires `confirm: true` |
@@ -518,7 +516,7 @@ covered without their own code:
   `find_messages_by_header` gets `"***"` as value when the name is masked.
 - **Payloads** (only with `--redact-payloads`): the bodies returned by `send_test_message`
   (response), `get_message_content`, `get_message_trace` with `trace_id`
-  (payload), `get_data_store_entry` and `list_variables` with `name` (and the deprecated tools they replace) become `{"size": …, "text": "[redacted]",
+  (payload), `get_data_store_entry` and `list_variables` with `name` become `{"size": …, "text": "[redacted]",
   "sha256": "<hex>", "redacted": true}`; `size` is the full size, `sha256` is computed over the
   bytes the tool returned (the first `max_bytes` when `truncated`). Resources, scripts and
   Partner Directory values are content, not payloads, and stay readable.

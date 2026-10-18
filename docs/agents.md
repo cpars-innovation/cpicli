@@ -87,7 +87,7 @@ so that `--root .` is the repository, or put the absolute path in `--root` (alwa
 2. In the chat (Agent mode) ask *"Use the doctor tool of cpi-dev"*. It reports the connection and
    which API areas the credentials can use.
 3. Cursor asks before each tool call. Allow the read tools (`list_*`, `get_*`, `drift`,
-   `help`, `doctor`) permanently if you like; keep `deploy`, `undeploy`, `upload_artifact(s)`
+   `help`, `doctor`) permanently if you like; keep `deploy`, `undeploy`, `upload_artifacts`
    and `send_test_message` on approval.
 
 `${workspaceFolder}` is the folder that contains `.cursor/mcp.json`. In the global

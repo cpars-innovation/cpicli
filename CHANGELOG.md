@@ -5,6 +5,21 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.27.0
+
+- **Removed: the seven MCP tool names deprecated in 0.25.0** (announced in 0.26.0):
+  `get_message_steps`, `get_message_attachment`, `get_message_store_entry`, `get_trace_message`,
+  `get_runtime_status`, `upload_artifact`, `get_variable`.
+  - A call to an old name fails with `errorCategory: usage` naming the replacement (table under
+    0.25.0).
+  - A `--tools` / `--disable-tools` filter that names one of them is refused at start, naming the
+    replacement.
+  - The CLI's old command names (`pd-deploy`, `log-level`, ...) stay.
+- **Fixed: MCP tool descriptions still pointed agents at the deprecated names** ("next:
+  get_message_steps", "before upload_artifact"); they name the replacements now.
+  `upload_artifacts` carries the full description of the former `upload_artifact` (draft skip,
+  directory layout, next steps).
+
 ## 0.26.0
 
 - **Announcement: the seven MCP tool names deprecated in 0.25.0 are removed in 0.27.0**
@@ -13,7 +28,7 @@ All notable changes to cpictl. Coming from FlashPipe? See
   - Switch to the replacements listed under 0.25.0 before upgrading to 0.27.0.
   - In 0.27.0 a call to an old name fails with `errorCategory: usage` naming the replacement.
   - The old CLI names (`pd-deploy`, `log-level`, ...) stay.
-- **CI runs the test suite on Windows as a required check.**
+- **CI runs the test suite on Windows too;** a failure there fails the run.
 
 - **Fixed (macOS and Windows): MCP tools refused new files below the server root** ("outside the
   server root") when the root's path goes through a symbolic link (macOS `/var` -> `/private/var`)

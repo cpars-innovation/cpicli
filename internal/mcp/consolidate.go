@@ -9,11 +9,11 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/output"
 )
 
-// deprecatedTools are tools another tool now covers: not listed any more
-// (fewer tool definitions in every prompt), still callable for clients
-// that use them, with a notice. Only tools of the same effect are merged,
-// so that approval per tool keeps working.
-var deprecatedTools = map[string]string{
+// removedTools are tools another tool covers (deprecated in 0.25.0, removed
+// in 0.27.0): a call fails with a usage error naming the replacement. Only
+// tools of the same effect were merged, so that approval per tool keeps
+// working. Their implementations live on in the replacements.
+var removedTools = map[string]string{
 	"get_message_steps":       "get_message_log with include_steps",
 	"get_message_attachment":  "get_message_content with attachment_id",
 	"get_message_store_entry": "get_message_content with store_entry_id",
@@ -23,8 +23,9 @@ var deprecatedTools = map[string]string{
 	"get_variable":            "list_variables with name",
 }
 
-// consolidate marks the deprecated tools and lets the tools that replace
-// them do their work (their handlers stay the implementation).
+// consolidate lets the tools that replace the removed ones do their work
+// (the removed tools' handlers stay the implementation), then drops the
+// removed tools.
 func consolidate(tools []Tool) []Tool {
 	idx := func(name string) int { return slices.IndexFunc(tools, func(t Tool) bool { return t.Name == name }) }
 	handler := func(name string) func(context.Context, json.RawMessage) (any, error) {
@@ -32,11 +33,6 @@ func consolidate(tools []Tool) []Tool {
 			return tools[i].Handler
 		}
 		return nil
-	}
-	for name, by := range deprecatedTools {
-		if i := idx(name); i >= 0 {
-			tools[i].Deprecated = by
-		}
 	}
 	// patch adds properties to a tool and routes calls that use them.
 	patch := func(name, description string, add props, route func(ctx context.Context, args map[string]any, base func(context.Context, json.RawMessage) (any, error)) (any, bool, error)) {
@@ -196,7 +192,7 @@ func consolidate(tools []Tool) []Tool {
 			},
 		})
 	}
-	return tools
+	return slices.DeleteFunc(tools, func(t Tool) bool { return removedTools[t.Name] != "" })
 }
 
 // merged returns v (a JSON object) with the extra fields added.

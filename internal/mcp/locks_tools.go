@@ -31,7 +31,7 @@ func lockTools(cfg Config, readOnly map[string]any) []Tool {
 		},
 		{
 			Name: "list_runtimes", Title: "List runtimes (Cloud Integration, integration cells)",
-			Description: "The tenant's runtimes and, with artifacts=true, what is deployed on each: version, status, deploy state, design-time runtime binding. A flow bound to an integration cell runs there, but the public API (list_runtime_artifacts, get_runtime_status) lists only Cloud Integration: use this when a flow deployed fine but looks undeployed.",
+			Description: "The tenant's runtimes and, with artifacts=true, what is deployed on each: version, status, deploy state, design-time runtime binding. A flow bound to an integration cell runs there, but the public API (list_runtime_artifacts) lists only Cloud Integration: use this when a flow deployed fine but looks undeployed.",
 			InputSchema: object(props{"artifacts": boolean("Also list the deployed artifacts per runtime"), "runtime": str("Only this runtime (ID, e.g. integrationcell); implies artifacts")}),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {

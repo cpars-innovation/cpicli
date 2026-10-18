@@ -46,7 +46,7 @@ type Config struct {
 	TenantHost string
 	// DenyFullSync makes pd_deploy refuse full_sync (develop mode).
 	DenyFullSync bool
-	// Versioning applies to upload_artifact and deploy (--versioning of the
+	// Versioning applies to upload_artifacts and deploy (--versioning of the
 	// server, see docs/versioning.md).
 	Versioning versioning.Mode
 	// LogLevels reverts set_log_level changes; created by Tools when nil.
@@ -306,7 +306,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "get_message_log", Title: "Get one message processing log",
-			Description: "Details of one message: status, full error text, errorInformation (lastErrorModelStepId: the .iflw element where it failed), custom header properties, adapter attributes (e.g. HTTP status), attachments and persisted messages. Next: get_message_steps for the failing step, get_message_attachment / get_message_store_entry for payloads.",
+			Description: "Details of one message: status, full error text, errorInformation (lastErrorModelStepId: the .iflw element where it failed), custom header properties, adapter attributes (e.g. HTTP status), attachments and persisted messages. Next: include_steps for the failing step, get_message_content for payloads.",
 			InputSchema: object(props{"message_guid": str("Message GUID from list_message_logs")}, "message_guid"),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -423,10 +423,10 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		{
 			Name: "get_message_trace", Title: "List traced steps of a message",
 			Description: "Steps of a message that was processed with log level TRACE, with the trace IDs of the message at each step (optionally only one model step). " +
-				"Use it to see how the payload changed step by step; read one with get_trace_message. Empty with a hint when the flow was not on TRACE.",
+				"Use it to see how the payload changed step by step; read one with trace_id. Empty with a hint when the flow was not on TRACE.",
 			InputSchema: object(props{
 				"message_guid":  str("Message GUID"),
-				"model_step_id": str("Only this element of the .iflw model (modelStepId from get_message_steps)"),
+				"model_step_id": str("Only this element of the .iflw model (modelStepId from get_message_log with include_steps)"),
 			}, "message_guid"),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -509,7 +509,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"trace_id (traceId of send_test_message, or trace-id custom header): messages by ApplicationMessageId first; otherwise scans the scope (artifact_ids or package_id, and since) for the trace-id custom header, at most max_scan messages. " +
 				"message_guid (any message, e.g. a failed one): all messages with its correlation ID; with key_headers (custom header properties the flows write, such as an order number) messages with the same value join, " +
 				"with the rest of their run, so the path continues when the message left the tenant and came back (found by the custom header search; a scope narrows it; tenants without that search scan the scope). " +
-				"Hop links: span, predecessor, inferred (same correlation ID, by start time), header (joined by a key header). Next: get_message_steps for firstFailure.messageGuid.",
+				"Hop links: span, predecessor, inferred (same correlation ID, by start time), header (joined by a key header). Next: get_message_log with include_steps for firstFailure.messageGuid.",
 			InputSchema: object(props{
 				"trace_id":     str("32 hex characters"),
 				"message_guid": str("A message GUID: follow its correlation ID across flows"),
@@ -568,7 +568,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "list_runtime_artifacts", Title: "List deployed artifacts",
-			Description: "All artifacts deployed on the tenant with status, version and deployment time. Use statuses [\"ERROR\"] for a tenant-wide health check (includes error messages); for specific artifacts use get_runtime_status.",
+			Description: "All artifacts deployed on the tenant with status, version and deployment time. Use statuses [\"ERROR\"] for a tenant-wide health check (includes error messages); for specific artifacts use artifact_ids.",
 			InputSchema: object(props{"statuses": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"STARTED", "STARTING", "ERROR", "STOPPING"}}, "description": "Only artifacts in these runtime statuses (default: all)"}}),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -600,7 +600,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "validate_artifact", Title: "Validate an integration flow",
-			Description: "Tenant check of an uploaded integration flow (Check in the Web UI): model errors such as missing mandatory settings. Checks the designtime version on the tenant, not local files: run it after upload_artifact and before deploy. status PASSED or FAILED (errorCategory failed) with details.",
+			Description: "Tenant check of an uploaded integration flow (Check in the Web UI): model errors such as missing mandatory settings. Checks the designtime version on the tenant, not local files: run it after upload_artifacts and before deploy. status PASSED or FAILED (errorCategory failed) with details.",
 			InputSchema: object(props{"artifact_id": str("Integration flow ID"), "version": str(`Designtime version, default "active"`)}, "artifact_id"),
 			Annotations: map[string]any{"readOnlyHint": true, "openWorldHint": true},
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -687,7 +687,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "download_artifact", Title: "Download an artifact into a local directory",
-			Description: "Download a designtime artifact and extract it into a local directory inside the server root. Use it once before editing an existing artifact; then edit the files and upload_artifact. The directory must be empty unless overwrite=true.",
+			Description: "Download a designtime artifact and extract it into a local directory inside the server root. Use it once before editing an existing artifact; then edit the files and upload_artifacts. The directory must be empty unless overwrite=true.",
 			InputSchema: object(props{
 				"artifact_id":   str("Artifact ID"),
 				"artifact_type": enum(`Artifact type, default "Integration"`, cpi.ArtifactTypes...),
@@ -728,7 +728,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				`(["NEW"] for a flow with one sender address, else "OLD=NEW" each, OLD as in the source) unless keep_addresses: the same HTTP path or ProcessDirect ` +
 				"address fails the deployment, the same directory or queue makes both flows poll it. A value with \"=\" is always OLD=NEW. " +
 				"Use this instead of renaming files by hand. The result lists the changes and files that still mention the source ID (check them). " +
-				"Writes local files inside the server root only; next upload_artifact (name from the manifest), validate_artifact, deploy.",
+				"Writes local files inside the server root only; next upload_artifacts (name from the manifest), validate_artifact, deploy.",
 			InputSchema: object(props{
 				"from_artifact_id": str("Source flow ID on the tenant (read only)"),
 				"from_version":     str(`Version of the source on the tenant, default "active"`),
@@ -901,7 +901,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		{
 			Name: "layout_iflow", Title: "Lay out flow diagrams",
 			Description: "Recompute the diagram of local .iflw files (inside the server root): steps left to right in flow order, branches one below the other, exception subprocesses below the main flow, senders and receivers next to their steps, right-angled lines, no overlaps. " +
-				"Only the diagram changes, never steps, configuration or sequence flows. Call it after editing an .iflw and before upload_artifact, instead of placing shapes by hand. " +
+				"Only the diagram changes, never steps, configuration or sequence flows. Call it after editing an .iflw and before upload_artifacts, instead of placing shapes by hand. " +
 				"mode tidy (default) keeps the order of steps and branches, full also reorders branches; check only reports problems; dry_run writes nothing. Spacing from .cpi/lint.yaml (layout).",
 			InputSchema: object(props{
 				"paths":   strArray(".iflw files or directories (artifact, package, content tree) relative to the server root"),
@@ -1063,7 +1063,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 		},
 		{
 			Name: "create_package", Title: "Create an integration package",
-			Description: "Create an integration package if it does not exist (action CREATED or EXISTS; an existing package is never changed). Use it before upload_artifact of an artifact in a new package.",
+			Description: "Create an integration package if it does not exist (action CREATED or EXISTS; an existing package is never changed). Use it before upload_artifacts of an artifact in a new package.",
 			InputSchema: object(props{
 				"package_id":  str("Package ID: letters and digits only, no special characters"),
 				"name":        str("Display name, defaults to package_id"),
@@ -1116,8 +1116,9 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			},
 		},
 		{
-			Name: "upload_artifacts", Title: "Upload several artifacts",
-			Description: "upload_artifact for several artifacts in one call (in parallel): one result per artifact (action CREATED, UPDATED or UNCHANGED, or error). The packages must exist. dry_run only compares. Does not deploy.",
+			Name: "upload_artifacts", Title: "Upload artifacts",
+			Description: "Create or update designtime artifacts from local directories, several in parallel: one result per artifact (action CREATED, UPDATED or UNCHANGED, or error; SKIPPED with skipped \"draft\" when the tenant's artifact is in draft: someone edits it in the Web UI, it is not overwritten). " +
+				"The packages must exist (create_package); each directory needs META-INF/MANIFEST.MF and src/main/resources. dry_run only compares. Does not deploy: next validate_artifact, then deploy.",
 			InputSchema: object(props{
 				"artifacts": map[string]any{"type": "array", "description": "Artifacts to upload", "items": object(props{
 					"artifact_id": str("Artifact ID (must match Bundle-SymbolicName)"),
@@ -1230,7 +1231,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			Description: "Send a test message to an endpoint of a deployed integration flow (a URL the tenant lists for it, or below one: a longer url or path for senders that route on the path, e.g. SOAP /cxf/out/<anything>) and return the HTTP status, the response and the message GUID. " +
 				"Flows started by ProcessDirect are reached through the test harness flow with process_direct_address. " +
 				"With wait_seconds it also waits for the message processing log and returns it (status, error text, custom headers, attachments). " +
-				"This triggers real processing, including calls to receivers: use test data on a development tenant. On failure: get_message_steps with the message GUID.",
+				"This triggers real processing, including calls to receivers: use test data on a development tenant. On failure: get_message_log with include_steps and the message GUID.",
 			InputSchema: object(props{
 				"artifact_id":  str("Integration flow ID (deployed)"),
 				"url":          str("Endpoint URL from list_service_endpoints (or a URL below it: sub-path, query); only needed when the flow has several endpoints"),
@@ -1579,7 +1580,7 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			Name: "drift", Title: "Compare local artifacts with the tenant",
 			Description: "For each artifact of a local content tree (optionally one package folder): local Bundle-Version and content vs the designtime version and content on the tenant, and the runtime version. " +
 				"State in_sync, tenant_newer (someone edited on the tenant: download before you upload, or their change is lost), local_newer, diverged, not_on_tenant; runtimeOutdated when the deployed version differs. " +
-				"Run it before upload_artifact. Read-only; downloads each artifact.",
+				"Run it before upload_artifacts. Read-only; downloads each artifact.",
 			InputSchema: object(props{
 				"local_dir":  str("Local content directory, relative to the server root"),
 				"package_id": str("Only artifacts in this package folder"),

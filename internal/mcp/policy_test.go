@@ -131,8 +131,8 @@ func TestLoopCountsOnlyItsFailures(t *testing.T) {
 
 	// a historic failure of an artifact the loop uploaded counts too
 	l = ledgerAt(t, start)
-	l.after("upload_artifact", json.RawMessage(`{"artifact_id":"Billing_Post","package_id":"P","dir":"x"}`), nil, nil)
-	l.after("upload_artifact", json.RawMessage(`{"artifact_id":"Other","package_id":"P","dir":"x","dry_run":true}`), nil, nil)
+	l.after("upload_artifacts", json.RawMessage(`{"artifacts":[{"artifact_id":"Billing_Post","package_id":"P","dir":"x"}]}`), nil, nil)
+	l.after("upload_artifacts", json.RawMessage(`{"artifacts":[{"artifact_id":"Other","package_id":"P","dir":"x"}],"dry_run":true}`), nil, nil)
 	l.after("list_message_logs", args, failedLogs("Other", start.Add(-time.Hour)), nil)
 	assert.Empty(t, l.open.Errors, "a dry run touches nothing")
 	for range 2 {
@@ -272,7 +272,7 @@ func TestRedactorMasksNameValueLists(t *testing.T) {
 	assert.Equal(t, "4711", detail.CustomHeaderProperties[0].Value, "the original is unchanged")
 
 	steps := &ops.MessageSteps{Runs: []ops.MessageRunWithSteps{{Steps: []cpi.MessageRunStep{{StepID: "s", Properties: []cpi.NameValue{{Name: "api-key", Value: "k"}, {Name: "URL", Value: "u"}}}}}}}
-	m = applyJSON(t, r, "get_message_steps", steps)
+	m = applyJSON(t, r, "get_message_log", steps)
 	props := m["runs"].([]any)[0].(map[string]any)["steps"].([]any)[0].(map[string]any)["properties"].([]any)
 	assert.Equal(t, Masked, props[0].(map[string]any)["value"])
 	assert.Equal(t, "u", props[1].(map[string]any)["value"])
@@ -322,7 +322,7 @@ func TestRedactorRedactsPayloads(t *testing.T) {
 	r, err := NewRedactor("", nil, true)
 	require.NoError(t, err)
 	att := &ops.DownloadedContent{ID: "A1", Content: ops.NewContent([]byte("<secret/>"), 0)}
-	m := applyJSON(t, r, "get_message_attachment", att)
+	m := applyJSON(t, r, "get_message_content", att)
 	assert.Equal(t, RedactedPayload, m["text"])
 	assert.EqualValues(t, 9, m["size"])
 	sum := sha256.Sum256([]byte("<secret/>"))
@@ -330,7 +330,7 @@ func TestRedactorRedactsPayloads(t *testing.T) {
 	assert.Equal(t, true, m["redacted"])
 
 	bin := &ops.DownloadedContent{ID: "A2", Content: ops.NewContent([]byte{0xff, 0x00, 0x01}, 0)}
-	m = applyJSON(t, r, "get_message_store_entry", bin)
+	m = applyJSON(t, r, "get_message_content", bin)
 	assert.Nil(t, m["base64"])
 	assert.Equal(t, RedactedPayload, m["text"])
 
@@ -339,7 +339,7 @@ func TestRedactorRedactsPayloads(t *testing.T) {
 	assert.Equal(t, "println 1", m["text"], "resources are content, not payloads")
 
 	off, _ := NewRedactor("", nil, false)
-	assert.Same(t, att, off.Apply("get_message_attachment", att))
+	assert.Same(t, att, off.Apply("get_message_content", att))
 }
 
 func TestRedactorMakesPathsRootRelative(t *testing.T) {

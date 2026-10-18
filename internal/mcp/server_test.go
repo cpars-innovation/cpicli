@@ -157,7 +157,7 @@ func TestDeployAndStatusTools(t *testing.T) {
 	assert.Equal(t, "FAILED", results[1].(map[string]any)["status"])
 	assert.Contains(t, results[1].(map[string]any)["error"], "script error")
 
-	resp = session(t, mock, t.TempDir(), call(2, "get_runtime_status", map[string]any{"artifact_ids": []string{"A"}}))
+	resp = session(t, mock, t.TempDir(), call(2, "list_runtime_artifacts", map[string]any{"artifact_ids": []string{"A"}}))
 	res = toolResult(t, resp["2"])
 	assert.False(t, res.IsError)
 	assert.True(t, res.StructuredContent.OK)
@@ -170,7 +170,7 @@ func TestToolArgumentErrorsAreUsage(t *testing.T) {
 		call(1, "undeploy", map[string]any{"artifact_ids": []string{"A"}, "confirm": false}),
 		call(2, "deploy", map[string]any{"artifact_ids": []string{"A"}, "artifactIds": []string{"typo"}}),
 		call(3, "deploy", map[string]any{"artifact_ids": []string{}}),
-		call(4, "upload_artifact", map[string]any{"artifact_id": "A", "type": "Integration", "package_id": "P", "dir": "../../etc"}),
+		call(4, "upload_artifacts", map[string]any{"artifacts": []map[string]any{{"artifact_id": "A", "type": "Integration", "package_id": "P", "dir": "../../etc"}}}),
 		call(5, "deploy", map[string]any{"artifact_ids": []string{"A"}, "artifact_type": "Bogus"}),
 	)
 	for id := 1; id <= 5; id++ {
@@ -300,9 +300,9 @@ func TestContentTools(t *testing.T) {
 		call(4, "get_resource", map[string]any{"artifact_id": "A", "name": "s.groovy", "type": "groovy"}),
 		call(5, "download_artifact", map[string]any{"artifact_id": "A", "dir": "work/A"}),
 		call(6, "download_artifact", map[string]any{"artifact_id": "A", "dir": "../outside"}),
-		call(7, "get_message_steps", map[string]any{"message_guid": "g1"}),
-		call(8, "get_message_attachment", map[string]any{"attachment_id": "att-g1-in.xml"}),
-		call(9, "get_message_store_entry", map[string]any{"entry_id": "e1", "max_bytes": 5}),
+		call(7, "get_message_log", map[string]any{"message_guid": "g1", "include_steps": true}),
+		call(8, "get_message_content", map[string]any{"attachment_id": "att-g1-in.xml"}),
+		call(9, "get_message_content", map[string]any{"store_entry_id": "e1", "max_bytes": 5}),
 		call(10, "get_resource", map[string]any{"artifact_id": "A", "name": "s.groovy", "type": "groovy", "max_bytes": 99999999}),
 	)
 	v := toolResult(t, resp["1"])

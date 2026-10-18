@@ -25,10 +25,9 @@ const (
 // toolEffects classifies every tool. TestEveryToolHasAnEffect fails for a
 // tool missing here, so a new tool cannot slip into read-only servers.
 var toolEffects = map[string]Effect{
-	"list_packages": EffectRead, "list_artifacts": EffectRead, "get_runtime_status": EffectRead,
-	"list_message_logs": EffectRead, "get_message_log": EffectRead, "get_message_steps": EffectRead,
-	"get_message_attachment": EffectRead, "get_message_store_entry": EffectRead,
-	"get_message_trace": EffectRead, "get_trace_message": EffectRead,
+	"list_packages": EffectRead, "list_artifacts": EffectRead,
+	"list_message_logs": EffectRead, "get_message_log": EffectRead,
+	"get_message_trace":      EffectRead,
 	"list_runtime_artifacts": EffectRead, "list_service_endpoints": EffectRead,
 	"validate_artifact": EffectRead, "check_guidelines": EffectRead,
 	"list_resources": EffectRead, "get_resource": EffectRead,
@@ -37,7 +36,7 @@ var toolEffects = map[string]Effect{
 	"pd_dependencies": EffectRead, "config_diff": EffectRead,
 	"list_data_stores": EffectRead, "list_data_store_entries": EffectRead, "get_data_store_entry": EffectRead,
 	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "list_runtimes": EffectRead, "list_value_mappings": EffectRead, "get_value_mapping": EffectRead, "set_value_mapping": EffectTenant,
-	"delete_artifact": EffectTenant, "delete_package": EffectTenant, "list_components": EffectRead, "list_integration_connections": EffectRead, "get_tenant_settings": EffectRead, "download_log_archive": EffectLocal, "unlock_artifact": EffectTenant, "list_variables": EffectRead, "get_variable": EffectRead,
+	"delete_artifact": EffectTenant, "delete_package": EffectTenant, "list_components": EffectRead, "list_integration_connections": EffectRead, "get_tenant_settings": EffectRead, "download_log_archive": EffectLocal, "unlock_artifact": EffectTenant, "list_variables": EffectRead,
 	"list_jms_queues": EffectRead, "get_jms_broker": EffectRead, "list_number_ranges": EffectRead,
 	"list_jms_messages": EffectRead, "find_messages_by_header": EffectRead,
 	"retry_jms_messages": EffectTenant, "move_jms_messages": EffectTenant, "delete_jms_messages": EffectTenant, "set_jms_queue_state": EffectTenant,
@@ -52,7 +51,7 @@ var toolEffects = map[string]Effect{
 	"download_artifact": EffectLocal, "discover_tenant": EffectLocal, "copy_iflow": EffectLocal, "bump_versions": EffectLocal, "lint_fix": EffectLocal, "layout_iflow": EffectLocal,
 	"idoc_template": EffectLocal, "run_script_cases": EffectLocal,
 
-	"create_package": EffectTenant, "upload_artifact": EffectTenant, "upload_artifacts": EffectTenant, "set_parameters": EffectTenant,
+	"create_package": EffectTenant, "upload_artifacts": EffectTenant, "set_parameters": EffectTenant,
 	"deploy": EffectTenant, "undeploy": EffectTenant, "pd_deploy": EffectTenant,
 	"send_test_message": EffectTenant, "run_tests": EffectTenant, "run_script_cases_online": EffectTenant, "set_log_level": EffectTenant,
 	"install_test_tools": EffectTenant, "set_stub_response": EffectTenant,
@@ -87,7 +86,7 @@ const (
 // tenantClasses classifies every tenant tool. TestEveryToolHasAClass fails
 // for a tenant tool missing here.
 var tenantClasses = map[string]Class{
-	"create_package": ClassWrite, "upload_artifact": ClassWrite, "upload_artifacts": ClassWrite, "set_parameters": ClassWrite,
+	"create_package": ClassWrite, "upload_artifacts": ClassWrite, "set_parameters": ClassWrite,
 	"set_value_mapping": ClassWrite, "generate_key_pair": ClassWrite, "upload_certificate_chain": ClassWrite,
 	"create_access_policy": ClassWrite, "add_artifact_reference": ClassWrite, "create_alternative_partner": ClassWrite,
 	"create_authorized_user": ClassWrite, "set_stub_response": ClassWrite,
@@ -158,6 +157,9 @@ func Filter(tools []Tool, f ToolFilter) (kept []Tool, removed []string, err erro
 			return nil, nil, output.Usagef("invalid tool pattern %q", p)
 		}
 		if !slices.ContainsFunc(names, func(n string) bool { return match(p, n) }) {
+			if by, ok := removedTools[p]; ok {
+				return nil, nil, output.Usagef("tool %s was removed in cpictl 0.27.0: use %s", p, by)
+			}
 			return nil, nil, output.Usagef("tool pattern %q matches no tool (tools: %s)", p, strings.Join(names, ", "))
 		}
 	}

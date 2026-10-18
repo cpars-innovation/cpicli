@@ -311,6 +311,11 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		err := output.Usagef("tool %s is not available on this server: %s", p.Name, reason)
 		return s.result(ToolResult{ExitCode: exitcode.Usage, ErrorCategory: Category(exitcode.Usage), Error: err.Error()})
 	}
+	if by, ok := removedTools[p.Name]; ok && idx < 0 {
+		// a tool of an older cpictl: a normal error result that says what to use
+		err := output.Usagef("tool %s was removed in cpictl 0.27.0: use %s", p.Name, by)
+		return s.result(ToolResult{ExitCode: exitcode.Usage, ErrorCategory: Category(exitcode.Usage), Error: err.Error()})
+	}
 	if idx < 0 {
 		return nil, &rpcError{Code: codeInvalidParams, Message: "unknown tool: " + p.Name}
 	}

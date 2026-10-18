@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 	"strings"
@@ -12,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A tool that covers a deprecated payload tool redacts payloads too.
+// A tool that covers a removed payload tool redacts payloads too.
 func TestConsolidatedToolsKeepRedaction(t *testing.T) {
-	for old, by := range deprecatedTools {
+	for old, by := range removedTools {
 		if !slices.Contains(payloadTools, old) {
 			continue
 		}
@@ -23,21 +24,31 @@ func TestConsolidatedToolsKeepRedaction(t *testing.T) {
 	}
 }
 
-// Deprecated tools are not listed but still callable; the tools covering
-// them are listed.
-func TestDeprecatedToolsHidden(t *testing.T) {
+// Removed tools are not offered; a call names the replacement.
+func TestRemovedTools(t *testing.T) {
 	tools := Tools(Config{})
 	srv := NewServer("cpicli", "test", Instructions, tools)
 	listed := map[string]bool{}
 	for _, tl := range srv.listedTools() {
 		listed[tl.Name] = true
 	}
-	for old, by := range deprecatedTools {
+	for old, by := range removedTools {
 		assert.False(t, listed[old], "%s listed", old)
+		assert.False(t, slices.ContainsFunc(tools, func(tl Tool) bool { return tl.Name == old }), "%s offered", old)
 		replacement, _, _ := strings.Cut(by, " ")
 		assert.True(t, listed[replacement], "%s (replaces %s) not listed", replacement, old)
-		assert.True(t, slices.ContainsFunc(tools, func(tl Tool) bool { return tl.Name == old }), "%s still callable", old)
+		_, known := toolEffects[old]
+		assert.False(t, known, "%s still has an effect entry", old)
 	}
+	raw := json.RawMessage(`{"name":"get_message_steps","arguments":{"message_guid":"g1"}}`)
+	res, rpcErr := srv.callTool(context.Background(), raw)
+	require.Nil(t, rpcErr)
+	text := mustJSON(t, res)
+	assert.Contains(t, text, "removed in cpictl 0.27.0: use get_message_log with include_steps")
+	assert.Contains(t, text, `\"errorCategory\":\"usage\"`)
+
+	_, _, err := ApplyFilters(tools, "", ToolFilter{Allow: []string{"get_message_steps"}})
+	assert.ErrorContains(t, err, "removed in cpictl 0.27.0: use get_message_log")
 }
 
 // The merged tools do what the deprecated ones did.
