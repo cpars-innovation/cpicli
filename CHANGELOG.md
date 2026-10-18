@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.23.0
+
 - **Partner Directory binaries can be inspected: `pd get --inspect` (#30).**
   - Shows the type the bytes really are, with a mismatch flag when it is not the declared type.
   - Decompresses gz and zlib, and lists zip entries (`--zip-entry` reads and inspects one).
