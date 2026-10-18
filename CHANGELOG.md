@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **JSON schemas of all results (#32):** `schemas/` has a JSON Schema (2020-12) for the
+  `--output json` envelope and for the `result` of every command, generated from the Go types the
+  commands return. `schemas/index.json` lists them, and releases attach
+  `cpictl_<version>_schemas.tar.gz`.
+  - Tests check real outputs against the schemas.
+  - A breaking change to a result (a removed field, a changed type, a field no longer always
+    present) needs a new `schemaVersion`.
+
 - **Skills list their inputs in the front matter (`inputs:`, #35)** in the format CPI Studio uses to
   ask for them in one form ([docs/plugin.md](docs/plugin.md#skill-inputs)). Each skill's text
   names the same inputs, and the agent asks only for the missing ones.

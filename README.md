@@ -280,6 +280,17 @@ With `--output json` stdout receives exactly one JSON document and stderr receiv
 removed or changes meaning. Go code calling `pkg/ops` gets the same classes from
 `ops.ErrorCategory(err)` and `ops.ExitCode(err)`.
 
+**JSON schemas** of the envelope and of every command's `result` are in
+[`schemas/`](schemas/) (JSON Schema 2020-12). Each release attaches them as
+`cpictl_<version>_schemas.tar.gz`.
+- `schemas/index.json` maps each command to its file (`pd get` is `pd_get.json`), and
+  `envelope.json` describes the envelope.
+- The schemas are generated from the Go types the commands return, and tests check real outputs
+  against them.
+- A field that may be missing is not in `required`, and a field that may be `null` says so.
+- A removed field, a changed type, or a field that is no longer always present raises
+  `schemaVersion`. New fields don't.
+
 Progress for a display (Studio, a CI step) comes as events with `--events <file>` (or `--events -`
 for stderr, next to the log lines): one JSON object per line with `schemaVersion`, `seq`, `time`,
 `command`, `event` and `data`. `start` opens the stream, `item` reports one artifact as soon as

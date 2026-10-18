@@ -121,6 +121,7 @@ dist: ## Build release archives for all platforms into dist/ (VERSION=v1.2.3)
 		fi; \
 		rm -rf $(RELEASE_DIR)/$$name; \
 	done
+	@tar -czf $(RELEASE_DIR)/$(BINARY_NAME)_$(VERSION)_schemas.tar.gz schemas
 	@cd $(RELEASE_DIR) && sha256sum *.tar.gz *.zip > SHA256SUMS
 	@echo "Release archives in $(RELEASE_DIR):" && ls -1 $(RELEASE_DIR)
 
