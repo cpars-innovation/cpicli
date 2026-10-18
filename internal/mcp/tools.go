@@ -1874,7 +1874,10 @@ func resolvePath(root, p string) (string, error) {
 		}
 		target = filepath.Join(absRoot, target)
 	}
-	target = evalExisting(filepath.Clean(target))
+	target, err = evalExisting(filepath.Clean(target))
+	if err != nil {
+		return "", output.Usagef("path %q cannot be resolved: %v", p, err)
+	}
 	if resolvedRoot, err := filepath.EvalSymlinks(absRoot); err == nil {
 		absRoot = resolvedRoot
 	}
@@ -1889,15 +1892,22 @@ func resolvePath(root, p string) (string, error) {
 // the longest existing part of p and appends the rest: a file that does not
 // exist yet must compare with the resolved root like an existing one
 // (macOS /var -> /private/var, Windows RUNNER~1 -> runneradmin).
-func evalExisting(p string) string {
+//
+// An entry that exists but does not resolve (a dangling symbolic link) is an
+// error: writing through it would create its target, wherever that is.
+func evalExisting(p string) (string, error) {
 	rest := ""
 	for dir := p; ; {
-		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-			return filepath.Join(resolved, rest)
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err == nil {
+			return filepath.Join(resolved, rest), nil
+		}
+		if _, lerr := os.Lstat(dir); lerr == nil {
+			return "", err
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return p
+			return p, nil
 		}
 		rest = filepath.Join(filepath.Base(dir), rest)
 		dir = parent

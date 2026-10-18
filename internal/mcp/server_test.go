@@ -228,8 +228,15 @@ func TestResolvePath(t *testing.T) {
 		assert.Error(t, err, bad)
 	}
 	// a symlink pointing outside the root is rejected too
-	cpitest.Symlink(t, "/etc", filepath.Join(root, "link"))
+	outside := t.TempDir()
+	cpitest.Symlink(t, outside, filepath.Join(root, "link"))
 	_, err = resolvePath(root, "link")
+	assert.Error(t, err)
+	_, err = resolvePath(root, filepath.Join("link", "new.txt"))
+	assert.Error(t, err, "a new file below it too")
+	// and one that points nowhere: writing through it would create its target
+	cpitest.Symlink(t, filepath.Join(outside, "missing"), filepath.Join(root, "dangling"))
+	_, err = resolvePath(root, "dangling")
 	assert.Error(t, err)
 }
 
