@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.25.0
+
 - **CLI: grouped names for four commands (from the review in #37).**
 
   | Now | Before (still works) |
