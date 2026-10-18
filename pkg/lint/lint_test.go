@@ -281,10 +281,22 @@ func TestRules(t *testing.T) {
 	assert.Equal(t, SevError, findingsOf(res, "hardcoded-secret", "FlowC")[0].Severity)
 	has("outdated-component", "FlowD", 1)
 	has("default-step-name", "FlowA", 1)
+	lines := 0
 	for _, f := range res.Findings {
 		assert.NotEmpty(t, f.Fingerprint)
 		assert.NotEmpty(t, f.Group)
+		if f.Line == 0 {
+			continue
+		}
+		lines++
+		data, err := os.ReadFile(filepath.Join(root, f.Path, f.File))
+		require.NoError(t, err)
+		text := strings.Split(string(data), "\n")
+		require.Less(t, f.Line-1, len(text))
+		assert.Contains(t, text[f.Line-1], `id="`+f.Element+`"`, "%s: line %d", f.Rule, f.Line)
 	}
+	assert.NotZero(t, lines, "findings on flow steps carry their line")
+	assert.Zero(t, findingsOf(res, "unused-resource", "FlowA")[0].Line, "no element: no line")
 }
 
 func TestConfigScopeAndBaseline(t *testing.T) {

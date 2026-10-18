@@ -2878,11 +2878,13 @@ Show the Partner Directory parameters of a partner ID on the tenant
 **Flags:**
 
 ```
-      --content         Include binary content
-      --key strings     Only these parameter IDs (repeatable)
-      --max-bytes int   Maximum bytes returned in the JSON result (default 65536; 0 with --out: unlimited)
-      --out string      Write the content to this file instead of stdout / the JSON result
-      --pid string      Partner ID
+      --content            Include binary content
+      --inspect            Inspect binaries: detected type, gz/zlib content, zip entries, certificates
+      --key strings        Only these parameter IDs (repeatable)
+      --max-bytes int      Maximum bytes returned in the JSON result (default 65536; 0 with --out: unlimited)
+      --out string         Write the content to this file instead of stdout / the JSON result
+      --pid string         Partner ID
+      --zip-entry string   With --inspect: read and inspect this zip entry
 ```
 
 **Examples:**
@@ -2890,6 +2892,8 @@ Show the Partner Directory parameters of a partner ID on the tenant
 ```
   cpictl pd get --pid ONE_OMS
   cpictl pd get --pid ONE_OMS --key now_email --content
+  cpictl pd get --pid ONE_OMS --key partner_cert --inspect
+  cpictl pd get --pid ONE_OMS --key mappings --inspect --zip-entry map/a.xsl
 ```
 
 ## pd list

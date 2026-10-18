@@ -426,3 +426,49 @@ func (c *Catalog) Save(path string) error {
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
+
+// Match is the catalogue entry Find found: an adapter or a step variant.
+type Match struct {
+	Adapter *Adapter `json:"adapter,omitempty"`
+	Step    *Step    `json:"step,omitempty"`
+}
+
+// Version is the matched entry's version.
+func (m Match) Version() string {
+	if m.Adapter != nil {
+		return m.Adapter.Version
+	}
+	if m.Step != nil {
+		return m.Step.Version
+	}
+	return ""
+}
+
+// Find returns the entry for a cmdVariantUri in any version, matched as
+// cpictl matches variants (without the version, the "sap:" prefix of the
+// component name and the vendor SAP). An entry from the editor metadata
+// wins over a learned one.
+func (c *Catalog) Find(uri string) (Match, bool) {
+	k := variantKey(uri)
+	var learned Match
+	found := false
+	for i := range c.Adapters {
+		if variantKey(c.Adapters[i].VariantURI) == k {
+			if c.Adapters[i].Source == SourceEditor {
+				return Match{Adapter: &c.Adapters[i]}, true
+			}
+			learned, found = Match{Adapter: &c.Adapters[i]}, true
+		}
+	}
+	for i := range c.Steps {
+		if variantKey(c.Steps[i].VariantURI) == k {
+			if c.Steps[i].Source == SourceEditor {
+				return Match{Step: &c.Steps[i]}, true
+			}
+			if !found {
+				learned, found = Match{Step: &c.Steps[i]}, true
+			}
+		}
+	}
+	return learned, found
+}

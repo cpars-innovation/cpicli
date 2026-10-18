@@ -44,6 +44,15 @@ func TestGetPDParameters(t *testing.T) {
 	require.Len(t, res.Binaries, 1)
 	assert.Equal(t, "<xsl:stylesheet/>", res.Binaries[0].Content.Text)
 	assert.Equal(t, []string{"nope"}, res.Missing)
+
+	res, err = GetPDParametersWith(api, "ONE_OMS", []string{"now_email"}, PDGetOptions{Inspect: &PDInspectOptions{}})
+	require.NoError(t, err)
+	in := res.Binaries[0].Inspection
+	require.NotNil(t, in)
+	assert.Equal(t, "xml", in.DetectedType, "no XSLT namespace")
+	assert.False(t, in.Mismatch, "plausible for xsl")
+	assert.Equal(t, "<xsl:stylesheet/>", in.Text)
+	assert.Nil(t, res.Binaries[0].Content)
 }
 
 func writeLocalPD(t *testing.T) string {

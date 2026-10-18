@@ -109,3 +109,40 @@ func FilterComponents(c *catalog.Catalog, name, kind, direction string) *Compone
 	}
 	return res
 }
+
+// ImportComponents builds a catalogue from the Web UI's editor metadata
+// (cpictl components import) and keeps what old, the catalogue it replaces
+// (nil: none), learned from flows, with the date it was learned. tenant
+// names the tenant the metadata is from (empty: old's).
+func ImportComponents(old *catalog.Catalog, data []byte, tenant string) (*catalog.Catalog, error) {
+	cat, err := catalog.Import(data)
+	if err != nil {
+		return nil, err
+	}
+	if old != nil {
+		var uses []catalog.Use
+		for _, a := range old.Adapters {
+			if a.Source == catalog.SourceLearned {
+				uses = append(uses, catalog.Use{URI: a.VariantURI, Adapter: a.Name, Direction: a.Direction})
+			}
+		}
+		for _, s := range old.Steps {
+			if s.Source == catalog.SourceLearned {
+				uses = append(uses, catalog.Use{URI: s.VariantURI, Type: s.Type})
+			}
+		}
+		cat.Learn(uses)
+		cat.Tenant = old.Tenant
+		// re-adding the learned entries does not make them newer
+		if d, ok := old.SourceDates[catalog.SourceLearned]; ok {
+			cat.SourceDates[catalog.SourceLearned] = d
+		} else {
+			delete(cat.SourceDates, catalog.SourceLearned)
+		}
+	}
+	if tenant != "" {
+		cat.Tenant = tenant
+	}
+	cat.GeneratedAt = time.Now().UTC().Truncate(time.Second)
+	return cat, nil
+}

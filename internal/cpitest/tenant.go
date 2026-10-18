@@ -174,6 +174,28 @@ type PDBinary struct {
 	Content     []byte
 }
 
+// pdChange is when a Partner Directory parameter was created and last
+// changed, and by whom.
+type pdChange struct {
+	CreatedBy, LastModifiedBy     string
+	CreatedTime, LastModifiedTime time.Time
+}
+
+// Seeded Partner Directory parameters (not written through the API) report
+// this user and time.
+const pdSeedUser = "mock-seed"
+
+var pdSeedTime = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// requestUser is the user a request authenticates as (Basic user, else the
+// mock's OAuth client).
+func requestUser(r *http.Request) string {
+	if u, _, ok := r.BasicAuth(); ok && u != "" {
+		return u
+	}
+	return "sb-mock-client!b1|it!b2"
+}
+
 // Package is an integration package of the mock tenant.
 type Package struct {
 	ID, Name, Version string
@@ -281,6 +303,10 @@ type Tenant struct {
 	// "<pid>/<id>".
 	PDStrings  map[string]string
 	PDBinaries map[string]PDBinary
+	// pdMeta: who changed a Partner Directory parameter when ("String:" or
+	// "Binary:" + PID/ID); parameters set directly in PDStrings/PDBinaries
+	// report pdSeedUser at pdSeedTime.
+	pdMeta map[string]pdChange
 	// XSLT transforms for the emulated XSLT test flow (testtools.XSLTID):
 	// the stylesheet from the Partner Directory, the input and the
 	// stylesheet parameters (headers and properties). The mock runs no
@@ -614,6 +640,9 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 	if m.PDBinaries == nil {
 		m.PDBinaries = map[string]PDBinary{}
 	}
+	if m.pdMeta == nil {
+		m.pdMeta = map[string]pdChange{}
+	}
 	row := func(kind, key string) map[string]string {
 		pid, id, _ := strings.Cut(key, "/")
 		row := map[string]string{"Pid": pid, "Id": id, "Value": m.PDStrings[key]}
@@ -621,8 +650,20 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 			b := m.PDBinaries[key]
 			row = map[string]string{"Pid": pid, "Id": id, "ContentType": b.ContentType, "Value": base64.StdEncoding.EncodeToString(b.Content)}
 		}
-		if sel := r.URL.Query().Get("$select"); sel != "" && !slices.Contains(strings.Split(sel, ","), "Value") {
-			delete(row, "Value") // $select without Value: the content is not sent
+		meta, ok := m.pdMeta[kind+":"+key]
+		if !ok {
+			meta = pdChange{CreatedBy: pdSeedUser, LastModifiedBy: pdSeedUser, CreatedTime: pdSeedTime, LastModifiedTime: pdSeedTime}
+		}
+		row["CreatedBy"], row["CreatedTime"] = meta.CreatedBy, odataDate(meta.CreatedTime)
+		row["LastModifiedBy"], row["LastModifiedTime"] = meta.LastModifiedBy, odataDate(meta.LastModifiedTime)
+		if sel := r.URL.Query().Get("$select"); sel != "" {
+			// only the selected properties, as the tenant answers
+			fields := strings.Split(sel, ",")
+			for k := range row {
+				if !slices.Contains(fields, k) {
+					delete(row, k)
+				}
+			}
 		}
 		return row
 	}
@@ -637,13 +678,20 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 	store := func(kind, key string, body map[string]string) bool {
 		if kind == "String" {
 			m.PDStrings[key] = body["Value"]
-			return true
+		} else {
+			content, err := base64.StdEncoding.DecodeString(body["Value"])
+			if err != nil {
+				return false
+			}
+			m.PDBinaries[key] = PDBinary{ContentType: body["ContentType"], Content: content}
 		}
-		content, err := base64.StdEncoding.DecodeString(body["Value"])
-		if err != nil {
-			return false
+		now, user := time.Now().UTC().Truncate(time.Millisecond), requestUser(r)
+		meta, ok := m.pdMeta[kind+":"+key]
+		if !ok || r.Method == http.MethodPost {
+			meta = pdChange{CreatedBy: user, CreatedTime: now}
 		}
-		m.PDBinaries[key] = PDBinary{ContentType: body["ContentType"], Content: content}
+		meta.LastModifiedBy, meta.LastModifiedTime = user, now
+		m.pdMeta[kind+":"+key] = meta
 		return true
 	}
 	if mm := rePDCollection.FindStringSubmatch(r.URL.Path); mm != nil {
@@ -733,6 +781,7 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 		} else {
 			delete(m.PDBinaries, key)
 		}
+		delete(m.pdMeta, kind+":"+key)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

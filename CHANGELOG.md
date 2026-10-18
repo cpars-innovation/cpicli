@@ -5,6 +5,30 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Partner Directory binaries can be inspected: `pd get --inspect` (#30).**
+  - Shows the type the bytes really are, with a mismatch flag when it is not the declared type.
+  - Decompresses gz and zlib, and lists zip entries (`--zip-entry` reads and inspects one).
+  - Parses certificates: subject, issuer, validity and days left, key, SANs and fingerprints.
+  - Bounded against zip bombs, standard library only.
+  - Go: `ops.InspectPDBinary` and `ops.GetPDParametersWith`. MCP: `get_pd_parameters` with
+    `inspect` and `zip_entry`.
+- **Lint findings carry the line of their element** (`line`, 1-based, in `file`; #31).
+- **Component catalogue as a Go API (#28):**
+  - `ops.ImportComponents(old, data, tenant)` is what `components import` does: it keeps the
+    learned entries and their date.
+  - `Catalog.Find(uri)` returns the entry for a `cmdVariantUri` with cpictl's variant matching.
+- **Mock tenant: Partner Directory parameters carry `CreatedBy`, `CreatedTime`, `LastModifiedBy`
+  and `LastModifiedTime` like the real tenant,** and `$select` returns only the selected fields
+  (#34).
+- **`cpi-discover` skill:** the naming table of `.cpi/conventions.md` starts with the anchored
+  regex of each rule, and the skill writes the flow ID rule into `.cpi/lint.yaml` (#36).
+
+### Fixed
+
+- **Custom CAs added to `http.DefaultTransport` after start are used (#25).** cpictl cloned the
+  default transport once, when the package was loaded; now it clones it per client. To set your own
+  CAs or proxy explicitly, pass `httpclnt.Options.HTTPClient`.
+
 ## 0.22.0
 
 - **Backups for disaster recovery: `cpictl backup create | verify | diff` ([docs/backup.md](docs/backup.md)).**

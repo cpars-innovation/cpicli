@@ -142,3 +142,26 @@ func TestSourceDates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, c.SourceDates, back.SourceDates)
 }
+
+func TestFind(t *testing.T) {
+	c := importFixture(t)
+	c.Learn([]Use{
+		{URI: "ctype::FlowstepVariant/cname::XmlModifier/version::1.1.0"},
+		{URI: "ctype::AdapterVariant/cname::JMS/tp::Not Applicable/mp::Not Applicable/direction::Receiver/version::1.0.0"},
+	})
+	m, ok := c.Find("ctype::AdapterVariant/cname::HTTP/tp::HTTP/mp::None/direction::Receiver/version::1.2.0")
+	require.True(t, ok)
+	require.NotNil(t, m.Adapter)
+	assert.Equal(t, "1.22.0", m.Version(), "any version, without sap:")
+	m, ok = c.Find("ctype::AdapterVariant/cname::sap:JMS/tp::Not Applicable/mp::Not Applicable/direction::Receiver")
+	require.True(t, ok)
+	assert.Equal(t, SourceEditor, m.Adapter.Source, "the editor entry wins")
+	m, ok = c.Find("ctype::FlowstepVariant/cname::XmlModifier")
+	require.True(t, ok)
+	require.NotNil(t, m.Step)
+	assert.Equal(t, SourceLearned, m.Step.Source)
+	assert.Equal(t, "1.1.0", m.Version())
+	_, ok = c.Find("ctype::FlowstepVariant/cname::Unknown")
+	assert.False(t, ok)
+	assert.Equal(t, "", Match{}.Version())
+}

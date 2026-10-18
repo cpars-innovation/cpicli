@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/config"
@@ -24,12 +25,19 @@ func NewPDCommand() *cobra.Command {
 		Use:   "get",
 		Short: "Show the Partner Directory parameters of a partner ID on the tenant",
 		Example: `  cpictl pd get --pid ONE_OMS
-  cpictl pd get --pid ONE_OMS --key now_email --content`,
+  cpictl pd get --pid ONE_OMS --key now_email --content
+  cpictl pd get --pid ONE_OMS --key partner_cert --inspect
+  cpictl pd get --pid ONE_OMS --key mappings --inspect --zip-entry map/a.xsl`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content, _ := cmd.Flags().GetBool("content")
-			res, err := ops.GetPDParameters(cpi.NewPartnerDirectory(tenantExecuter(cmd)), config.GetString(cmd, "pid"),
-				config.GetStringSlice(cmd, "key"), content, contentLimit(cmd))
+			opts := ops.PDGetOptions{IncludeContent: content, MaxBytes: contentLimit(cmd)}
+			if inspect, _ := cmd.Flags().GetBool("inspect"); inspect {
+				entry, _ := cmd.Flags().GetString("zip-entry")
+				opts.Inspect = &ops.PDInspectOptions{ZipEntry: entry, TextBytes: max(opts.MaxBytes, 0)}
+			}
+			res, err := ops.GetPDParametersWith(cpi.NewPartnerDirectory(tenantExecuter(cmd)), config.GetString(cmd, "pid"),
+				config.GetStringSlice(cmd, "key"), opts)
 			if err != nil {
 				return err
 			}
@@ -39,6 +47,7 @@ func NewPDCommand() *cobra.Command {
 			}
 			for _, b := range res.Binaries {
 				log.Info().Msgf("binary %-30s %s, %d bytes, sha256 %s", b.ID, b.ContentType, b.Size, b.SHA256)
+				logPDInspection("  ", b.Inspection)
 			}
 			for _, k := range res.Missing {
 				log.Warn().Msgf("%s not found", k)
@@ -49,6 +58,8 @@ func NewPDCommand() *cobra.Command {
 	get.Flags().String("pid", "", "Partner ID")
 	get.Flags().StringSlice("key", nil, "Only these parameter IDs (repeatable)")
 	get.Flags().Bool("content", false, "Include binary content")
+	get.Flags().Bool("inspect", false, "Inspect binaries: detected type, gz/zlib content, zip entries, certificates")
+	get.Flags().String("zip-entry", "", "With --inspect: read and inspect this zip entry")
 	addContentFlags(get)
 	_ = get.MarkFlagRequired("pid")
 
@@ -120,4 +131,45 @@ directory are listed as unknown. Nothing is read from the tenant.`,
 	c.AddCommand(get, diff, deps)
 	c.AddCommand(pdPartnerCommands()...)
 	return c
+}
+
+// logPDInspection logs what InspectPDBinary found (nil: nothing).
+func logPDInspection(indent string, in *ops.PDInspection) {
+	if in == nil {
+		return
+	}
+	msg := "detected " + in.DetectedType
+	if in.Mismatch {
+		msg += " (declared " + in.DeclaredType + ")"
+	}
+	if in.Truncated {
+		msg += ", cut"
+	}
+	if in.Mismatch {
+		log.Warn().Msg(indent + msg)
+	} else {
+		log.Info().Msg(indent + msg)
+	}
+	for _, c := range in.Certificates {
+		state := fmt.Sprintf("valid until %s (%d days)", c.NotAfter.Format("2006-01-02"), c.DaysLeft)
+		if c.Expired {
+			state = "expired " + c.NotAfter.Format("2006-01-02")
+		}
+		log.Info().Msgf("%scertificate %s, issuer %s, %s", indent, c.Subject, c.Issuer, state)
+	}
+	for _, e := range in.Entries {
+		log.Info().Msgf("%s%-40s %d bytes", indent, e.Name, e.Size)
+	}
+	if in.EntriesTruncated {
+		log.Info().Msg(indent + "... more entries")
+	}
+	for _, w := range in.Warnings {
+		log.Warn().Msg(indent + w)
+	}
+	if in.Inner != nil {
+		logPDInspection(indent+"  ", in.Inner)
+	}
+	if in.Entry != nil {
+		logPDInspection(indent+"  ", in.Entry)
+	}
 }

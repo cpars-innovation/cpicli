@@ -2,6 +2,7 @@ package ops
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -29,4 +30,32 @@ func TestLearnComponentsFromDiscovery(t *testing.T) {
 	back, err := catalog.Load(file)
 	require.NoError(t, err)
 	assert.Equal(t, c.Adapters, back.Adapters)
+}
+
+func TestImportComponentsKeepsLearned(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "catalog", "testdata", "editor-metadata.json"))
+	require.NoError(t, err)
+	old := &catalog.Catalog{Tenant: "old"}
+	old.Learn([]catalog.Use{{URI: "ctype::FlowstepVariant/cname::XmlModifier/version::1.1.0"}})
+	learnedAt := old.SourceDates[catalog.SourceLearned]
+	require.False(t, learnedAt.IsZero())
+
+	c, err := ImportComponents(old, data, "")
+	require.NoError(t, err)
+	assert.Equal(t, "old", c.Tenant)
+	m, ok := c.Find("ctype::FlowstepVariant/cname::XmlModifier")
+	require.True(t, ok)
+	assert.Equal(t, "1.1.0", m.Version())
+	assert.Equal(t, learnedAt, c.SourceDates[catalog.SourceLearned], "re-adding does not make learned entries newer")
+	assert.Contains(t, c.SourceDates, catalog.SourceEditor)
+
+	c, err = ImportComponents(nil, data, "t1")
+	require.NoError(t, err)
+	assert.Equal(t, "t1", c.Tenant)
+	_, ok = c.Find("ctype::FlowstepVariant/cname::XmlModifier")
+	assert.False(t, ok)
+	assert.NotContains(t, c.SourceDates, catalog.SourceLearned)
+
+	_, err = ImportComponents(old, []byte(`{}`), "")
+	assert.Error(t, err)
 }

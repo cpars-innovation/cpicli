@@ -6,6 +6,10 @@
 
 ## Naming
 
+<!-- Convention: the rule in words, then the anchored regular expression of the IDs (and names) that
+     follow it in a code span, e.g. "<Domain><System>, `^[A-Z]{2}[A-Z0-9]{2,4}$`". Tools read the
+     first `^…$` code span of the cell to check new IDs; leave it out where no regular pattern exists. -->
+
 | What | Convention | Strength | Examples |
 |------|------------|----------|----------|
 | Package ID | | | |

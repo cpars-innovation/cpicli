@@ -1454,6 +1454,9 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				"keys":            strArray("Only these parameter IDs"),
 				"include_content": boolean("Return binary content (text inline, else base64; default false)"),
 				"max_bytes":       maxBytesSchema(),
+				"inspect": boolean("Inspect binaries (default false): the type the bytes really are (mismatch flag), gz/zlib content, zip entries, " +
+					"certificates (subject, issuer, expiry, days left, fingerprints). Bounded; text cut at max_bytes"),
+				"zip_entry": str("With inspect: read and inspect this zip entry"),
 			}, "pid"),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -1462,6 +1465,8 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 					Keys           []string `json:"keys"`
 					IncludeContent bool     `json:"include_content"`
 					MaxBytes       int      `json:"max_bytes"`
+					Inspect        bool     `json:"inspect"`
+					ZipEntry       string   `json:"zip_entry"`
 				}
 				if err := decode(raw, &a); err != nil {
 					return nil, err
@@ -1469,7 +1474,11 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if err := checkMaxBytes(a.MaxBytes); err != nil {
 					return nil, err
 				}
-				return ops.GetPDParameters(cpi.NewPartnerDirectory(cfg.Exe), a.Pid, a.Keys, a.IncludeContent, a.MaxBytes)
+				opts := ops.PDGetOptions{IncludeContent: a.IncludeContent, MaxBytes: a.MaxBytes}
+				if a.Inspect {
+					opts.Inspect = &ops.PDInspectOptions{ZipEntry: a.ZipEntry, TextBytes: cmp.Or(a.MaxBytes, 65536)}
+				}
+				return ops.GetPDParametersWith(cpi.NewPartnerDirectory(cfg.Exe), a.Pid, a.Keys, opts)
 			},
 		},
 		{

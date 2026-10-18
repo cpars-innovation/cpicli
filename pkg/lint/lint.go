@@ -3,6 +3,7 @@
 package lint
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -53,8 +54,11 @@ type Finding struct {
 	File        string `json:"file,omitempty"`
 	Element     string `json:"element,omitempty"`
 	ElementName string `json:"elementName,omitempty"`
-	Message     string `json:"message"`
-	Suggestion  string `json:"suggestion,omitempty"`
+	// Line is the 1-based line of Element in File (0: unknown, e.g. a
+	// finding about the whole file).
+	Line       int    `json:"line,omitempty"`
+	Message    string `json:"message"`
+	Suggestion string `json:"suggestion,omitempty"`
 	// Fixable: lint --fix can apply the suggestion.
 	Fixable bool `json:"fixable,omitempty"`
 	// Related are other artifacts involved (e.g. flows with the same script).
@@ -418,11 +422,13 @@ func runLint(ctx context.Context, o Options) (*Result, *lintContext, error) {
 		return nil, nil, err
 	}
 	min := severityRank[o.MinSeverity]
+	lines := elementLines{dir: o.Dir}
 	for _, f := range all {
 		if lc.ignored(f) || severityRank[f.Severity] < min {
 			continue
 		}
 		f.Baseline = known[f.Fingerprint]
+		f.Line = lines.of(f)
 		res.Findings = append(res.Findings, f)
 		res.Counts[f.Severity]++
 		res.ByRule[f.Rule]++
@@ -444,6 +450,33 @@ func runLint(ctx context.Context, o Options) (*Result, *lintContext, error) {
 		return a.key < b.key
 	})
 	return res, lc, nil
+}
+
+// elementLines finds the line of a finding's element in its file: the first
+// line with id="<element>". Files are read once.
+type elementLines struct {
+	dir   string
+	files map[string][]byte
+}
+
+func (l *elementLines) of(f Finding) int {
+	if f.File == "" || f.Element == "" {
+		return 0
+	}
+	name := filepath.Join(l.dir, filepath.FromSlash(f.Path), filepath.FromSlash(f.File))
+	data, ok := l.files[name]
+	if !ok {
+		data, _ = os.ReadFile(name)
+		if l.files == nil {
+			l.files = map[string][]byte{}
+		}
+		l.files[name] = data
+	}
+	i := bytes.Index(data, []byte(`id="`+f.Element+`"`))
+	if i < 0 {
+		return 0
+	}
+	return bytes.Count(data[:i], []byte{'\n'}) + 1
 }
 
 func (lc *lintContext) enabled(r lintRule) bool {

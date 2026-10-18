@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"cmp"
 	"errors"
 	"io"
 	"io/fs"
@@ -58,35 +57,12 @@ Entries from the editor metadata win over learned ones.`,
 			if err != nil {
 				return output.Usage(err)
 			}
-			cat, err := catalog.Import(data)
+			file := componentsFile(cmd)
+			old, _ := catalog.Load(file) // nil when there is none: nothing learned to keep
+			cat, err := ops.ImportComponents(old, data, config.GetString(cmd, "tenant"))
 			if err != nil {
 				return output.Usage(err)
 			}
-			file := componentsFile(cmd)
-			// keep what was learned before
-			if old, err := catalog.Load(file); err == nil {
-				var uses []catalog.Use
-				for _, a := range old.Adapters {
-					if a.Source == catalog.SourceLearned {
-						uses = append(uses, catalog.Use{URI: a.VariantURI, Adapter: a.Name, Direction: a.Direction})
-					}
-				}
-				for _, s := range old.Steps {
-					if s.Source == catalog.SourceLearned {
-						uses = append(uses, catalog.Use{URI: s.VariantURI, Type: s.Type})
-					}
-				}
-				cat.Learn(uses)
-				cat.Tenant = old.Tenant
-				// re-adding the learned entries does not make them newer
-				if d, ok := old.SourceDates[catalog.SourceLearned]; ok {
-					cat.SourceDates[catalog.SourceLearned] = d
-				} else {
-					delete(cat.SourceDates, catalog.SourceLearned)
-				}
-			}
-			cat.Tenant = cmp.Or(config.GetString(cmd, "tenant"), cat.Tenant)
-			cat.GeneratedAt = time.Now().UTC().Truncate(time.Second)
 			if err := saveCatalog(cat, file); err != nil {
 				return err
 			}

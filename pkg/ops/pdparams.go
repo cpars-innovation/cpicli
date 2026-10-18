@@ -29,6 +29,18 @@ type PDBinary struct {
 	Size        int      `json:"size"`
 	SHA256      string   `json:"sha256"`
 	Content     *Content `json:"content,omitempty"`
+	// Inspection only with PDGetOptions.Inspect.
+	Inspection *PDInspection `json:"inspection,omitempty"`
+}
+
+// PDGetOptions are the options of GetPDParametersWith.
+type PDGetOptions struct {
+	// IncludeContent returns binary content, cut at MaxBytes (see
+	// NewContent).
+	IncludeContent bool
+	MaxBytes       int
+	// Inspect runs InspectPDBinary on every binary with these options.
+	Inspect *PDInspectOptions
 }
 
 // PDParameters are the parameters of one partner ID.
@@ -44,6 +56,11 @@ type PDParameters struct {
 // Binary content is returned only with includeContent (truncated to max
 // bytes, see NewContent); otherwise size and SHA-256 identify it.
 func GetPDParameters(api *cpi.PartnerDirectory, pid string, keys []string, includeContent bool, max int) (*PDParameters, error) {
+	return GetPDParametersWith(api, pid, keys, PDGetOptions{IncludeContent: includeContent, MaxBytes: max})
+}
+
+// GetPDParametersWith is GetPDParameters with binaries inspected on request.
+func GetPDParametersWith(api *cpi.PartnerDirectory, pid string, keys []string, opts PDGetOptions) (*PDParameters, error) {
 	if pid == "" {
 		return nil, output.Usagef("pid is required")
 	}
@@ -69,9 +86,12 @@ func GetPDParameters(api *cpi.PartnerDirectory, pid string, keys []string, inclu
 			return nil, fmt.Errorf("binary parameter %s/%s: invalid base64 value: %w", pid, p.ID, err)
 		}
 		b := PDBinary{ID: p.ID, ContentType: p.ContentType, Size: len(data), SHA256: sha256Hex(data)}
-		if includeContent {
-			c := NewContent(data, max)
+		if opts.IncludeContent {
+			c := NewContent(data, opts.MaxBytes)
 			b.Content = &c
+		}
+		if opts.Inspect != nil {
+			b.Inspection, _ = InspectPDBinary(data, p.ContentType, *opts.Inspect)
 		}
 		res.Binaries = append(res.Binaries, b)
 		found[p.ID] = true

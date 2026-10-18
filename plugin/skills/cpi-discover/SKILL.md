@@ -85,6 +85,16 @@ The summary contains counts, not rules. Then **look at examples** to understand 
 Start from [conventions-template.md](conventions-template.md). For every rule:
 
 - State it as an instruction ("Package IDs: `<Domain><System>`, e.g. `SDS4`"; package IDs allow letters and digits only).
+- In the **Naming** table, end each Convention cell that has a regular pattern with its anchored
+  regular expression in a code span, e.g. "Domain, source, target, object:
+  `^[A-Z]{2}_[A-Za-z0-9]+_[A-Za-z0-9]+_[A-Za-z0-9]+$`".
+  Tools (CPI Studio's creation wizard, reviews) read the first `^…$` span of the cell and check
+  new IDs and names against it, so it must match every example in the row and the flows the rule
+  counts: test it against the IDs in discovery.json before you write it. Use only `^ $ [] () | ? * + {}`
+  and `\d`; no lookarounds. No regex for a row without a regular pattern (write "unknown"), and none
+  for an **observed** rule.
+  Put the Integration flow ID regex of a **rule** also into `.cpi/lint.yaml` (`naming: {iflowId: '<regex>'}`),
+  so `lint` reports flows that don't follow it.
 - Give the evidence: how many flows follow it and one or two example IDs.
 - Mark the strength: **rule** (≥ 80 % of the flows), **common** (≥ 50 %), **observed**
   (less, or contradicting variants). Never promote a minority pattern to a rule.

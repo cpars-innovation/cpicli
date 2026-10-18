@@ -98,7 +98,7 @@ func NewWithOptions(o Options) *HTTPExecuter {
 	e := &HTTPExecuter{host: o.Host, scheme: o.Scheme, port: o.Port, showLogs: o.ShowLogs, csrf: &csrf{}}
 	base := o.HTTPClient
 	if base == nil {
-		base = &http.Client{Timeout: DefaultTimeout, Transport: secureTransport}
+		base = &http.Client{Timeout: DefaultTimeout, Transport: secureTransport()}
 	}
 	if o.OAuthHost != "" {
 		if e.showLogs {
@@ -268,13 +268,27 @@ func (e *HTTPExecuter) ReadRespBody(resp *http.Response) ([]byte, error) {
 // payloads): a misbehaving endpoint cannot exhaust memory.
 var MaxResponseBytes int64 = 1 << 30
 
-// secureTransport is the default transport with TLS 1.2 as the minimum; it
-// keeps the proxy settings of the environment.
-var secureTransport = func() *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+// secureTransport is http.DefaultTransport as it is when the executer is
+// created, with TLS 1.2 as the minimum. It keeps everything else of it: the
+// proxy settings of the environment and the trusted CAs a program added
+// (RootCAs of its TLSClientConfig, e.g. a company CA). A program that
+// replaced http.DefaultTransport with another RoundTripper gets that one as
+// it is; ServiceDetails.HTTPClient / Options.HTTPClient pass a client of
+// your own instead.
+func secureTransport() http.RoundTripper {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return http.DefaultTransport
+	}
+	t := base.Clone() // clones TLSClientConfig too
+	if t.TLSClientConfig == nil {
+		t.TLSClientConfig = &tls.Config{}
+	}
+	if t.TLSClientConfig.MinVersion < tls.VersionTLS12 {
+		t.TLSClientConfig.MinVersion = tls.VersionTLS12
+	}
 	return t
-}()
+}
 
 // HTTPError is returned for tenant responses with an unexpected status code.
 // Its message is kept identical to the historic plain error string because

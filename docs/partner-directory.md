@@ -80,10 +80,20 @@ for string and binary parameters.
 ```bash
 cpictl pd get --pid ONE_OMS                          # tenant values (binaries: type, size, sha256)
 cpictl pd get --pid ONE_OMS --key now_email --content
+cpictl pd get --pid ONE_OMS --key partner_cert --inspect   # what the bytes are, certificate expiry
 cpictl pd diff --resources-path ./partner-directory  # create / update / unchanged / remote_only
 cpictl pd-deploy --keys ONE_OMS:now_email --dry-run  # then without --dry-run
 ```
 
+- `pd get --inspect` looks inside binaries (Go: `ops.InspectPDBinary`, MCP: `get_pd_parameters`
+  with `inspect`):
+  - the type the bytes really are, with `mismatch` when it is not the declared content type;
+  - gz and zlib decompressed, zip entries listed (`--zip-entry` reads and inspects one);
+  - certificates: subject, issuer, serial, validity and days left, key, SANs, SHA-1 and SHA-256
+    fingerprints, every certificate of a PEM chain.
+
+  It is bounded against zip bombs (16 MiB decompressed, 1000 entries, 3 levels of nesting) and
+  writes nothing to disk.
 - `pd diff` shows what `pd-deploy` would change; `remote_only` parameters are the ones
   `--full-sync` would delete. A PID whose local files cannot be read is an error (exit 7), never
   "empty".
