@@ -1,9 +1,35 @@
 ---
 name: cpi-build
 description: Build or change an SAP Cloud Integration flow and get it deployed - edit the flow's files locally (.iflw model, scripts, mappings, parameters), upload, validate, deploy and fix until the runtime starts it, following .cpi/conventions.md and the plan in .cpi/plans. Use when the user asks to implement, change, fix or deploy an integration flow.
+inputs:
+  - id: flowId
+    label: Flow ID
+    kind: text
+    required: true
+    checks: [naming]
+    help: The flow to build or change.
+  - id: package
+    label: Package
+    kind: select
+    source: packages
+    checks: [package-exists]
+  - id: plan
+    label: Plan
+    kind: text
+    help: Path of the plan, e.g. .cpi/plans/<FlowId>.md (default for the flow ID).
+  - id: tier
+    label: Development tenant
+    kind: select
+    source: tiers
+    help: Never a productive tenant.
 ---
 
 # Build an integration flow
+
+**Inputs:** flow ID (`flowId`, required); package (`package`); plan (`plan`); development tenant (`tier`). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 Work on local files in the repository and use the cpi MCP tools to move them to the tenant.
 Read [iflow-structure.md](iflow-structure.md) before editing a model for the first time, and

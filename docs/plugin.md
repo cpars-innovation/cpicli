@@ -58,6 +58,29 @@ orders fail?"), or called directly, e.g. `/cpi:cpi-discover`. To see what is ava
 `/skills` in Claude Code, ask "what can the cpi server do?" (the MCP tool `help` lists tools,
 skills and workflows), or `cpictl skills list` in a terminal.
 
+### Skill inputs
+
+Each skill lists the inputs it needs in its front matter, so a tool such as CPI Studio can ask for
+the missing ones in one form before the skill starts. The skill's text names the same inputs,
+and the agent asks only for what is still missing.
+
+```yaml
+inputs:
+  - id: flowId                 # camelCase, unique in the skill
+    label: Flow ID
+    kind: text                 # text, select, multiselect or boolean (no secrets)
+    required: true
+    default: ...               # optional; one of options for a select
+    help: The flow to build or change.
+    pattern: '^[A-Z][A-Za-z0-9_]*$'   # optional, for text
+    options: [change, flow]    # fixed choices, or:
+    source: packages           # packages, artifactTypes, templates or tiers (filled by the tool)
+    checks: [naming]           # artifact-id-free, package-id-free, package-exists, naming
+```
+
+Claude Code ignores the field. A test in the repository checks every skill's inputs against this
+format.
+
 Why a reviewer *agent* and the rest as skills: planning, building and testing are
 conversations with you and need the full context of the task, so they run in the main
 session. A review is better done by someone who did not write the code: the agent starts

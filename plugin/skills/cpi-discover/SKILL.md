@@ -2,9 +2,20 @@
 name: cpi-discover
 description: Discover how an SAP Cloud Integration tenant builds its integration flows (naming, adapters, error handling, logging, scripts, parameters) and write the repository's conventions file .cpi/conventions.md. Use when a repository has no .cpi/conventions.md yet, when the user asks to analyse, onboard or learn a tenant, or to refresh the conventions after the tenant changed.
 allowed-tools: Read Write Edit Glob Grep mcp__plugin_cpi_cpi__discover_tenant mcp__plugin_cpi_cpi__list_packages mcp__plugin_cpi_cpi__list_artifacts mcp__plugin_cpi_cpi__list_resources mcp__plugin_cpi_cpi__get_resource mcp__plugin_cpi_cpi__get_parameters mcp__plugin_cpi_cpi__list_credentials mcp__plugin_cpi_cpi__list_runtime_artifacts mcp__plugin_cpi_cpi__graph_search mcp__plugin_cpi_cpi__graph_neighbors mcp__plugin_cpi_cpi__graph_path mcp__plugin_cpi_cpi__list_components mcp__plugin_cpi_cpi__list_integration_connections
+inputs:
+  - id: packages
+    label: Representative packages
+    kind: multiselect
+    source: packages
+    help: Packages whose flows show the house style. Empty means all, except SAP standard content.
 ---
 
 # Discover a tenant's conventions
+
+**Inputs:** representative packages (`packages`). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 Every tenant has its own house style. The other cpi skills (plan, build, test, review) follow
 `.cpi/conventions.md` in the repository. This skill writes the first version of that file from

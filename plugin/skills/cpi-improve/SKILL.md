@@ -1,9 +1,30 @@
 ---
 name: cpi-improve
 description: Find and apply improvements across SAP Cloud Integration flows - all packages, a package or single flows. Runs lint (reuse, Partner Directory candidates, dead weight, simplification, robustness, performance, configuration, hygiene), groups the findings into proposals such as moving shared scripts into script collections, routing tables into the Partner Directory or removing unused steps, writes them to .cpi/improvements, and after approval applies them one proposal at a time (lint_fix for mechanical changes, cpi-build for the rest), then tests and reviews. Use when the user asks to clean up, refactor, harmonise or improve flows, reduce duplication, or check best practices across many flows.
+inputs:
+  - id: scope
+    label: Scope
+    kind: select
+    required: true
+    options: [all, packages, flows]
+    default: packages
+  - id: packages
+    label: Packages
+    kind: multiselect
+    source: packages
+    help: With scope packages.
+  - id: flowIds
+    label: Flows
+    kind: text
+    help: With scope flows; flow IDs, comma-separated.
 ---
 
 # Improve integration flows
+
+**Inputs:** scope (`scope`, required, all / packages / flows, default packages); packages (`packages`); flows (`flowIds`). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 Two phases: **propose** (read only) and, after the user approves, **apply** (one proposal at a
 time). Never change files or the tenant before the user has approved a proposal.

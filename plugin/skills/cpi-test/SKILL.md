@@ -1,9 +1,27 @@
 ---
 name: cpi-test
 description: Set up and run tests of a deployed SAP Cloud Integration flow - write test cases with sample messages under .cpi/tests/<FlowId>/, run them with run_tests (HTTP status, message status, response, custom headers, steps, receiver stub calls), and diagnose failures down to the failing step. Use after a deployment, when the user asks to test a flow, to add test cases, or to find out why messages fail.
+inputs:
+  - id: flowId
+    label: Flow ID
+    kind: text
+    required: true
+  - id: tier
+    label: Development tenant
+    kind: select
+    source: tiers
+  - id: installTools
+    label: Install the test tooling if missing
+    kind: boolean
+    default: false
 ---
 
 # Test an integration flow
+
+**Inputs:** flow ID (`flowId`, required); development tenant (`tier`); install the test tooling if missing (`installTools`, default false). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 Tests run against a deployed flow on a **development tenant** and trigger real processing,
 including calls to receivers. Check `.cpi/conventions.md` (Testing) for receivers that must

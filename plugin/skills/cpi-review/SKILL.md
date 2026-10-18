@@ -1,9 +1,26 @@
 ---
 name: cpi-review
 description: Review an SAP Cloud Integration flow or a change to one against .cpi/conventions.md, the plan, the tenant's check and design guidelines and general CPI good practice, and report findings by severity. Use when the user asks for a review, before a release or transport, or after cpi-build finished a larger change.
+inputs:
+  - id: flowIds
+    label: Flows to review
+    kind: text
+    required: true
+    help: One or more flow IDs, comma-separated.
+  - id: scope
+    label: Review
+    kind: select
+    options: [change, flow]
+    default: change
+    help: change reviews the uncommitted or last change, flow the whole flow.
 ---
 
 # Review an integration flow
+
+**Inputs:** flows to review (`flowIds`, required); review (`scope`, change / flow, default change). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 Delegate the review to the **cpi-reviewer** agent so that it judges the result with a fresh
 context and read-only tools. Give it:

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 const pluginDir = "../../plugin"
@@ -97,4 +98,68 @@ func readJSON(t *testing.T, path string, v any) {
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(data, v), path)
+}
+
+// skillInput is one entry of a skill's inputs front matter (the format CPI
+// Studio reads to ask for the inputs in one form).
+type skillInput struct {
+	ID       string   `yaml:"id"`
+	Label    string   `yaml:"label"`
+	Kind     string   `yaml:"kind"`
+	Required bool     `yaml:"required"`
+	Default  any      `yaml:"default"`
+	Help     string   `yaml:"help"`
+	Pattern  string   `yaml:"pattern"`
+	Options  []string `yaml:"options"`
+	Source   string   `yaml:"source"`
+	Checks   []string `yaml:"checks"`
+}
+
+func TestSkillInputs(t *testing.T) {
+	kinds := []string{"text", "select", "multiselect", "boolean"}
+	sources := []string{"packages", "artifactTypes", "templates", "tiers"}
+	checks := []string{"artifact-id-free", "package-id-free", "package-exists", "naming"}
+	frontmatter := regexp.MustCompile(`(?s)^---\n(.*?)\n---\n`)
+	skills, err := filepath.Glob(filepath.Join(pluginDir, "skills", "*", "SKILL.md"))
+	require.NoError(t, err)
+	for _, f := range skills {
+		data, err := os.ReadFile(f)
+		require.NoError(t, err)
+		var fm struct {
+			Inputs []skillInput `yaml:"inputs"`
+		}
+		dec := yaml.NewDecoder(strings.NewReader(string(frontmatter.FindSubmatch(data)[1])))
+		require.NoError(t, dec.Decode(&fm), f)
+		require.NotEmpty(t, fm.Inputs, "%s lists its inputs", f)
+		seen := map[string]bool{}
+		for _, in := range fm.Inputs {
+			where := f + " " + in.ID
+			assert.Regexp(t, `^[a-z][A-Za-z0-9]*$`, in.ID, where)
+			assert.False(t, seen[in.ID], "%s: duplicate", where)
+			seen[in.ID] = true
+			assert.NotEmpty(t, in.Label, where)
+			assert.Contains(t, kinds, in.Kind, "%s: no secret or other kinds", where)
+			if in.Kind == "select" || in.Kind == "multiselect" {
+				assert.True(t, len(in.Options) > 0 || in.Source != "", "%s: options or source", where)
+			}
+			if in.Source != "" {
+				assert.Contains(t, sources, in.Source, where)
+			}
+			for _, c := range in.Checks {
+				assert.Contains(t, checks, c, where)
+			}
+			if in.Pattern != "" {
+				_, err := regexp.Compile(in.Pattern)
+				assert.NoError(t, err, where)
+			}
+			if in.Default != nil && len(in.Options) > 0 {
+				assert.Contains(t, in.Options, in.Default, "%s: default is an option", where)
+			}
+			if in.Kind == "boolean" && in.Default != nil {
+				assert.IsType(t, true, in.Default, where)
+			}
+			// the body names the input too (the model may not see the front matter)
+			assert.Contains(t, string(data), "(`"+in.ID+"`", "%s: listed under **Inputs:**", where)
+		}
+	}
 }

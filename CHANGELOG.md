@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Skills list their inputs in the front matter (`inputs:`, #35)** in the format CPI Studio uses to
+  ask for them in one form ([docs/plugin.md](docs/plugin.md#skill-inputs)). Each skill's text
+  names the same inputs, and the agent asks only for the missing ones.
+
 - **Error groups of `logs summary` / `message_summary` show when they happened (#27):**
   - `occurrences` lists the time and message GUID per failure, and `buckets` counts them per time
     bucket (`--buckets`, default 24).

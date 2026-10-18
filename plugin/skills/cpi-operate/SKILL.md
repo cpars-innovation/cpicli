@@ -1,9 +1,29 @@
 ---
 name: cpi-operate
 description: Operate an SAP Cloud Integration tenant - find out what is failing and why, follow a message by its business key across flows, handle messages waiting in JMS queues (inspect, retry, move), check runtime errors, edit locks, expiring certificates, integration connections and tenant settings, and collect logs. Use when the user asks why messages fail, what is stuck, about the health of a tenant, about a specific order or document number, or to clean up after an incident.
+inputs:
+  - id: tier
+    label: Tenant
+    kind: select
+    source: tiers
+    required: true
+  - id: question
+    label: What do you want to know?
+    kind: text
+    help: A failing flow, a business key (order, invoice number) or "what is failing".
+  - id: window
+    label: Time window
+    kind: select
+    options: [1h, 4h, 24h, 7d]
+    default: 4h
 ---
 
 # Operate a tenant
+
+**Inputs:** tenant (`tier`, required); what do you want to know (`question`); time window (`window`, 1h / 4h / 24h / 7d, default 4h). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 Monitoring and incident handling on a deployed landscape. Read first, change only what the user
 agreed to, one change at a time, and say what you did. On a productive tenant every change

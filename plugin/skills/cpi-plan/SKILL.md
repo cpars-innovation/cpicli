@@ -1,9 +1,30 @@
 ---
 name: cpi-plan
 description: Plan a new or changed SAP Cloud Integration flow before building it - clarify the interface (sender, receiver, protocols, payloads, mapping, error handling, volumes), decide the package, IDs and steps according to .cpi/conventions.md, and write the design to .cpi/plans/<FlowId>.md. Use when the user describes an integration requirement or asks for a design, an estimate or "how would we build ...".
+inputs:
+  - id: requirement
+    label: What should the flow do?
+    kind: text
+    required: true
+    help: Sender, receiver, trigger and the business purpose, or the path of a brief in .cpi/briefs.
+  - id: package
+    label: Package
+    kind: select
+    source: packages
+    help: Leave empty to let the plan propose one from the conventions.
+  - id: flowId
+    label: Flow ID
+    kind: text
+    checks: [artifact-id-free, naming]
+    help: Leave empty to let the plan propose one from the naming conventions.
 ---
 
 # Plan an integration flow
+
+**Inputs:** what should the flow do (`requirement`, required); package (`package`); flow ID (`flowId`). The same list is in the front matter (`inputs`) for tools
+such as CPI Studio, which ask for them in one form. Use the values the user or the calling tool
+already gave, find the rest yourself where you can, and ask only for what is still missing, in
+one question.
 
 The goal is a design that the cpi-build skill can implement without guessing, and that the
 user has agreed to. Do not touch the tenant in this phase except for read-only lookups.
