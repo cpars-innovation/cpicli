@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.28.0
+
 - **Security material audit.** Passwords, tokens and keys belong in the secure store and the
   keystore; new checks find them elsewhere ([lint.md](docs/lint.md#security-material)):
   - New lint rules (group `security`) follow values read from the SecureStoreService
