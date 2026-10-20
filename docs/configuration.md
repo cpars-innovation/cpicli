@@ -173,6 +173,27 @@ packages you see and may change.
 gateway: https://gw.example.com/t/dev      # the gateway and the SAP tenant name
 ```
 
+Sign in once with Entra ID and cpictl keeps and refreshes the token for you:
+
+```yaml
+# ~/.cpictl/dev.yaml
+gateway: https://gw.example.com/t/dev      # the gateway and the SAP tenant name
+login:
+  tenantId: <entra directory id>           # the gateway's Entra tenant
+  clientId: <public-client app>            # the app registration cpictl signs in as
+  scope: api://<gateway app>/access        # the gateway's API scope (string or list)
+```
+
+```bash
+cpictl --profile dev login                 # opens a browser (or: --device-code)
+cpictl --profile dev packages              # uses the stored token, refreshed silently
+cpictl --profile dev logout                # clears the stored token
+```
+
+The token is stored per profile under `$HOME/.cpictl/tokens/<profile>.json` (mode `0600`) and refreshed with the
+refresh token, so a long-running `cpictl mcp` session does not stop working after an hour. Without a `login` block,
+or before the first `login`, cpictl falls back to the `CPICTL_GATEWAY_TOKEN` environment variable:
+
 ```bash
 export CPICTL_GATEWAY_TOKEN=...            # your access token for the gateway
 cpictl --profile dev packages
@@ -181,13 +202,13 @@ cpictl --profile dev packages
 | Flag | Environment variable | Description |
 |------|----------------------|-------------|
 | `--gateway` | `CPICTL_GATEWAY` | Gateway URL including `/t/<SAP tenant>` |
-| — | `CPICTL_GATEWAY_TOKEN` | Your token (never a flag or a config file) |
+| — | `CPICTL_GATEWAY_TOKEN` | Your token when not signed in (never a flag or a config file) |
 
 - `--gateway` excludes `--oauth-*` and `--tmn-userid`: in gateway mode the gateway holds the key.
-- A project `cpictl.yaml` must not set `gateway` (it would choose where your token is sent): set it in the profile
-  or `$HOME/cpictl.yaml`.
-- Not yet in gateway mode: `cpictl login` / `logout` / `whoami` with the token in the OS keychain (until then the
-  environment variable), and test messages (`send`), which still use the runtime settings above.
+- A project `cpictl.yaml` must not set `gateway` or `login` (they choose where your token is sent and where you
+  sign in): set them in the profile or `$HOME/cpictl.yaml`.
+- Not yet in gateway mode: `whoami`, an OS-keychain token store (the `0600` file is the fallback), and test
+  messages (`send`), which still use the runtime settings above.
 
 ## Global flags
 

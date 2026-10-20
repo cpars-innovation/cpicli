@@ -95,7 +95,13 @@ type Options struct {
 	// BasePath prefixes every request path (the gateway's /t/<tenant>); the
 	// guard of a local scope still sees the tenant's own paths.
 	BearerToken string
-	BasePath    string
+	// BearerTokenSource, when set, supplies the bearer for every request and
+	// is preferred over BearerToken: oauth2 fetches a token from it per
+	// request and refreshes it silently, so a long-running session (e.g.
+	// cpictl mcp) does not fail when the first token expires. Used in gateway
+	// mode with a token from cpictl login.
+	BearerTokenSource oauth2.TokenSource
+	BasePath          string
 }
 
 // New returns an initialised HTTPExecuter instance.
@@ -111,6 +117,14 @@ func NewWithOptions(o Options) *HTTPExecuter {
 	base := o.HTTPClient
 	if base == nil {
 		base = &http.Client{Timeout: DefaultTimeout, Transport: secureTransport()}
+	}
+	if o.BearerTokenSource != nil {
+		// oauth2's transport attaches the bearer and refreshes it per
+		// request; e.bearer stays empty so Exec does not also set the header.
+		client := oauth2.NewClient(context.WithValue(context.Background(), oauth2.HTTPClient, base), o.BearerTokenSource)
+		client.Timeout, client.Jar = base.Timeout, base.Jar
+		e.httpClient, e.AuthType = client, "BEARER"
+		return e
 	}
 	if o.BearerToken != "" {
 		e.httpClient, e.bearer, e.AuthType = base, o.BearerToken, "BEARER"

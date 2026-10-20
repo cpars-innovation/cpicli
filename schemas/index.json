@@ -366,6 +366,16 @@
       "typed": true
     },
     {
+      "command": "login",
+      "file": "login.json",
+      "typed": true
+    },
+    {
+      "command": "logout",
+      "file": "logout.json",
+      "typed": true
+    },
+    {
       "command": "logs",
       "file": "logs.json",
       "typed": true

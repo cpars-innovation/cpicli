@@ -117,6 +117,8 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewIFlowCommand())
 	rootCmd.AddCommand(NewSkillsCommand())
 	rootCmd.AddCommand(NewVersionCommand())
+	rootCmd.AddCommand(NewLoginCommand())
+	rootCmd.AddCommand(NewLogoutCommand())
 	rootCmd.AddCommand(NewDriftCommand())
 	rootCmd.AddCommand(NewDataStoreCommand())
 	rootCmd.AddCommand(NewLocksCommand())
@@ -556,6 +558,11 @@ func checkProjectConfig(files []configFile) error {
 	// must not choose where
 	if project.v.InConfig("gateway") {
 		return fmt.Errorf("%s contains gateway: set it in the profile or $HOME/cpictl.yaml (a repository file must not choose where your token is sent)", project.path)
+	}
+	// login decides which Entra tenant and app the user authenticates to: a
+	// repository file must not choose where sign-in goes
+	if project.v.InConfig("login") {
+		return fmt.Errorf("%s contains login: set it in the profile or $HOME/cpictl.yaml (a repository file must not choose where you sign in)", project.path)
 	}
 	if home == nil {
 		return nil
