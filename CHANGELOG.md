@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`cpictl login` / `logout` for gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)): sign in
+  with Entra ID in the browser (or `--device-code` on a headless host); the token is kept per profile and refreshed
+  silently, so a long-running `cpictl mcp` keeps working past the first token's hour. `CPICTL_GATEWAY_TOKEN` still
+  works without a login. A project `cpictl.yaml` may not set `login`.
+
 ## 0.29.0
 
 **Who is affected:** only users of an access scope (`--scope-file`, `--scope-*`, MCP servers started

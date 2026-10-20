@@ -40,8 +40,10 @@ func loginConfig() (auth.Config, bool) {
 func NewLoginCommand() *cobra.Command {
 	var deviceCode bool
 	cmd := &cobra.Command{
-		Use:   "login",
-		Short: "Sign in to the cpictl gateway with Entra ID",
+		// no tenant call: signing in only talks to Entra
+		Annotations: map[string]string{annotationOffline: "true"},
+		Use:         "login",
+		Short:       "Sign in to the cpictl gateway with Entra ID",
 		Long: `Sign in to the cpictl gateway with Entra ID and store the token for the
 active profile, so cpictl (and cpictl mcp) talk to the gateway as you without a
 CPI service key. The token is refreshed silently; run again if sign-in expires.
@@ -104,6 +106,7 @@ By default a browser opens for sign-in; use --device-code on a headless host.`,
 // NewLogoutCommand clears the stored login token for the active profile.
 func NewLogoutCommand() *cobra.Command {
 	return &cobra.Command{
+		Annotations:  map[string]string{annotationOffline: "true"},
 		Use:          "logout",
 		Short:        "Clear the stored cpictl gateway login token for the active profile",
 		SilenceUsage: true,

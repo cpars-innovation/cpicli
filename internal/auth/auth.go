@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"runtime"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -30,6 +32,25 @@ type Config struct {
 
 // PublicCloud is the default Entra authority.
 const PublicCloud = "https://login.microsoftonline.com/"
+
+// Validate refuses an authority that is not https (plain http only on
+// loopback, for tests): sign-in codes and tokens must not travel unencrypted.
+func (c Config) Validate() error {
+	if c.Authority == "" {
+		return nil
+	}
+	u, err := url.Parse(c.Authority)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("login.authority %q is not a URL", c.Authority)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	if ip := net.ParseIP(u.Hostname()); u.Scheme == "http" && (u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback())) {
+		return nil
+	}
+	return fmt.Errorf("login.authority %q must use https", c.Authority)
+}
 
 func (c Config) endpoint() oauth2.Endpoint {
 	base := c.Authority
@@ -56,6 +77,9 @@ func (c Config) oauth2Config(redirect string) *oauth2.Config {
 // command opens the browser and prints the URL there, a test drives it. It
 // returns when Entra redirects back, the context is cancelled, or visit fails.
 func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) error) (*oauth2.Token, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("opening a loopback listener for the sign-in redirect: %w", err)
@@ -75,7 +99,19 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 		err  error
 	}
 	ch := make(chan result, 1)
-	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// one answer only, and only on /callback: a browser's favicon request or
+	// another local process must neither block nor decide the sign-in
+	send := func(res result) {
+		select {
+		case ch <- res:
+		default:
+		}
+	}
+	srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/callback" {
+			http.NotFound(w, r)
+			return
+		}
 		q := r.URL.Query()
 		switch {
 		case q.Get("error") != "":
@@ -83,13 +119,13 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 			if d := q.Get("error_description"); d != "" {
 				msg += ": " + d
 			}
-			ch <- result{err: fmt.Errorf("sign-in refused: %s", msg)}
+			send(result{err: fmt.Errorf("sign-in refused: %s", msg)})
 			http.Error(w, "Sign-in failed. You can close this tab.", http.StatusBadRequest)
 		case q.Get("state") != state:
-			ch <- result{err: fmt.Errorf("sign-in state did not match: possible cross-site request")}
+			send(result{err: fmt.Errorf("sign-in state did not match: possible cross-site request")})
 			http.Error(w, "Sign-in failed. You can close this tab.", http.StatusBadRequest)
 		default:
-			ch <- result{code: q.Get("code")}
+			send(result{code: q.Get("code")})
 			fmt.Fprintln(w, "Signed in to cpictl. You can close this tab and return to the terminal.")
 		}
 	})}
@@ -119,6 +155,9 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 // verification URL and code to display; the call then blocks until the user
 // finishes, the code expires, or the context is cancelled.
 func LoginDeviceCode(ctx context.Context, c Config, show func(*oauth2.DeviceAuthResponse)) (*oauth2.Token, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
 	conf := c.oauth2Config("")
 	da, err := conf.DeviceAuth(ctx)
 	if err != nil {

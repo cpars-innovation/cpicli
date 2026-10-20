@@ -689,8 +689,11 @@ func initializeConfig(cmd *cobra.Command) error {
 		switch {
 		case hasAuth:
 			return output.Usagef("--gateway and SAP credentials (--oauth-host, --tmn-userid) exclude each other: in gateway mode the gateway holds the key")
-		case os.Getenv(gatewayTokenEnv) == "":
-			return output.Usagef("gateway mode: set %s to your token for %s", gatewayTokenEnv, gw)
+		case os.Getenv(gatewayTokenEnv) == "" && gatewayTokenSource(cmd) == nil:
+			if _, ok := loginConfig(); ok {
+				return output.Usagef("gateway mode: not signed in, run cpictl login (or set %s)", gatewayTokenEnv)
+			}
+			return output.Usagef("gateway mode: set %s to your token for %s, or configure login and run cpictl login", gatewayTokenEnv, gw)
 		}
 		// http is only honoured on loopback (ParseHost): never a token in clear text
 		if _, host, _, path := cpi.ParseGateway(gw); host == "" || path == "" {

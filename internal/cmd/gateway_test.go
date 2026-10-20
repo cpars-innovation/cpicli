@@ -96,4 +96,40 @@ func TestGatewayMode(t *testing.T) {
 		assert.NotEqual(t, 0, code)
 		assert.Contains(t, stderr, "must not choose where your token is sent")
 	})
+
+	t.Run("signed in with cpictl login: the stored token, no environment variable", func(t *testing.T) {
+		home := t.TempDir()
+		login := "login:\n  tenantId: tid\n  clientId: cid\n  scope: api://gw/access\n  authority: http://127.0.0.1:1/\n"
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n"+login, 0o600)
+		t.Setenv(gatewayTokenEnv, "")
+
+		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "undeploy", "--artifact-ids", "A")
+		assert.Equal(t, 2, code)
+		assert.Contains(t, stderr, "not signed in, run cpictl login")
+
+		// what cpictl login stores (unexpired: no refresh call)
+		writeModeFile(t, filepath.Join(home, ".cpictl", "tokens", "gw.json"),
+			`{"access_token":"user-token","token_type":"Bearer","refresh_token":"r","expiry":"2099-01-01T00:00:00Z"}`, 0o600)
+		before := len(seen())
+		code, stderr = projectRun(t, home, t.TempDir(), "--profile", "gw", "undeploy", "--artifact-ids", "A")
+		assert.Equal(t, 0, code, stderr)
+		require.Greater(t, len(seen()), before)
+		for _, s := range seen()[before:] {
+			assert.True(t, strings.HasPrefix(s, "Bearer user-token "), s)
+		}
+		assert.NotContains(t, stderr, "user-token", "the token is never logged")
+
+		code, stderr = projectRun(t, home, t.TempDir(), "--profile", "gw", "logout")
+		assert.Equal(t, 0, code, stderr)
+		assert.NoFileExists(t, filepath.Join(home, ".cpictl", "tokens", "gw.json"))
+	})
+
+	t.Run("login refuses a sign-in address without https", func(t *testing.T) {
+		home := t.TempDir()
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\nlogin:\n  tenantId: tid\n  clientId: cid\n  authority: http://login.example.com/\n", 0o600)
+		t.Setenv(gatewayTokenEnv, "")
+		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "login")
+		assert.NotEqual(t, 0, code)
+		assert.Contains(t, stderr, "must use https")
+	})
 }

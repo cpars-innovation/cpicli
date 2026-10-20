@@ -190,8 +190,10 @@ cpictl --profile dev packages              # uses the stored token, refreshed si
 cpictl --profile dev logout                # clears the stored token
 ```
 
-The token is stored per profile under `$HOME/.cpictl/tokens/<profile>.json` (mode `0600`) and refreshed with the
-refresh token, so a long-running `cpictl mcp` session does not stop working after an hour. Without a `login` block,
+The token is stored per profile under `$HOME/.cpictl/tokens/<profile>.json` (mode `0600`; on Windows the user
+profile's permissions protect it) and refreshed with the refresh token, so a long-running `cpictl mcp` session does
+not stop working after an hour. The file holds the refresh token, the long-lived credential: treat it like a
+password, and `logout` on shared machines. `login.authority` (default: Entra's public cloud) must use https. Without a `login` block,
 or before the first `login`, cpictl falls back to the `CPICTL_GATEWAY_TOKEN` environment variable:
 
 ```bash

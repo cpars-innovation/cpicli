@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 
 	"golang.org/x/oauth2"
 )
@@ -110,6 +111,9 @@ func (s *Store) Delete(key string) error {
 // refreshes it with the refresh token when expired and writes any refreshed
 // token back to the store. It errors with ErrNotLoggedIn if nothing is stored.
 func (s *Store) TokenSource(ctx context.Context, c Config, key string) (oauth2.TokenSource, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
 	tok, err := s.Load(key)
 	if err != nil {
 		return nil, err
@@ -119,8 +123,10 @@ func (s *Store) TokenSource(ctx context.Context, c Config, key string) (oauth2.T
 }
 
 // persistingSource writes a refreshed token back so the next process starts
-// from it instead of a fresh sign-in.
+// from it instead of a fresh sign-in. Token is called per request, also from
+// parallel requests (cpictl mcp, parallel uploads).
 type persistingSource struct {
+	mu    sync.Mutex
 	store *Store
 	key   string
 	src   oauth2.TokenSource
@@ -128,6 +134,8 @@ type persistingSource struct {
 }
 
 func (p *persistingSource) Token() (*oauth2.Token, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	tok, err := p.src.Token()
 	if err != nil {
 		return nil, err

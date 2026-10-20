@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -144,4 +145,44 @@ func TestTokenSourceRefreshesAndPersists(t *testing.T) {
 	stored, err := s.Load("dev")
 	require.NoError(t, err)
 	assert.Equal(t, tok.AccessToken, stored.AccessToken, "refreshed token must be persisted")
+}
+
+func TestValidateAuthority(t *testing.T) {
+	for a, ok := range map[string]bool{"": true, "https://login.microsoftonline.com/": true, "http://127.0.0.1:8080/": true,
+		"http://localhost/": true, "http://login.example.com/": false, "ftp://x/": false, "::": false} {
+		err := Config{Authority: a}.Validate()
+		if ok && err != nil || !ok && err == nil {
+			t.Errorf("%q: %v", a, err)
+		}
+	}
+}
+
+// Parallel requests share one source: refresh and persist must not race.
+func TestTokenSourceParallel(t *testing.T) {
+	issuer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"b","token_type":"Bearer","refresh_token":"r2","expires_in":3600}`)
+	}))
+	defer issuer.Close()
+	s := &Store{Dir: t.TempDir()}
+	tok := &oauth2.Token{AccessToken: "a", TokenType: "Bearer", RefreshToken: "r", Expiry: time.Now().Add(-time.Minute)} // expired: refresh
+	if err := s.Save("p", tok); err != nil {
+		t.Fatal(err)
+	}
+	src, err := s.TokenSource(context.Background(), Config{TenantID: "t", ClientID: "c", Authority: issuer.URL + "/"}, "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() {
+			if _, err := src.Token(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+	wg.Wait()
+	if got, err := s.Load("p"); err != nil || got.AccessToken != "b" {
+		t.Errorf("refreshed token not persisted: %v %v", got, err)
+	}
 }
