@@ -1,7 +1,7 @@
 ---
 name: cpi-discover
 description: Discover how an SAP Cloud Integration tenant builds its integration flows (naming, adapters, error handling, logging, scripts, parameters) and write the repository's conventions file .cpi/conventions.md. Use when a repository has no .cpi/conventions.md yet, when the user asks to analyse, onboard or learn a tenant, or to refresh the conventions after the tenant changed.
-allowed-tools: Read Write Edit Glob Grep mcp__plugin_cpi_cpi__discover_tenant mcp__plugin_cpi_cpi__list_packages mcp__plugin_cpi_cpi__list_artifacts mcp__plugin_cpi_cpi__list_resources mcp__plugin_cpi_cpi__get_resource mcp__plugin_cpi_cpi__get_parameters mcp__plugin_cpi_cpi__list_credentials mcp__plugin_cpi_cpi__list_runtime_artifacts mcp__plugin_cpi_cpi__graph_search mcp__plugin_cpi_cpi__graph_neighbors mcp__plugin_cpi_cpi__graph_path mcp__plugin_cpi_cpi__list_components mcp__plugin_cpi_cpi__list_integration_connections
+allowed-tools: Read Write Edit Glob Grep mcp__plugin_cpi_cpi__discover_tenant mcp__plugin_cpi_cpi__list_packages mcp__plugin_cpi_cpi__list_artifacts mcp__plugin_cpi_cpi__list_resources mcp__plugin_cpi_cpi__get_resource mcp__plugin_cpi_cpi__get_parameters mcp__plugin_cpi_cpi__list_credentials mcp__plugin_cpi_cpi__list_runtime_artifacts mcp__plugin_cpi_cpi__graph_search mcp__plugin_cpi_cpi__graph_neighbors mcp__plugin_cpi_cpi__graph_path mcp__plugin_cpi_cpi__list_components mcp__plugin_cpi_cpi__list_integration_connections mcp__plugin_cpi_cpi__lint
 inputs:
   - id: packages
     label: Representative packages
@@ -45,6 +45,23 @@ The summary contains counts, not rules. Then **look at examples** to understand 
   logging and error handling framework.
 - `get_parameters` of a few flows: how are parameters named and grouped?
 - `list_credentials`: how are credentials named (compare with `summary.credentialRefs`)?
+- **Authentication headers and secret properties.** Which headers carry credentials to receivers
+  besides `Authorization` (an API's own `X-Partner-Token`, `Ocp-Apim-Subscription-Key`, ...), and
+  in which properties do scripts keep values read from the secure store? Run `lint` with
+  `rules: ["undeclared-auth-header", "secret-target-name"]` on the content (`local_dir`, or the
+  repository): it names headers that read like authentication headers and every header or property
+  a script puts a credential into. Confirm them in the scripts (`get_resource`), then declare them
+  in `.cpi/lint.yaml` (they add to the defaults; ask the user when unsure whether a header is
+  secret):
+
+  ```yaml
+  security:
+    secretHeaders: [X-Partner-Token]
+    secretProperties: ["secret*", "PartnerToken"]
+  ```
+
+  and name them in conventions.md (Configuration and security). From then on lint keeps those
+  values out of logs, JMS queues, other flows and wildcard receivers.
 - Script collections are in `discovery.json` (`scriptCollections`): each script with its summary
   and functions (from their doc comments), and `iflows[].collectionScripts` says which flows call
   which function. `graph_search` with `types: ["script"]` finds them by purpose; script nodes

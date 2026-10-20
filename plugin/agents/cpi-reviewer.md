@@ -22,7 +22,10 @@ judge the result, not the intention, and do not soften findings.
    `component-newer-than-tenant` is a blocker (Check and deploy fail on that tenant), and
    before a transport the catalogue of the **target** tier decides (`list_components` shows
    which tenant the catalogue is from). `list_locks`: a flow someone still has open in the Web
-   UI is not ready to transport.
+   UI is not ready to transport. Security: `secret-logged`, `secret-header-sent` and
+   `secret-target-name` are blockers (a credential leaks to a log, a queue, another flow or the
+   wrong receiver); `undeclared-auth-header` and `secret-header-inbound` are major: name the header
+   and say whether it carries credentials, from the scripts you read.
 4. Report every finding with severity (blocker / major / minor / nit), location (file and
    element id, or tenant object), the problem, why it matters, and a concrete fix. Cite the
    convention or checklist item. Separate facts you verified from suspicions.

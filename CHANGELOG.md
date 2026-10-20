@@ -20,6 +20,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
     - `secret-header-inbound` (warning): Allowed Header(s) of the flow do not accept a secret
       header from senders.
     - `secret-in-body` (warning): security material in the message body.
+    - `undeclared-auth-header` (warning): a header that reads like an authentication header
+      (`X-Partner-Token`, `Ocp-Apim-Subscription-Key`) is not declared yet.
+  - Projects declare their own authentication headers and secret properties in `.cpi/lint.yaml`
+    `security`; the names add to the defaults.
+  - The skills follow it: cpi-discover finds the project's authentication headers and writes
+    them into `.cpi/lint.yaml` and conventions.md, cpi-build keeps credentials in them only,
+    the review checklist and the cpi-reviewer agent treat `secret-*` findings as blockers.
   - `hardcoded-secret` also checks configure files (`repository.configure`) and recognises
     private keys, JSON web tokens, provider access keys and `Basic`/`Bearer` values whatever the
     parameter's name.

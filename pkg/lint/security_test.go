@@ -1,6 +1,9 @@
 package lint
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -143,4 +146,57 @@ func TestSecurityConfig(t *testing.T) {
 	assert.False(t, globMatch("x-*-key", "x-api-keys"))
 	assert.True(t, defaultSecurity().secretHeader("authorization"))
 	assert.False(t, defaultSecurity().secretProperty("token"))
+}
+
+// A project's own authentication header: undeclared, lint asks to declare
+// it; declared in .cpi/lint.yaml (added to the defaults), the secret-*
+// rules protect it like Authorization.
+func TestCustomAuthHeader(t *testing.T) {
+	script := `def cred = service.getUserCredential("Partner")
+message.setHeader("X-Partner-Token", new String(cred.getPassword()))
+message.setHeader("X-Correlation", "abc")
+`
+	jms := map[string]string{"ComponentType": "JMS", "direction": "Receiver", "QueueName_outbound": "Q.Out",
+		"cmdVariantUri": "ctype::AdapterVariant/cname::sap:JMS/tp::Not Applicable/mp::Not Applicable/direction::Receiver/version::1.6.3"}
+	run := func(lintYAML string) *Result {
+		root := t.TempDir()
+		m := &sapModel{}
+		m.channel("Queue", "End", jms)
+		m.process("Process_1", "IntegrationProcess", start("Start"), end("End"))
+		dir := filepath.Join(root, "content")
+		files := map[string]string{
+			"META-INF/MANIFEST.MF": "Manifest-Version: 1.0\nBundle-SymbolicName: Partner_Out; singleton:=true\nBundle-Version: 1.0.0\nSAP-BundleType: IntegrationFlow\n",
+			"src/main/resources/scenarioflows/integrationflow/Partner_Out.iflw": m.String(),
+			"src/main/resources/script/token.groovy":                            script,
+		}
+		for name, data := range files {
+			p := filepath.Join(dir, "P", "Partner_Out", filepath.FromSlash(name))
+			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+			require.NoError(t, os.WriteFile(p, []byte(data), 0o644))
+		}
+		cfgFile := filepath.Join(root, ".cpi", "lint.yaml")
+		require.NoError(t, os.MkdirAll(filepath.Dir(cfgFile), 0o755))
+		require.NoError(t, os.WriteFile(cfgFile, []byte(lintYAML), 0o644))
+		cfg, err := LoadConfig(cfgFile)
+		require.NoError(t, err)
+		res, err := Run(context.Background(), Options{Dir: dir, Config: cfg})
+		require.NoError(t, err)
+		return res
+	}
+
+	res := run("")
+	assert.ElementsMatch(t, []string{"secret-header-sent", "secret-target-name", "undeclared-auth-header"}, rulesOf(res, "Partner_Out", "secret-", "undeclared-"))
+	f := findingsOf(res, "secret-target-name", "Partner_Out")[0]
+	assert.Contains(t, f.Suggestion, "add it to security.secretHeaders in .cpi/lint.yaml")
+	assert.Contains(t, findingsOf(res, "undeclared-auth-header", "Partner_Out")[0].Message, "X-Partner-Token (script token.groovy)")
+
+	res = run("security:\n  secretHeaders: [X-Partner-Token]\n")
+	assert.Equal(t, []string{"secret-header-sent"}, rulesOf(res, "Partner_Out", "secret-", "undeclared-"),
+		"declared: a valid place for the token, still not for the JMS queue")
+
+	cfg, err := LoadConfig(filepath.Join(t.TempDir(), "missing.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, cfg.Security.SecretHeaders, "Authorization")
+	assert.True(t, defaultSecurity().withDefaults().secretHeader("x-api-key"))
+	assert.Len(t, SecurityConfig{SecretHeaders: []string{"authorization", "X-Own"}}.withDefaults().SecretHeaders, 5, "added to the defaults, no duplicates")
 }

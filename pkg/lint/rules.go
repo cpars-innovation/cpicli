@@ -115,6 +115,7 @@ var lintRules = []lintRule{
 	{id: "secret-logged", group: GroupSecurity, severity: SevError, title: "Security material reaches the message processing log, an error text or standard output", artifact: ruleSecretLogged},
 	{id: "secret-in-body", group: GroupSecurity, severity: SevWarning, title: "Security material is written into the message body", artifact: ruleSecretInBody},
 	{id: "secret-header-sent", group: GroupSecurity, severity: SevError, title: "A receiver passes a secret header on (JMS, ProcessDirect, broker, or a wildcard in its request headers)", artifact: ruleSecretHeaderSent},
+	{id: "undeclared-auth-header", group: GroupSecurity, severity: SevWarning, title: "A header reads like an authentication header but is not declared in .cpi/lint.yaml security.secretHeaders", artifact: ruleUndeclaredAuthHeader},
 	{id: "secret-header-inbound", group: GroupSecurity, severity: SevWarning, title: "The flow's Allowed Header(s) let senders set a secret header", artifact: ruleSecretHeaderInbound},
 	// hygiene
 	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},

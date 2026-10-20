@@ -77,6 +77,7 @@ Per lint rule: what it means, when to act, how to change it in Cloud Integration
 | `secret-logged` | **always, first** | log that the credential was read, never the value; drop it from exception texts | the value is in old message logs: rotate it |
 | `secret-header-sent` | always | name the header only in the request headers of the receiver it is meant for; Delete it (content modifier) before JMS, ProcessDirect, AMQP or Kafka receivers; or keep the value in a property | low; test the receiver still authenticates |
 | `secret-target-name` | always | rename to a name in `.cpi/lint.yaml` `security` (a `secret*` property, `Authorization`), or add the project's convention there | low; rename every read of it in the same flow |
+| `undeclared-auth-header` | the header carries credentials | declare it in `.cpi/lint.yaml` `security.secretHeaders` (and conventions.md); a harmless header: an `ignore` entry | none; the declaration makes the other secret-* rules check it |
 | `secret-header-inbound` | always | remove the header from Allowed Header(s); read the value from the secure store | medium: a sender that relied on passing it stops working |
 | `secret-in-body` | the body is not a token request | build the token request body only for that call and replace it right after | low |
 | `hardcoded-endpoint` | always | `{{parameter}}` per environment, or Partner Directory per partner | low |

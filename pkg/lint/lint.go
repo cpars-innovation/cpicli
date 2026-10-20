@@ -215,6 +215,7 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, output.Usagef("%s: rule %s: severity %q (off, info, warning, error)", path, rule, sev)
 		}
 	}
+	cfg.Security = cfg.Security.withDefaults()
 	d := DefaultConfig().Settings
 	if cfg.Settings.DuplicateMinFlows < 2 {
 		cfg.Settings.DuplicateMinFlows = d.DuplicateMinFlows

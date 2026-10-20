@@ -73,6 +73,7 @@ cpictl lint --list-rules
 | | `secret-logged` | error | security material passed to the message processing log (`addAttachmentAsString`, `setStringProperty`, `addCustomHeaderProperty`), a logger, `println` or an exception text (error texts end up in the log) | |
 | | `secret-in-body` | warning | security material written into the message body (`setBody`, a content modifier body with `${header.Authorization}`): fine for a token request, but replace the body right after that call | |
 | | `secret-header-sent` | error | a secret header the flow sets and does not remove reaches a receiver that passes headers on: JMS (stored in the queue), ProcessDirect (the called flow gets every header), AMQP, Kafka, or a request header list with a wildcard (`*`, `X-*`). A header named explicitly in a receiver's request headers is meant for that receiver | |
+| | `undeclared-auth-header` | warning | a header that reads like an authentication header (`auth`, `token`, `api-key`, `secret`, `subscription-key`, `signature`, `session`, `cookie`, ...; not CSRF) is set by the flow or named in a receiver's request headers but not declared in `security.secretHeaders` | |
 | | `secret-header-inbound` | warning | the flow's Allowed Header(s) name a secret header (or a pattern matching one): senders could set or replace it | |
 | hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
 | hygiene | `outdated-component` | info | a step or adapter older than the tenant offers (with a [component catalogue](components.md)), else older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
@@ -123,8 +124,8 @@ repository:                 # offline checks against the pipeline files (relativ
   configure: configuration/  # configure file or folder: configure-unknown-parameter, configure-missing-parameter
   deployConfig: deploy.yml   # deploy config: flow-without-deployment (default: orchestrator.deployConfig)
 security:                   # where flows may keep security material (secret-* rules); * matches any characters
-  secretHeaders: [Authorization, Proxy-Authorization, X-API-Key, APIKey]  # default
-  secretProperties: ["secret*"]                                           # default: properties starting with secret
+  secretHeaders: [X-Partner-Token]   # added to the defaults Authorization, Proxy-Authorization, X-API-Key, APIKey
+  secretProperties: [PartnerToken]   # added to the default secret*
 ignoreVendors: [SAP]        # default: SAP-delivered content is not checked; [] checks every vendor
 ignore:                     # findings that stay (say why in a comment)
   - artifact: Legacy_*
@@ -146,6 +147,11 @@ Passwords, tokens and keys belong in the secure store (user credentials, secure 
 credentials) and the keystore. A flow reads them by name when it needs them and keeps them in a few
 known places:
 
+- **Declare your own authentication headers.** APIs often expect their own header
+  (`X-Partner-Token`, `Ocp-Apim-Subscription-Key`). Add it to `security.secretHeaders` (the names
+  add to the defaults); `undeclared-auth-header` lists headers that read like one and are not
+  declared yet. The cpi-discover skill finds them and writes the declaration; the build and review
+  skills follow it.
 - **Only in the headers and properties named in `security`.** `secretHeaders` are the headers that
   carry credentials to a receiver (`Authorization` for a script-built Basic or Bearer value).
   `secretProperties` are for everything else. Prefer properties: no adapter sends them, and they

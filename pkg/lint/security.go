@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -17,7 +18,9 @@ import (
 // message processing log, the message body, and the senders that may set
 // headers.
 
-// SecurityConfig names where a flow may keep security material.
+// SecurityConfig names where a flow may keep security material. The names
+// of .cpi/lint.yaml add to the defaults: a project declares its own
+// authentication headers (X-Partner-Token) without repeating Authorization.
 type SecurityConfig struct {
 	// SecretHeaders are the headers a flow may put security material into
 	// (case-insensitive, * matches any characters).
@@ -34,6 +37,21 @@ func defaultSecurity() SecurityConfig {
 		SecretHeaders:    []string{"Authorization", "Proxy-Authorization", "X-API-Key", "APIKey"},
 		SecretProperties: []string{"secret*"},
 	}
+}
+
+// withDefaults adds the default names to the configured ones.
+func (c SecurityConfig) withDefaults() SecurityConfig {
+	d := defaultSecurity()
+	merge := func(defaults, own []string) []string {
+		out := slices.Clone(defaults)
+		for _, n := range own {
+			if n = strings.TrimSpace(n); n != "" && !slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, n) }) {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+	return SecurityConfig{SecretHeaders: merge(d.SecretHeaders, c.SecretHeaders), SecretProperties: merge(d.SecretProperties, c.SecretProperties)}
 }
 
 func nameMatches(patterns []string, name string) bool {
@@ -263,7 +281,7 @@ func ruleSecretTarget(lc *lintContext, a *lintArtifact) []Finding {
 			}
 			out = append(out, a.finding("secret-target-name", file, "", "", fmt.Sprintf("%d", u.line),
 				fmt.Sprintf("%s line %d puts security material into %s", path.Base(file), u.line, what),
-				"use one of the "+allowed))
+				declareHint(u.sink, u.name, allowed)))
 		}
 	}
 	eachElement(a, func(file string, m *iflow.Model, el *iflow.Element) {
@@ -280,10 +298,84 @@ func ruleSecretTarget(lc *lintContext, a *lintArtifact) []Finding {
 				}
 				out = append(out, a.finding("secret-target-name", file, el.ID, el.Name, t.sink+":"+r["Name"],
 					fmt.Sprintf("content modifier %q copies security material into the %s %s", el.Name, t.sink, r["Name"]),
-					"use one of the "+allowed))
+					declareHint(t.sink, r["Name"], allowed)))
 			}
 		}
 	})
+	return out
+}
+
+// declareHint: rename, or declare the name when it is the project's own
+// authentication header or secret property.
+func declareHint(sink, name, allowed string) string {
+	if name == "" {
+		return "use a fixed name, one of the " + allowed
+	}
+	key := "secretHeaders"
+	if sink == "property" {
+		key = "secretProperties"
+	}
+	return fmt.Sprintf("use one of the %s; if %s is an authentication %s of this project (a receiver expects it), add it to security.%s in .cpi/lint.yaml", allowed, name, sink, key)
+}
+
+// reAuthName: header names that say they carry authentication.
+var reAuthName = regexp.MustCompile(`(?i)(auth|token|api[-_]?key|secret|passw|pwd|subscription[-_]?key|signature|session|cookie|credential|bearer)`)
+
+// authLooking reports a header name that reads like an authentication
+// header (CSRF tokens are fetched by the adapters, not secrets of the flow).
+func authLooking(name string) bool {
+	return reAuthName.MatchString(name) && !strings.Contains(strings.ToLower(name), "csrf")
+}
+
+// ruleUndeclaredAuthHeader: a header that reads like an authentication
+// header (set by the flow, or sent by a receiver by name) is not declared
+// in security.secretHeaders, so the secret-* rules do not protect it.
+func ruleUndeclaredAuthHeader(lc *lintContext, a *lintArtifact) []Finding {
+	sec := lc.cfg.Security
+	seen := map[string]string{} // lower name -> name
+	where := map[string]string{}
+	add := func(name, at string) {
+		if name == "" || sec.secretHeader(name) || !authLooking(name) || strings.Contains(name, "*") {
+			return
+		}
+		if _, ok := seen[strings.ToLower(name)]; !ok {
+			seen[strings.ToLower(name)], where[strings.ToLower(name)] = name, at
+		}
+	}
+	for _, file := range sortedKeys(a.Scripts) {
+		for _, m := range reSetHeaderName.FindAllStringSubmatch(string(blankComments(a.Scripts[file])), -1) {
+			add(m[1], "script "+scriptRef(file))
+		}
+	}
+	eachElement(a, func(file string, m *iflow.Model, el *iflow.Element) {
+		if !isContentModifier(el) {
+			return
+		}
+		for _, r := range tableRows(el.Props["headerTable"]) {
+			if !strings.EqualFold(r["Action"], "Delete") {
+				add(r["Name"], fmt.Sprintf("content modifier %q", el.Name))
+			}
+		}
+	})
+	for _, file := range sortedModelFiles(a) {
+		for _, ad := range a.Models[file].Adapters {
+			if ad.Props["direction"] != "Receiver" {
+				continue
+			}
+			lists := headerLists(ad)
+			for _, k := range sortedKeys(lists) {
+				for _, e := range lists[k] {
+					add(e, fmt.Sprintf("receiver %q", channelName(ad)))
+				}
+			}
+		}
+	}
+	var out []Finding
+	for _, k := range sortedKeys(seen) {
+		out = append(out, a.finding("undeclared-auth-header", "", "", "", k,
+			fmt.Sprintf("the header %s (%s) reads like an authentication header but is not in security.secretHeaders", seen[k], where[k]),
+			"if it carries credentials, add it to security.secretHeaders in .cpi/lint.yaml so the secret-* rules protect it; otherwise add an ignore entry"))
+	}
 	return out
 }
 

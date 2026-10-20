@@ -67,6 +67,8 @@ applied). Status: proposed (by discovery) or agreed (by the team).
 - What is externalised:
 - Credential naming and who creates them (`cpictl credentials`):
 - Certificates and keystore aliases:
+- Headers and properties that carry credentials (declared in `.cpi/lint.yaml` `security`; nothing
+  else may hold a password, token or key, and they are never logged):
 
 ## Testing
 

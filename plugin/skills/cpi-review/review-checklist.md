@@ -40,6 +40,11 @@ Apply `.cpi/conventions.md` first; its "Review checklist additions" are mandator
 - Environment-specific values are externalised; no hard-coded hosts, paths or credential
   names that differ per environment.
 - No secrets, tokens or personal data in scripts, parameters, properties or logs.
+- Security material only in the headers and properties declared in `.cpi/lint.yaml` `security`;
+  never logged, never in an exception text; a secret header named explicitly on the one receiver
+  that needs it, removed before JMS, ProcessDirect, AMQP and Kafka receivers; not in Allowed
+  Header(s). lint `secret-logged`, `secret-header-sent` and `secret-target-name` are blockers;
+  `undeclared-auth-header` means the header must be declared (or confirmed harmless).
 - Credentials and key aliases the flow refers to exist (`list_credentials`, `list_keystore`)
   and certificates are not about to expire.
 - Sender authorization (role-based / client certificate) as the conventions require.

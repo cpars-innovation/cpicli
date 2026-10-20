@@ -125,6 +125,14 @@ the plan does not cover.
 - Externalise everything that differs between environments (hosts, paths, credential names,
   directories) as `{{Parameter}}`, with keys named as in the conventions.
 - Do not put secrets, tokens or productive data into files, parameters or test messages.
+- Security material: read it from the secure store or keystore by name, and keep it only in the
+  headers and properties declared in `.cpi/lint.yaml` `security` (default `Authorization`,
+  `Proxy-Authorization`, `X-API-Key`, `APIKey`, properties `secret*`; conventions.md names the
+  project's own). Prefer a property; set the header right before the call that needs it and name
+  it explicitly in that receiver's request headers (never `*`); delete it before JMS,
+  ProcessDirect, AMQP or Kafka receivers. Never log it, put it in an exception text or a log
+  attachment. A new authentication header goes into `.cpi/lint.yaml` and conventions.md. Run
+  `lint` on the flow: `secret-*` findings are errors to fix before deploying.
 - Keep `Bundle-SymbolicName` in META-INF/MANIFEST.MF equal to the flow ID.
 - Report what you changed (files, parameters, deployed version) at the end, and say what you
   checked locally, what on the tenant, and what you did not run.
