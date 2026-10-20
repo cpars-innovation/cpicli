@@ -74,7 +74,10 @@ func NewTenantSettingsCommand() *cobra.Command {
   cpictl tenant-settings archiving --on --confirm`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res := ops.GetTenantSettings(tenantExecuter(cmd))
+			res, err := ops.GetTenantSettings(tenantExecuter(cmd))
+			if err != nil {
+				return err
+			}
 			output.SetResult(cmd.Context(), res)
 			log.Info().Msgf("External logging: %s", onOff(res.ExternalLogging))
 			log.Info().Msgf("Archiving:        %s", onOff(res.Archiving))

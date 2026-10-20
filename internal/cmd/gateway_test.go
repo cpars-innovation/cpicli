@@ -12,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
+	"github.com/cpars-innovation/cpicli/internal/exitcode"
+	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +32,12 @@ func fakeGateway(t *testing.T, mock *cpitest.Tenant) (*httptest.Server, func() [
 		mu.Lock()
 		seen = append(seen, r.Header.Get("Authorization")+" "+r.Method+" "+r.URL.Path)
 		mu.Unlock()
+		if r.URL.Path == "/whoami" && r.Header.Get("Authorization") == "Bearer user-token" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"org":"contoso","user":"oid-anna","name":"anna@contoso.com","roles":["CPI.SD"],"expires":"2099-01-01T00:00:00Z",
+				"sapTenants":{"dev":{"scopeHash":"abc","scope":{"version":1,"grants":[{"packages":["SD_*"],"actions":["read","deploy"]}]}}}}`))
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer user-token" || !strings.HasPrefix(r.URL.Path, "/t/dev/") {
 			http.Error(w, "no", http.StatusUnauthorized)
 			return
@@ -132,4 +141,31 @@ func TestGatewayMode(t *testing.T) {
 		assert.NotEqual(t, 0, code)
 		assert.Contains(t, stderr, "must use https")
 	})
+
+	t.Run("whoami asks the gateway", func(t *testing.T) {
+		home := t.TempDir()
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n", 0o600)
+		t.Setenv(gatewayTokenEnv, "user-token")
+		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "whoami")
+		assert.Equal(t, 0, code, stderr)
+		assert.Contains(t, stderr, "anna@contoso.com (oid-anna) in contoso")
+		assert.Contains(t, stderr, "SAP tenant dev: read,deploy on SD_*")
+		assert.NotContains(t, stderr, "user-token")
+
+		t.Setenv(gatewayTokenEnv, "")
+		code, stderr = projectRun(t, t.TempDir(), t.TempDir(), "whoami")
+		assert.Equal(t, 2, code)
+		assert.Contains(t, stderr, "needs gateway mode")
+	})
+}
+
+// A refusal of the cpictl gateway is a scope refusal (exit code 9), not an
+// authentication problem.
+func TestGatewayRefusalExitCode(t *testing.T) {
+	refused := &httpclnt.HTTPError{CallType: "Deploy integration flow", StatusCode: 403,
+		Body: []byte(`{"error":{"code":"scope","message":{"lang":"en","value":"scope: deploy of artifact FI_B is not granted"}}}`)}
+	assert.Equal(t, exitcode.Scope, output.ExitCode(refused))
+	assert.Equal(t, "Deploy integration flow refused by the cpictl gateway: scope: deploy of artifact FI_B is not granted", refused.Error())
+	tenant := &httpclnt.HTTPError{CallType: "Deploy integration flow", StatusCode: 403, Body: []byte(`{"error":{"code":"Forbidden"}}`)}
+	assert.Equal(t, exitcode.Auth, output.ExitCode(tenant))
 }

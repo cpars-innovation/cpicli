@@ -121,6 +121,9 @@ func ExitCode(err error) int {
 // TransportExitCode classifies authentication and tenant communication
 // errors, returning fallback for anything else.
 func TransportExitCode(err error, fallback int) int {
+	if httpclnt.IsGatewayRefusal(err) {
+		return exitcode.Scope // decided by the gateway's policy, like a local scope
+	}
 	var retrieveErr *oauth2.RetrieveError
 	if httpclnt.IsAuthError(err) || errors.As(err, &retrieveErr) {
 		return exitcode.Auth

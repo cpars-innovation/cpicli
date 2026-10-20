@@ -98,22 +98,31 @@ type TenantSettingsResult struct {
 
 // GetTenantSettings reads external logging, archiving and the last archiving
 // runs; a part the credentials cannot read is reported as a warning.
-func GetTenantSettings(exe *httpclnt.HTTPExecuter) *TenantSettingsResult {
+func GetTenantSettings(exe *httpclnt.HTTPExecuter) (*TenantSettingsResult, error) {
 	res := &TenantSettingsResult{TenantSettings: cpi.TenantSettings{ArchivingRuns: []cpi.ArchivingRun{}}}
+	var errs []error
 	if on, err := cpi.ExternalLoggingActive(exe); err == nil {
 		res.ExternalLogging = &on
 	} else {
+		errs = append(errs, err)
 		res.Warnings = append(res.Warnings, "external logging: "+err.Error())
 	}
 	if on, err := cpi.ArchivingActive(exe); err == nil {
 		res.Archiving = &on
 	} else {
+		errs = append(errs, err)
 		res.Warnings = append(res.Warnings, "archiving: "+err.Error())
 	}
 	if runs, err := cpi.ArchivingRuns(exe); err == nil {
 		res.ArchivingRuns = runs
 	} else {
+		errs = append(errs, err)
 		res.Warnings = append(res.Warnings, "archiving runs: "+err.Error())
 	}
-	return res
+	if len(errs) == 3 {
+		// nothing could be read (no role, or refused by a gateway): not a
+		// result with warnings
+		return nil, errs[0]
+	}
+	return res, nil
 }

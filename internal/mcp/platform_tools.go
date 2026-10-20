@@ -32,7 +32,7 @@ func platformTools(cfg Config, readOnly map[string]any) []Tool {
 			InputSchema: object(props{}),
 			Annotations: readOnly,
 			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
-				return ops.GetTenantSettings(cfg.Exe), nil
+				return ops.GetTenantSettings(cfg.Exe)
 			},
 		},
 		{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -333,7 +334,41 @@ type HTTPError struct {
 }
 
 func (e *HTTPError) Error() string {
+	if msg, ok := e.GatewayRefusal(); ok {
+		return fmt.Sprintf("%v refused by the cpictl gateway: %s", e.CallType, msg)
+	}
 	return fmt.Sprintf("%v call failed with response code = %d", e.CallType, e.StatusCode)
+}
+
+// GatewayRefusal reports a refusal of the cpictl gateway (gateway mode): a
+// 403 whose OData error has code "scope". The tenant never saw the request.
+func (e *HTTPError) GatewayRefusal() (string, bool) {
+	if e.StatusCode != http.StatusForbidden {
+		return "", false
+	}
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message struct {
+				Value string `json:"value"`
+			} `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(e.Body, &body) != nil || body.Error.Code != "scope" {
+		return "", false
+	}
+	return body.Error.Message.Value, true
+}
+
+// IsGatewayRefusal reports whether err is (or wraps) a refusal of the
+// cpictl gateway.
+func IsGatewayRefusal(err error) bool {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	_, ok := httpErr.GatewayRefusal()
+	return ok
 }
 
 // StatusCode returns the HTTP status code carried by err (or any error it

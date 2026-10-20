@@ -114,6 +114,9 @@ func explainUploadError(exe *httpclnt.HTTPExecuter, artifactID string, err error
 		// (invalid header field (line N), ...)
 		return WithTenantText(err)
 	}
+	if httpclnt.IsGatewayRefusal(err) {
+		return err
+	}
 	var notes []string
 	var he *httpclnt.HTTPError
 	if errors.As(err, &he) {
@@ -150,6 +153,9 @@ func WithTenantText(err error) error {
 	var he *httpclnt.HTTPError
 	if !errors.As(err, &he) {
 		return err
+	}
+	if _, refused := he.GatewayRefusal(); refused {
+		return err // the gateway's reason is in the message already: the tenant said nothing
 	}
 	msg := tenantErrorText(he.Body)
 	if msg == "" {

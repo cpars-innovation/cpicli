@@ -809,6 +809,11 @@
       "command": "version bump",
       "file": "version_bump.json",
       "typed": true
+    },
+    {
+      "command": "whoami",
+      "file": "whoami.json",
+      "typed": true
     }
   ],
   "schemaVersion": 1

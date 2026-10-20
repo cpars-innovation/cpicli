@@ -1,0 +1,192 @@
+{
+  "$defs": {
+    "cmd.WhoAmI": {
+      "properties": {
+        "expires": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "org": {
+          "type": "string"
+        },
+        "roles": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sapTenants": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/cmd.WhoAmIScope"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expires",
+        "org",
+        "sapTenants",
+        "user"
+      ],
+      "type": "object"
+    },
+    "cmd.WhoAmIScope": {
+      "properties": {
+        "scope": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/scope.Scope"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scopeHash": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "scopeHash"
+      ],
+      "type": "object"
+    },
+    "scope.Deny": {
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "scope.Grant": {
+      "properties": {
+        "actions": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "actions",
+        "packages"
+      ],
+      "type": "object"
+    },
+    "scope.Scope": {
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "artifacts": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "deny": {
+          "items": {
+            "$ref": "#/$defs/scope.Deny"
+          },
+          "type": "array"
+        },
+        "grants": {
+          "items": {
+            "$ref": "#/$defs/scope.Grant"
+          },
+          "type": "array"
+        },
+        "packages": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "partners": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tenant": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/whoami.json",
+  "$ref": "#/$defs/cmd.WhoAmI",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl whoami.",
+  "title": "cpictl whoami result",
+  "x-schemaVersion": 1
+}

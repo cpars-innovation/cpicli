@@ -190,6 +190,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`variables get`](#variables-get) | Read the value of a variable |
 | [`version`](#version) | Artifact versions in the repository (Bundle-Version) |
 | [`version bump`](#version-bump) | Raise Bundle-Version of (changed) artifacts |
+| [`whoami`](#whoami) | Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode) |
 
 ## Global flags
 
@@ -4590,4 +4591,24 @@ manifests with the change. No tenant access.
   cpictl version bump --changed --dir packages
   cpictl version bump --changed --level minor --package UtilitiesBaseEDM
   cpictl version bump --artifact UtilitiesBase_MDX_to_EDM_Outbound --dry-run
+```
+
+## whoami
+
+Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode)
+
+```
+In gateway mode, asks the gateway who it takes you for (organisation, user,
+roles, when your token expires) and which packages and actions you may use on
+each SAP tenant it serves you. Use it to check you are signed in as the right
+user (cpictl login) and what an agent working for you can do.
+```
+
+**Usage:** `cpictl whoami`
+
+**Examples:**
+
+```
+  cpictl --profile dev whoami
+  cpictl --profile dev whoami --output json
 ```

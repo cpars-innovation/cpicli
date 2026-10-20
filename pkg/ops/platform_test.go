@@ -3,6 +3,9 @@ package ops
 import (
 	"archive/zip"
 	"bytes"
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -46,13 +49,32 @@ func TestConnectionsArchivesSettings(t *testing.T) {
 	_, err = DownloadLogArchive(exe, "system", file)
 	assert.ErrorContains(t, err, "available: http, trace")
 
-	s := GetTenantSettings(exe)
+	s, err := GetTenantSettings(exe)
+	require.NoError(t, err)
 	require.NotNil(t, s.ExternalLogging)
 	assert.False(t, *s.ExternalLogging)
 	assert.Empty(t, s.Warnings)
 	require.NoError(t, cpi.SetExternalLogging(exe, true))
 	require.NoError(t, cpi.ActivateArchiving(exe))
-	s = GetTenantSettings(exe)
+	s, err = GetTenantSettings(exe)
+	require.NoError(t, err)
 	assert.True(t, *s.ExternalLogging)
 	assert.True(t, *s.Archiving)
+}
+
+// A gateway (or a missing role) refusing every part: a refusal, not a
+// result with warnings; the message says the gateway refused.
+func TestTenantSettingsAllRefused(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":{"code":"scope","message":{"lang":"en","value":"scope: settings:read is not granted"}}}`))
+	}))
+	defer srv.Close()
+	exe := cpi.InitHTTPExecuter(&cpi.ServiceDetails{Gateway: srv.URL + "/t/dev", GatewayToken: "t"})
+	_, err := GetTenantSettings(exe)
+	require.Error(t, err)
+	assert.True(t, httpclnt.IsGatewayRefusal(err))
+	assert.Contains(t, err.Error(), "refused by the cpictl gateway: scope: settings:read is not granted")
+	assert.NotContains(t, WithTenantText(err).Error(), "the tenant says")
 }

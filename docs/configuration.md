@@ -209,7 +209,8 @@ cpictl --profile dev packages
 - `--gateway` excludes `--oauth-*` and `--tmn-userid`: in gateway mode the gateway holds the key.
 - A project `cpictl.yaml` must not set `gateway` or `login` (they choose where your token is sent and where you
   sign in): set them in the profile or `$HOME/cpictl.yaml`.
-- Not yet in gateway mode: `whoami`, an OS-keychain token store (the `0600` file is the fallback), and test
+- `cpictl whoami` shows who the gateway takes you for and your scope per SAP tenant.
+- Not yet in gateway mode: an OS-keychain token store (the `0600` file is the fallback), and test
   messages (`send`), which still use the runtime settings above.
 
 ## Global flags

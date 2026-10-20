@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`cpictl whoami`** (gateway mode): who the gateway takes you for, roles, token expiry, and your
+  scope per SAP tenant (#43).
+- **Gateway refusals are reported as such** (#40): a request the cpictl gateway refuses reads
+  "refused by the cpictl gateway: …" (it no longer says "the tenant says") and exits with code 9
+  (scope), not 3 (authentication). `tenant-settings` / MCP `get_tenant_settings` fail when no part
+  could be read instead of answering ok with three warnings.
+- **Docs:** secrets from a vault in the pipeline (Azure Key Vault, AWS Secrets Manager), masking,
+  and a nightly coverage check with `credentials apply --dry-run`
+  ([backup.md](docs/backup.md#secrets-from-a-vault-pipeline)).
+
 - **`cpictl backup restore`** ([backup.md](docs/backup.md#restore)): puts a backup back into a
   tenant, the same one or a new one.
   - **Restored:** packages, artifacts (as backed up), externalised parameters, the Partner
