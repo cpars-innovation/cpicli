@@ -29,7 +29,8 @@ func TestTransportCommands(t *testing.T) {
 		"--git-skip-commit", "--sync-package-details=false"}, basicAuth(dev)...)...)
 	require.Equal(t, 0, r.code, r.stderr)
 	for _, args := range [][]string{{"init", "-q", "-b", "dev"}, {"add", "."}, {"-c", "user.name=t", "-c", "user.email=t@x", "commit", "-q", "-m", "dev"}} {
-		out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput()
+		// no detached auto maintenance writing while t.TempDir cleans up
+		out, err := exec.Command("git", append([]string{"-C", repo, "-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)...).CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
 

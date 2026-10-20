@@ -14,7 +14,10 @@ import (
 
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"}, args...)...)
+	// no auto maintenance: git runs it detached after a commit, and it can
+	// still write to .git/objects when t.TempDir removes the repository
+	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false",
+		"-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)...)
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 }

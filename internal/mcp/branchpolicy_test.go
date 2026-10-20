@@ -69,7 +69,9 @@ func TestBranchPolicyWrap(t *testing.T) {
 	root := t.TempDir()
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"}, args...)...)
+		// no detached auto maintenance writing while t.TempDir cleans up
+		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false",
+			"-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)...)
 		out, err := cmd.CombinedOutput()
 		require.NoError(t, err, string(out))
 	}
