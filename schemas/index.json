@@ -36,6 +36,21 @@
       "typed": true
     },
     {
+      "command": "auth login",
+      "file": "auth_login.json",
+      "typed": true
+    },
+    {
+      "command": "auth logout",
+      "file": "auth_logout.json",
+      "typed": true
+    },
+    {
+      "command": "auth status",
+      "file": "auth_status.json",
+      "typed": true
+    },
+    {
       "command": "backup create",
       "file": "backup_create.json",
       "typed": true
@@ -368,16 +383,6 @@
     {
       "command": "log-level",
       "file": "log-level.json",
-      "typed": true
-    },
-    {
-      "command": "login",
-      "file": "login.json",
-      "typed": true
-    },
-    {
-      "command": "logout",
-      "file": "logout.json",
       "typed": true
     },
     {

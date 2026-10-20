@@ -14,6 +14,10 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`access-policies list`](#access-policies-list) | List access policies with their artifact references |
 | [`artifacts`](#artifacts) | List designtime artifacts of a package |
 | [`audit-log`](#audit-log) | Show the tenant's audit log (who changed what, newest first) |
+| [`auth`](#auth) | Sign in to a cpictl gateway: login, logout, status (gateway mode) |
+| [`auth login`](#auth-login) | Sign in to the cpictl gateway with Entra ID |
+| [`auth logout`](#auth-logout) | Clear the stored cpictl gateway login token for the active profile |
+| [`auth status`](#auth-status) | Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode) |
 | [`backup`](#backup) | Back up a tenant into one archive, compare backups, verify them |
 | [`backup create`](#backup-create) | Write a backup of the tenant into one archive |
 | [`backup diff`](#backup-diff) | Compare two backups, or a backup with the tenant |
@@ -90,8 +94,6 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`locks unlock`](#locks-unlock) | Remove the edit lock of an artifact (requires --confirm) |
 | [`log-files archive`](#log-files-archive) | Download the latest log files of a type as one zip |
 | [`log-files get`](#log-files-get) | Print the end of a log file |
-| [`login`](#login) | Sign in to the cpictl gateway with Entra ID |
-| [`logout`](#logout) | Clear the stored cpictl gateway login token for the active profile |
 | [`logs`](#logs) | Query message processing logs |
 | [`logs attachment`](#logs-attachment) | Download a log attachment (ID from 'logs get') |
 | [`logs files`](#logs-files) | List system and HTTP log files of the runtime |
@@ -190,7 +192,6 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`variables get`](#variables-get) | Read the value of a variable |
 | [`version`](#version) | Artifact versions in the repository (Bundle-Version) |
 | [`version bump`](#version-bump) | Raise Bundle-Version of (changed) artifacts |
-| [`whoami`](#whoami) | Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode) |
 
 ## Global flags
 
@@ -350,6 +351,85 @@ log; without it the tenant answers 403 and the result says missing_role
 ```
   cpictl audit-log --since 24h
   cpictl audit-log --since 7d --user dev@example.com --object Orders
+```
+
+## auth
+
+Sign in to a cpictl gateway: login, logout, status (gateway mode)
+
+```
+Sign in to a cpictl gateway (gateway mode) and check who it takes you for.
+
+Only for profiles with a gateway: profiles that talk to SAP directly keep
+their service key in the profile (cpictl profile), and need no sign-in.
+```
+
+## auth login
+
+Sign in to the cpictl gateway with Entra ID
+
+```
+Sign in to the cpictl gateway with Entra ID and store the token for the
+active profile, so cpictl (and cpictl mcp) talk to the gateway as you without a
+CPI service key. The token is refreshed silently; run again if sign-in expires.
+
+The profile needs a gateway and a login block:
+
+  gateway: https://cpi-gateway.example.com/t/dev
+  login:
+    tenantId: <entra directory id>
+    clientId: <public-client app registration>
+    scope: api://<gateway app>/access
+
+By default a browser opens for sign-in; use --device-code on a headless host.
+```
+
+**Usage:** `cpictl auth login [flags]`
+
+**Flags:**
+
+```
+      --device-code   Sign in with a device code (headless/SSH) instead of opening a browser
+```
+
+**Examples:**
+
+```
+  cpictl --profile dev auth login
+  cpictl --profile dev auth login --device-code
+```
+
+## auth logout
+
+Clear the stored cpictl gateway login token for the active profile
+
+**Usage:** `cpictl auth logout`
+
+**Examples:**
+
+```
+  cpictl --profile dev auth logout
+```
+
+## auth status
+
+Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode)
+
+```
+In gateway mode, asks the gateway who it takes you for (organisation, user,
+roles, when your token expires) and which packages and actions you may use on
+each SAP tenant it serves you. Use it to check you are signed in as the right
+user (cpictl auth login) and what an agent working for you can do.
+```
+
+**Usage:** `cpictl auth status`
+
+**Examples:**
+
+```
+  cpictl --profile dev auth status
+  cpictl --profile dev auth status --output json
+  cpictl --profile dev whoami
 ```
 
 ## backup
@@ -2096,40 +2176,6 @@ Print the end of a log file
       --out string           Write the content to this file instead of stdout / the JSON result
       --tail-bytes int       Bytes from the end of the file (default 65536)
 ```
-
-## login
-
-Sign in to the cpictl gateway with Entra ID
-
-```
-Sign in to the cpictl gateway with Entra ID and store the token for the
-active profile, so cpictl (and cpictl mcp) talk to the gateway as you without a
-CPI service key. The token is refreshed silently; run again if sign-in expires.
-
-The profile needs a gateway and a login block:
-
-  gateway: https://cpi-gateway.example.com/t/dev
-  login:
-    tenantId: <entra directory id>
-    clientId: <public-client app registration>
-    scope: api://<gateway app>/access
-
-By default a browser opens for sign-in; use --device-code on a headless host.
-```
-
-**Usage:** `cpictl login [flags]`
-
-**Flags:**
-
-```
-      --device-code   Sign in with a device code (headless/SSH) instead of opening a browser
-```
-
-## logout
-
-Clear the stored cpictl gateway login token for the active profile
-
-**Usage:** `cpictl logout`
 
 ## logs
 
@@ -4591,24 +4637,4 @@ manifests with the change. No tenant access.
   cpictl version bump --changed --dir packages
   cpictl version bump --changed --level minor --package UtilitiesBaseEDM
   cpictl version bump --artifact UtilitiesBase_MDX_to_EDM_Outbound --dry-run
-```
-
-## whoami
-
-Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode)
-
-```
-In gateway mode, asks the gateway who it takes you for (organisation, user,
-roles, when your token expires) and which packages and actions you may use on
-each SAP tenant it serves you. Use it to check you are signed in as the right
-user (cpictl login) and what an agent working for you can do.
-```
-
-**Usage:** `cpictl whoami`
-
-**Examples:**
-
-```
-  cpictl --profile dev whoami
-  cpictl --profile dev whoami --output json
 ```

@@ -14,8 +14,8 @@ import (
 )
 
 // ErrNotLoggedIn is returned when no token is stored for a key, i.e. the user
-// has not run `cpictl login` for that profile.
-var ErrNotLoggedIn = errors.New("not logged in: run cpictl login")
+// has not run `cpictl auth login` for that profile.
+var ErrNotLoggedIn = errors.New("not logged in: run cpictl auth login")
 
 // Store keeps tokens on disk, one file per key (the profile name), readable
 // only by the user. It is the headless/CI fallback; an OS-keychain backend can

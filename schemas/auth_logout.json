@@ -1,8 +1,8 @@
 {
-  "$id": "https://github.com/cpars-innovation/cpicli/schemas/logout.json",
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/auth_logout.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "The command has no result.",
-  "title": "cpictl logout result",
+  "title": "cpictl auth logout result",
   "type": "null",
   "x-schemaVersion": 1
 }

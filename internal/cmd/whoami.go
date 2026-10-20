@@ -32,30 +32,33 @@ type WhoAmIScope struct {
 	Scope     *scope.Scope `json:"scope"`
 }
 
-func NewWhoAmICommand() *cobra.Command {
+// NewAuthStatusCommand is cpictl auth status (alias whoami).
+func NewAuthStatusCommand() *cobra.Command {
 	return &cobra.Command{
 		// checks gateway mode and the token itself (a clearer message than
 		// the tenant check outside gateway mode)
 		Annotations: map[string]string{annotationOffline: "true"},
-		Use:         "whoami",
+		Use:         "status",
+		Aliases:     []string{"whoami"},
 		Short:       "Show who the cpictl gateway takes you for, and your scope per SAP tenant (gateway mode)",
 		Long: `In gateway mode, asks the gateway who it takes you for (organisation, user,
 roles, when your token expires) and which packages and actions you may use on
 each SAP tenant it serves you. Use it to check you are signed in as the right
-user (cpictl login) and what an agent working for you can do.`,
-		Example: `  cpictl --profile dev whoami
-  cpictl --profile dev whoami --output json`,
+user (cpictl auth login) and what an agent working for you can do.`,
+		Example: `  cpictl --profile dev auth status
+  cpictl --profile dev auth status --output json
+  cpictl --profile dev whoami`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			gw := config.GetString(cmd, "gateway")
 			if gw == "" {
-				return output.Usagef("whoami needs gateway mode: set gateway in the profile (docs/configuration.md#gateway-mode)")
+				return output.Usagef("auth status needs gateway mode: set gateway in the profile (docs/configuration.md#gateway-mode)")
 			}
 			// /whoami is at the gateway's root, not below /t/<tenant>
 			scheme, host, port, _ := cpi.ParseGateway(gw)
 			sd := serviceDetails(cmd)
 			if sd.GatewayToken == "" && sd.GatewayTokenSource == nil {
-				return output.Usagef("not signed in to the gateway: run cpictl login (or set %s)", gatewayTokenEnv)
+				return output.Usagef("not signed in to the gateway: run cpictl auth login (or set %s)", gatewayTokenEnv)
 			}
 			sd.Gateway = fmt.Sprintf("%s://%s:%d", scheme, host, port)
 			exe := cpi.InitHTTPExecuter(sd).WithContext(cmd.Context())

@@ -5,8 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
-- **`cpictl whoami`** (gateway mode): who the gateway takes you for, roles, token expiry, and your
-  scope per SAP tenant (#43).
+- **`cpictl auth` for gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)):
+  - `cpictl auth login`: sign in to the cpictl gateway with Entra ID in the browser (or
+    `--device-code` on a headless host). The token is kept per profile and refreshed silently, so a
+    long-running `cpictl mcp` keeps working past the first token's hour.
+  - `cpictl auth logout`: clears the stored token of the profile.
+  - `cpictl auth status` (short: `cpictl whoami`): who the gateway takes you for, roles, token
+    expiry, and your scope per SAP tenant (#43).
+  - `CPICTL_GATEWAY_TOKEN` still works without signing in. A project `cpictl.yaml` may not set
+    `login`. Profiles that talk to SAP directly are not affected.
 - **Gateway refusals are reported as such** (#40): a request the cpictl gateway refuses reads
   "refused by the cpictl gateway: …" (it no longer says "the tenant says") and exits with code 9
   (scope), not 3 (authentication). `tenant-settings` / MCP `get_tenant_settings` fail when no part
@@ -28,10 +35,6 @@ All notable changes to cpictl. Coming from FlashPipe? See
     deleted; a second run changes nothing. `--only` and `--packages` restore part of a backup.
   - Tested on a real tenant: a deleted flow, a changed Partner Directory value and a deleted number
     range came back, and the flow was deployed again.
-- **`cpictl login` / `logout` for gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)): sign in
-  with Entra ID in the browser (or `--device-code` on a headless host); the token is kept per profile and refreshed
-  silently, so a long-running `cpictl mcp` keeps working past the first token's hour. `CPICTL_GATEWAY_TOKEN` still
-  works without a login. A project `cpictl.yaml` may not set `login`.
 
 ## 0.29.0
 

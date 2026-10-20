@@ -16,7 +16,7 @@ import (
 func serviceDetails(cmd *cobra.Command) *cpi.ServiceDetails {
 	if gw := config.GetString(cmd, "gateway"); gw != "" {
 		sd := &cpi.ServiceDetails{Gateway: gw}
-		// Prefer a cpictl login token (refreshed silently); fall back to the
+		// Prefer a cpictl auth login token (refreshed silently); fall back to the
 		// environment. The token is never read from a flag or a config file.
 		if src := gatewayTokenSource(cmd); src != nil {
 			sd.GatewayTokenSource = src
@@ -43,7 +43,7 @@ func serviceDetails(cmd *cobra.Command) *cpi.ServiceDetails {
 }
 
 // gatewayTokenEnv holds the user's token for a cpictl gateway (gateway mode),
-// used when the profile has no cpictl login session.
+// used when the profile has no cpictl auth login session.
 const gatewayTokenEnv = "CPICTL_GATEWAY_TOKEN"
 
 // gatewayTokenSource returns a refreshing token source from the stored cpictl

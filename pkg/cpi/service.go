@@ -33,7 +33,7 @@ type ServiceDetails struct {
 	// GatewayTokenSource, when set, supplies the gateway bearer per request
 	// and is preferred over GatewayToken: it refreshes the token silently so a
 	// long-running session does not fail when the first token expires. Set by
-	// gateway mode from a cpictl login token.
+	// gateway mode from a cpictl auth login token.
 	GatewayTokenSource oauth2.TokenSource
 }
 

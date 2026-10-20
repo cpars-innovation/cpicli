@@ -117,9 +117,8 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewIFlowCommand())
 	rootCmd.AddCommand(NewSkillsCommand())
 	rootCmd.AddCommand(NewVersionCommand())
-	rootCmd.AddCommand(NewLoginCommand())
-	rootCmd.AddCommand(NewLogoutCommand())
-	rootCmd.AddCommand(NewWhoAmICommand())
+	rootCmd.AddCommand(NewAuthCommand())
+	rootCmd.AddCommand(whoAmIAlias(NewAuthStatusCommand()))
 	rootCmd.AddCommand(NewDriftCommand())
 	rootCmd.AddCommand(NewDataStoreCommand())
 	rootCmd.AddCommand(NewLocksCommand())
@@ -369,6 +368,14 @@ func renamed(c *cobra.Command, name string) *cobra.Command {
 func legacyName(c *cobra.Command, now string) *cobra.Command {
 	c.Hidden = true
 	c.Short = "Old name of '" + now + "'"
+	return c
+}
+
+// whoAmIAlias keeps cpictl whoami as a short, unlisted way to cpictl auth
+// status: it is what people type.
+func whoAmIAlias(c *cobra.Command) *cobra.Command {
+	c.Use, c.Aliases, c.Hidden = "whoami", nil, true
+	c.Short = "Same as 'auth status'"
 	return c
 }
 
@@ -692,9 +699,9 @@ func initializeConfig(cmd *cobra.Command) error {
 			return output.Usagef("--gateway and SAP credentials (--oauth-host, --tmn-userid) exclude each other: in gateway mode the gateway holds the key")
 		case os.Getenv(gatewayTokenEnv) == "" && gatewayTokenSource(cmd) == nil:
 			if _, ok := loginConfig(); ok {
-				return output.Usagef("gateway mode: not signed in, run cpictl login (or set %s)", gatewayTokenEnv)
+				return output.Usagef("gateway mode: not signed in, run cpictl auth login (or set %s)", gatewayTokenEnv)
 			}
-			return output.Usagef("gateway mode: set %s to your token for %s, or configure login and run cpictl login", gatewayTokenEnv, gw)
+			return output.Usagef("gateway mode: set %s to your token for %s, or configure login and run cpictl auth login", gatewayTokenEnv, gw)
 		}
 		// http is only honoured on loopback (ParseHost): never a token in clear text
 		if _, host, _, path := cpi.ParseGateway(gw); host == "" || path == "" {

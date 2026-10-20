@@ -100,7 +100,7 @@ type Options struct {
 	// is preferred over BearerToken: oauth2 fetches a token from it per
 	// request and refreshes it silently, so a long-running session (e.g.
 	// cpictl mcp) does not fail when the first token expires. Used in gateway
-	// mode with a token from cpictl login.
+	// mode with a token from cpictl auth login.
 	BearerTokenSource oauth2.TokenSource
 	BasePath          string
 }

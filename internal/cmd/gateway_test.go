@@ -106,7 +106,7 @@ func TestGatewayMode(t *testing.T) {
 		assert.Contains(t, stderr, "must not choose where your token is sent")
 	})
 
-	t.Run("signed in with cpictl login: the stored token, no environment variable", func(t *testing.T) {
+	t.Run("signed in with cpictl auth login: the stored token, no environment variable", func(t *testing.T) {
 		home := t.TempDir()
 		login := "login:\n  tenantId: tid\n  clientId: cid\n  scope: api://gw/access\n  authority: http://127.0.0.1:1/\n"
 		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n"+login, 0o600)
@@ -114,9 +114,9 @@ func TestGatewayMode(t *testing.T) {
 
 		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "undeploy", "--artifact-ids", "A")
 		assert.Equal(t, 2, code)
-		assert.Contains(t, stderr, "not signed in, run cpictl login")
+		assert.Contains(t, stderr, "not signed in, run cpictl auth login")
 
-		// what cpictl login stores (unexpired: no refresh call)
+		// what cpictl auth login stores (unexpired: no refresh call)
 		writeModeFile(t, filepath.Join(home, ".cpictl", "tokens", "gw.json"),
 			`{"access_token":"user-token","token_type":"Bearer","refresh_token":"r","expiry":"2099-01-01T00:00:00Z"}`, 0o600)
 		before := len(seen())
@@ -128,7 +128,7 @@ func TestGatewayMode(t *testing.T) {
 		}
 		assert.NotContains(t, stderr, "user-token", "the token is never logged")
 
-		code, stderr = projectRun(t, home, t.TempDir(), "--profile", "gw", "logout")
+		code, stderr = projectRun(t, home, t.TempDir(), "--profile", "gw", "auth", "logout")
 		assert.Equal(t, 0, code, stderr)
 		assert.NoFileExists(t, filepath.Join(home, ".cpictl", "tokens", "gw.json"))
 	})
@@ -137,23 +137,25 @@ func TestGatewayMode(t *testing.T) {
 		home := t.TempDir()
 		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\nlogin:\n  tenantId: tid\n  clientId: cid\n  authority: http://login.example.com/\n", 0o600)
 		t.Setenv(gatewayTokenEnv, "")
-		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "login")
+		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "auth", "login")
 		assert.NotEqual(t, 0, code)
 		assert.Contains(t, stderr, "must use https")
 	})
 
-	t.Run("whoami asks the gateway", func(t *testing.T) {
+	t.Run("auth status asks the gateway; whoami is the same", func(t *testing.T) {
 		home := t.TempDir()
 		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n", 0o600)
 		t.Setenv(gatewayTokenEnv, "user-token")
-		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "whoami")
-		assert.Equal(t, 0, code, stderr)
-		assert.Contains(t, stderr, "anna@contoso.com (oid-anna) in contoso")
-		assert.Contains(t, stderr, "SAP tenant dev: read,deploy on SD_*")
-		assert.NotContains(t, stderr, "user-token")
+		for _, args := range [][]string{{"auth", "status"}, {"auth", "whoami"}, {"whoami"}} {
+			code, stderr := projectRun(t, home, t.TempDir(), append([]string{"--profile", "gw"}, args...)...)
+			assert.Equal(t, 0, code, "%v: %s", args, stderr)
+			assert.Contains(t, stderr, "anna@contoso.com (oid-anna) in contoso")
+			assert.Contains(t, stderr, "SAP tenant dev: read,deploy on SD_*")
+			assert.NotContains(t, stderr, "user-token")
+		}
 
 		t.Setenv(gatewayTokenEnv, "")
-		code, stderr = projectRun(t, t.TempDir(), t.TempDir(), "whoami")
+		code, stderr := projectRun(t, t.TempDir(), t.TempDir(), "auth", "status")
 		assert.Equal(t, 2, code)
 		assert.Contains(t, stderr, "needs gateway mode")
 	})

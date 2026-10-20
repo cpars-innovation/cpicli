@@ -35,6 +35,21 @@ func loginConfig() (auth.Config, bool) {
 	return auth.Config{TenantID: tenant, ClientID: client, Scopes: scopes, Authority: viper.GetString("login.authority")}, true
 }
 
+// NewAuthCommand groups signing in to a cpictl gateway. SAP credentials are
+// not here: they belong to the profile (cpictl profile).
+func NewAuthCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "auth",
+		Short: "Sign in to a cpictl gateway: login, logout, status (gateway mode)",
+		Long: `Sign in to a cpictl gateway (gateway mode) and check who it takes you for.
+
+Only for profiles with a gateway: profiles that talk to SAP directly keep
+their service key in the profile (cpictl profile), and need no sign-in.`,
+	}
+	c.AddCommand(NewLoginCommand(), NewLogoutCommand(), NewAuthStatusCommand())
+	return c
+}
+
 // NewLoginCommand signs the user in to the gateway's Entra ID and stores the
 // tokens for the active profile.
 func NewLoginCommand() *cobra.Command {
@@ -44,6 +59,8 @@ func NewLoginCommand() *cobra.Command {
 		Annotations: map[string]string{annotationOffline: "true"},
 		Use:         "login",
 		Short:       "Sign in to the cpictl gateway with Entra ID",
+		Example: `  cpictl --profile dev auth login
+  cpictl --profile dev auth login --device-code`,
 		Long: `Sign in to the cpictl gateway with Entra ID and store the token for the
 active profile, so cpictl (and cpictl mcp) talk to the gateway as you without a
 CPI service key. The token is refreshed silently; run again if sign-in expires.
@@ -109,6 +126,7 @@ func NewLogoutCommand() *cobra.Command {
 		Annotations:  map[string]string{annotationOffline: "true"},
 		Use:          "logout",
 		Short:        "Clear the stored cpictl gateway login token for the active profile",
+		Example:      `  cpictl --profile dev auth logout`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, profile, err := resolveConfigSource(config.GetString(cmd, "config"), config.GetString(cmd, "profile"))
