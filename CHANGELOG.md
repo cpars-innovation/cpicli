@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.30.0
+
 - **`cpictl auth` for gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)):
   - `cpictl auth login`: sign in to the cpictl gateway with Entra ID in the browser (or
     `--device-code` on a headless host). The token is kept per profile and refreshed silently, so a
