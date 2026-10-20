@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)): `gateway: https://gw.example.com/t/dev`
+  in a profile (or `--gateway`) sends every API call to a cpictl gateway with the user's token from
+  `CPICTL_GATEWAY_TOKEN` instead of to the tenant with a service key; the gateway decides per user which packages
+  are visible. SAP credentials in the same configuration are refused, and so is `gateway` in a project
+  `cpictl.yaml`. `cpictl login` and test messages through the gateway follow.
+- `pkg/httpclnt`: `Options.BearerToken` and `Options.BasePath`; `pkg/cpi`: `ServiceDetails.Gateway`,
+  `ParseGateway`.
+
 ## 0.28.0
 
 - **Security material audit.** Passwords, tokens and keys belong in the secure store and the

@@ -162,6 +162,33 @@ a different service key than the API: *SAP Process Integration Runtime*, plan
 Without these settings the API credentials are used (works when they also carry
 `ESBMessaging.send`, e.g. with Basic Auth). Missing roles are exit code 3.
 
+### Gateway mode
+
+With a [cpictl gateway](https://github.com/cpars-innovation/cpictl-gateway) in front of the tenant, cpictl holds
+no SAP key: it sends every API call to the gateway with your own token, and the gateway decides per user which
+packages you see and may change.
+
+```yaml
+# ~/.cpictl/dev.yaml
+gateway: https://gw.example.com/t/dev      # the gateway and the SAP tenant name
+```
+
+```bash
+export CPICTL_GATEWAY_TOKEN=...            # your access token for the gateway
+cpictl --profile dev packages
+```
+
+| Flag | Environment variable | Description |
+|------|----------------------|-------------|
+| `--gateway` | `CPICTL_GATEWAY` | Gateway URL including `/t/<SAP tenant>` |
+| — | `CPICTL_GATEWAY_TOKEN` | Your token (never a flag or a config file) |
+
+- `--gateway` excludes `--oauth-*` and `--tmn-userid`: in gateway mode the gateway holds the key.
+- A project `cpictl.yaml` must not set `gateway` (it would choose where your token is sent): set it in the profile
+  or `$HOME/cpictl.yaml`.
+- Not yet in gateway mode: `cpictl login` / `logout` / `whoami` with the token in the OS keychain (until then the
+  environment variable), and test messages (`send`), which still use the runtime settings above.
+
 ## Global flags
 
 | Flag | Description |
