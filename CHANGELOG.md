@@ -5,6 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.29.0
+
+**Who is affected:** only users of an access scope (`--scope-file`, `--scope-*`, MCP servers started
+with a scope). Without a scope nothing changes. With one: downloading message contents and sending
+test messages now need the action on that flow's package (a runtime flow whose designtime artifact
+no longer exists is refused for them), and requests below a message or runtime artifact other than
+the lists cpictl reads are refused. cpictl's own commands and MCP tools work as before.
+
 - **Access scope: `grants` and `deny`** ([access-scope.md](docs/access-scope.md#grants-and-deny)). A scope can give
   different actions on different packages (deploy on `SD_*`, only read on `FI_Shared`) and deny packages or artifacts
   whatever is granted. Message contents and test messages are now decided on the message's flow, not only on whether
