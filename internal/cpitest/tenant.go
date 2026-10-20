@@ -7,12 +7,14 @@ import (
 	"cmp"
 	"crypto/ecdsa"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/pkg/testtools"
 	"io"
+	"maps"
 	mrand "math/rand/v2"
 	"net"
 	"net/http"
@@ -201,6 +203,9 @@ type Package struct {
 	ID, Name, Version string
 	// ShortText is required by a real tenant (create fails without it).
 	ShortText, Description string
+	// Vendor and Mode as the tenant reports them (Mode READ_ONLY: standard
+	// content copied from Discover).
+	Vendor, Mode string
 }
 
 // Lock is an edit lock of an artifact (IntegrationDesigntimeLocks).
@@ -348,6 +353,10 @@ type Tenant struct {
 	// are created on demand; failed runs of JMS consumers leave their message
 	// in the queue (status RETRY).
 	Queues map[string]*JMSQueue
+	// NumberRanges are the number ranges by name (OData properties: Name,
+	// Description, MinValue, MaxValue, CurrentValue, FieldLength, Rotate);
+	// nil answers 404 like a tenant without the API.
+	NumberRanges map[string]map[string]string
 	// NoCustomHeaderSearch answers 404 for
 	// MessageProcessingLogCustomHeaderProperties (a tenant without it).
 	NoCustomHeaderSearch bool
@@ -567,6 +576,8 @@ var (
 	reResources       = regexp.MustCompile(`^/api/v1/IntegrationDesigntimeArtifacts\(Id='([^']+)',Version='active'\)/Resources(\(Name='([^']+)',ResourceType='([^']+)'\)/\$value)?$`)
 	reDesignValue     = regexp.MustCompile(`^/api/v1/(\w+)DesigntimeArtifacts\(Id='([^']+)',Version='active'\)/\$value$`)
 	reCredential      = regexp.MustCompile(`^/api/v1/(UserCredentials|OAuth2ClientCredentials|SecureParameters)(?:\('(.+)'\))?$`)
+	reNumberRange     = regexp.MustCompile(`^/api/v1/NumberRanges\('([^']+)'\)$`)
+	reCertResource    = regexp.MustCompile(`^/api/v1/CertificateResources\('([0-9A-Fa-f]+)'\)/\$value$`)
 	reKeystoreCert    = regexp.MustCompile(`^/api/v1/KeystoreEntries\('([0-9A-Fa-f]+)'\)/Certificate/\$value$`)
 	reCertImport      = regexp.MustCompile(`^/api/v1/CertificateResources\('([0-9A-Fa-f]+)'\)/\$value$`)
 	rePackage         = regexp.MustCompile(`^/api/v1/IntegrationPackages\('([^']+)'\)$`)
@@ -1184,6 +1195,31 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	case reCredential.MatchString(path):
 		m.handleCredential(w, r, reCredential.FindStringSubmatch(path))
 
+	case m.NumberRanges != nil && (path == "/api/v1/NumberRanges" || reNumberRange.MatchString(path)):
+		m.handleNumberRange(w, r, path)
+
+	case r.Method == http.MethodPut && reCertResource.MatchString(path):
+		alias, _ := hex.DecodeString(reCertResource.FindStringSubmatch(path)[1])
+		body, _ := io.ReadAll(r.Body)
+		der, err := base64.StdEncoding.DecodeString(string(body))
+		cert, cerr := x509.ParseCertificate(der)
+		if err != nil || cerr != nil {
+			http.Error(w, "not a certificate", http.StatusBadRequest)
+			return
+		}
+		update := r.URL.Query().Get("update") == "true"
+		i := slices.IndexFunc(m.Keystore, func(e KeystoreEntry) bool { return e.Alias == string(alias) })
+		switch {
+		case i >= 0 && !update:
+			http.Error(w, "entry exists", http.StatusConflict)
+			return
+		case i >= 0:
+			m.Keystore[i].DER, m.Keystore[i].NotAfter = der, cert.NotAfter
+		default:
+			m.Keystore = append(m.Keystore, KeystoreEntry{Alias: string(alias), DER: der, NotAfter: cert.NotAfter})
+		}
+		w.WriteHeader(http.StatusOK)
+
 	case r.Method == http.MethodGet && path == "/api/v1/KeystoreEntries":
 		rows := []map[string]any{}
 		for _, e := range m.Keystore {
@@ -1570,7 +1606,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		for _, p := range m.Packages {
 			if p.ID == id {
 				writeJSON(w, map[string]any{"d": map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version,
-					"ShortText": p.ShortText, "Description": p.Description}})
+					"ShortText": p.ShortText, "Description": p.Description, "Vendor": p.Vendor, "Mode": cmp.Or(p.Mode, "EDIT_ALLOWED")}})
 				return
 			}
 		}
@@ -1620,7 +1656,8 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		results := []map[string]string{}
 		for _, p := range m.Packages {
-			results = append(results, map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version, "ShortText": p.ShortText, "Description": p.Description})
+			results = append(results, map[string]string{"Id": p.ID, "Name": p.Name, "Version": p.Version, "ShortText": p.ShortText, "Description": p.Description,
+				"Vendor": p.Vendor, "Mode": cmp.Or(p.Mode, "EDIT_ALLOWED")})
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": results}})
 
@@ -1939,4 +1976,46 @@ func compareVersions(a, b string) int {
 		}
 	}
 	return 0
+}
+
+// handleNumberRange serves NumberRanges: list, one, create (POST) and
+// replace (PUT), answering writes with 202 like the tenant.
+func (m *Tenant) handleNumberRange(w http.ResponseWriter, r *http.Request, path string) {
+	name := ""
+	if mm := reNumberRange.FindStringSubmatch(path); mm != nil {
+		name = strings.ReplaceAll(mm[1], "''", "'")
+	}
+	switch {
+	case r.Method == http.MethodGet && name == "":
+		rows := []map[string]string{}
+		for _, k := range slices.Sorted(maps.Keys(m.NumberRanges)) {
+			rows = append(rows, m.NumberRanges[k])
+		}
+		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
+	case r.Method == http.MethodGet:
+		if nr, ok := m.NumberRanges[name]; ok {
+			writeJSON(w, map[string]any{"d": nr})
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	case r.Method == http.MethodPost || r.Method == http.MethodPut:
+		var nr map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&nr); err != nil || nr["Name"] == "" {
+			http.Error(w, "bad number range", http.StatusBadRequest)
+			return
+		}
+		_, exists := m.NumberRanges[nr["Name"]]
+		if r.Method == http.MethodPost && exists {
+			http.Error(w, "exists", http.StatusConflict)
+			return
+		}
+		if r.Method == http.MethodPut && (!exists || nr["Name"] != name) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		m.NumberRanges[nr["Name"]] = nr
+		w.WriteHeader(http.StatusAccepted)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

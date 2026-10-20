@@ -46,6 +46,11 @@
       "typed": true
     },
     {
+      "command": "backup restore",
+      "file": "backup_restore.json",
+      "typed": true
+    },
+    {
       "command": "backup verify",
       "file": "backup_verify.json",
       "typed": true

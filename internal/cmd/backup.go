@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/config"
@@ -29,11 +30,12 @@ lists every file with its checksum, index.json what a comparison needs.
 
 backup diff compares two backups, or a backup with the tenant (metadata only,
 quick). backup verify checks an archive's checksums and artifact zips.
+backup restore puts a backup back into a tenant (--dry-run: the plan only).
 
 Uploading to S3 or Azure Blob Storage and rotation are done by the pipeline and
 the storage's lifecycle rules (docs/backup.md has examples).`,
 	}
-	c.AddCommand(newBackupCreateCommand(), newBackupVerifyCommand(), newBackupDiffCommand())
+	c.AddCommand(newBackupCreateCommand(), newBackupVerifyCommand(), newBackupDiffCommand(), newBackupRestoreCommand())
 	return c
 }
 
@@ -205,4 +207,104 @@ func progressLogger(cmd *cobra.Command) ops.ProgressFunc {
 		}
 		ev.Msgf("%d/%d %s", p.Step, p.Total, p.Message)
 	}
+}
+
+func newBackupRestoreCommand() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "restore <archive>",
+		Short: "Restore a backup into the tenant (--dry-run: write the plan only)",
+		Long: `Restores what the tenant API can take back, in this order: packages, artifacts
+(the zips as backed up), externalised parameters, the Partner Directory,
+credentials whose secret is set in its environment variable (credentials.yml),
+certificates, access policies, number ranges, and deploys what was running.
+Everything else is a manual step in the plan: secrets you have not set, key
+pairs (their private keys never left the tenant), standard packages from
+Discover, artifacts on integration cells.
+
+Nothing is deleted: content the backup does not have stays on the tenant.
+Existing objects are only changed where they differ. Artifact content is
+restored as backed up; the tenant's designtime version stays (a new artifact
+gets the backup's version). Number ranges are never lowered (numbers already
+issued would repeat).
+
+--dry-run writes nothing and shows the plan; --plan-file saves the plan (or,
+without --dry-run, the report) as Markdown, or as JSON for a .json name.
+A restore that writes needs --confirm. The archive is verified first: a
+damaged archive is refused.
+
+Exit code 0 when everything was restored, 7 when steps failed (listed), 2
+without --confirm.`,
+		Example: `  cpictl backup restore nightly.tar.gz --dry-run --plan-file restore-plan.md
+  CPI_SECRET_USER_ERP_USER=... cpictl backup restore nightly.tar.gz --confirm --plan-file restore-report.md
+  cpictl backup restore nightly.tar.gz --only packages,artifacts,parameters --packages 'SD_*' --confirm
+  cpictl backup restore nightly.tar.gz --only number-ranges --dry-run`,
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			confirm, _ := cmd.Flags().GetBool("confirm")
+			if !dryRun && !confirm {
+				return output.Usagef("a restore writes to the tenant: run it with --dry-run first, then with --confirm")
+			}
+			only, _ := cmd.Flags().GetStringSlice("only")
+			packages, _ := cmd.Flags().GetStringSlice("packages")
+			parallel, _ := cmd.Flags().GetInt("parallel")
+			delay, _ := cmd.Flags().GetInt("delay-length")
+			wait, err := resolveDeployWait(cmd, "deploy-timeout", "deploy.timeout", false, defaultDeployChecks, delay)
+			if err != nil {
+				return err
+			}
+			sd := serviceDetails(cmd)
+			res, err := ops.RestoreBackup(cmd.Context(), tenantExecuter(cmd), args[0], ops.RestoreOptions{DryRun: dryRun, Areas: only,
+				Packages: packages, Parallel: parallel, TargetHost: sd.Host,
+				Deploy: ops.Options{Interval: wait.Interval, MaxChecks: wait.MaxChecks, Timeout: wait.Timeout, CompareVersions: false}})
+			if res != nil {
+				output.SetResult(cmd.Context(), res)
+				logRestore(res)
+				if plan := config.GetString(cmd, "plan-file"); plan != "" {
+					if werr := ops.WriteRestorePlan(res, plan); werr != nil {
+						return werr
+					}
+					log.Info().Msgf("%s written to %s", map[bool]string{true: "Plan", false: "Report"}[res.DryRun], plan)
+				}
+			}
+			return err
+		},
+	}
+	c.Flags().Bool("dry-run", false, "Show what the restore would do; write nothing")
+	c.Flags().String("plan-file", "", "Write the plan (dry run) or the report to this file: Markdown, or JSON for a .json name")
+	c.Flags().Bool("confirm", false, "Confirm a restore that writes to the tenant")
+	c.Flags().StringSlice("only", nil, "Only these areas: "+strings.Join(ops.RestoreAreas, ", "))
+	c.Flags().StringSlice("packages", nil, "Only these packages (patterns with *) for packages, artifacts, parameters and deploy")
+	c.Flags().Int("parallel", 4, "Artifacts uploaded at a time")
+	c.Flags().Int("delay-length", defaultDeployDelaySeconds, "Seconds between deployment status checks")
+	c.Flags().String("deploy-timeout", "", "How long to wait for the deployments, e.g. 30m (default 10m; config: deploy.timeout)")
+	return c
+}
+
+func logRestore(res *ops.RestoreResult) {
+	prefix := ""
+	if res.DryRun {
+		prefix = "[DRY RUN] "
+	}
+	for _, s := range res.Steps {
+		if s.Action == ops.RestoreUnchanged {
+			continue
+		}
+		msg := fmt.Sprintf("%s%s %s: %s", prefix, s.Area, s.Object, s.Action)
+		if s.Detail != "" {
+			msg += " (" + s.Detail + ")"
+		}
+		switch s.Action {
+		case ops.RestoreFailed:
+			log.Error().Msg(msg + ": " + s.Error)
+		case ops.RestoreManual:
+			log.Warn().Msg(msg)
+		default:
+			log.Info().Msg(msg)
+		}
+	}
+	c := res.Counts
+	log.Info().Msgf("%sRestore of %s (tenant %s): %d create, %d update, %d deploy, %d unchanged, %d manual, %d failed",
+		prefix, res.Archive, res.SourceTenant, c[ops.RestoreCreate], c[ops.RestoreUpdate], c[ops.RestoreDeployIt], c[ops.RestoreUnchanged], c[ops.RestoreManual], c[ops.RestoreFailed])
 }

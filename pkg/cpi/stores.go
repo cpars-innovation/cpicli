@@ -447,3 +447,19 @@ func (s *Stores) IDMappings(sourceID, targetID string) ([]IDMapping, error) {
 	}
 	return out, nil
 }
+
+// SetNumberRange creates the number range (create) or replaces it,
+// including its current value.
+func (s *Stores) SetNumberRange(r NumberRange, create bool) error {
+	body, err := json.Marshal(map[string]string{"Name": r.Name, "Description": r.Description, "MinValue": r.MinValue, "MaxValue": r.MaxValue,
+		"CurrentValue": r.CurrentValue, "FieldLength": r.FieldLength, "Rotate": r.Rotate})
+	if err != nil {
+		return err
+	}
+	if create {
+		_, err = s.send("POST", "/api/v1/NumberRanges", body, "Create number range")
+		return err
+	}
+	_, err = s.send("PUT", "/api/v1/NumberRanges("+pathKey(r.Name)+")", body, "Update number range")
+	return err
+}
