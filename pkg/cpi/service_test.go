@@ -49,3 +49,35 @@ func TestInitHTTPExecuterRetriesReads(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 	assert.Equal(t, int32(1), posts.Load(), "writes are not retried")
 }
+
+func TestParseGateway(t *testing.T) {
+	for in, want := range map[string][4]any{
+		"https://gw.example.com/t/dev":       {"https", "gw.example.com", 443, "/t/dev"},
+		"https://gw.example.com:8443/t/dev/": {"https", "gw.example.com", 8443, "/t/dev"},
+		"gw.example.com/t/dev":               {"https", "gw.example.com", 443, "/t/dev"},
+		"http://127.0.0.1:8080/t/dev":        {"http", "127.0.0.1", 8080, "/t/dev"},
+		"http://gw.example.com/t/dev":        {"https", "gw.example.com", 443, "/t/dev"}, // no token in clear text
+		"https://gw.example.com":             {"https", "gw.example.com", 443, ""},
+	} {
+		s, h, p, path := ParseGateway(in)
+		assert.Equal(t, want, [4]any{s, h, p, path}, in)
+	}
+}
+
+func TestGatewayExecuter(t *testing.T) {
+	var auth, path atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth.Store(r.Header.Get("Authorization"))
+		path.Store(r.URL.Path)
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer srv.Close()
+	exe := InitHTTPExecuter(&ServiceDetails{Gateway: srv.URL + "/t/dev", GatewayToken: "tok",
+		OauthHost: "ignored.example.com", OauthClientId: "x", OauthClientSecret: "y"})
+	resp, err := exe.Exec(http.MethodPost, "/api/v1/IntegrationPackages", nil, nil)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, "Bearer tok", auth.Load(), "the user's token, no service key")
+	assert.Equal(t, "/t/dev/api/v1/IntegrationPackages", path.Load())
+	assert.Equal(t, "BEARER", exe.AuthType)
+}

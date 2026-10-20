@@ -23,6 +23,11 @@ type ServiceDetails struct {
 	// HTTPClient is the client requests go through (timeouts, transport,
 	// proxy); nil: one with httpclnt.DefaultTimeout.
 	HTTPClient *http.Client
+	// Gateway is the URL of a cpictl gateway including the SAP tenant
+	// (https://gw.example.com/t/dev): requests go there with GatewayToken,
+	// the user's token, instead of to the tenant with a service key.
+	Gateway      string
+	GatewayToken string
 }
 
 // ReadRetries and ReadBackoff apply to every executer created by
@@ -34,6 +39,12 @@ var (
 )
 
 func InitHTTPExecuter(serviceDetails *ServiceDetails) *httpclnt.HTTPExecuter {
+	if serviceDetails.Gateway != "" {
+		scheme, host, port, path := ParseGateway(serviceDetails.Gateway)
+		exe := httpclnt.NewWithOptions(httpclnt.Options{Host: host, Scheme: scheme, Port: port, BasePath: path,
+			BearerToken: serviceDetails.GatewayToken, HTTPClient: serviceDetails.HTTPClient, ShowLogs: true})
+		return exe.RetryReads(ReadRetries, ReadBackoff)
+	}
 	scheme, host, port := ParseHost(serviceDetails.Host)
 	oauthHost := serviceDetails.OauthHost
 	if oauthHost != "" {
@@ -82,6 +93,25 @@ func ParseHost(value string) (scheme string, host string, port int) {
 		scheme = "http"
 	}
 	return scheme, host, port
+}
+
+// ParseGateway splits a gateway URL into scheme, host, port and path (the
+// SAP tenant, /t/<name>). As in ParseHost, plain http is only honoured for
+// loopback hosts, so a token is never sent unencrypted to a remote gateway.
+func ParseGateway(value string) (scheme string, host string, port int, path string) {
+	rest := strings.TrimSpace(value)
+	prefix := ""
+	for _, p := range []string{"https://", "http://"} {
+		if strings.HasPrefix(rest, p) {
+			prefix, rest = p, strings.TrimPrefix(rest, p)
+		}
+	}
+	hostPart, path, _ := strings.Cut(rest, "/")
+	scheme, host, port = ParseHost(prefix + hostPart)
+	if path != "" {
+		path = "/" + strings.TrimSuffix(path, "/")
+	}
+	return scheme, host, port, path
 }
 
 func modifyingCall(method string, urlPath string, content []byte, successCode int, callType string, exe *httpclnt.HTTPExecuter) error {

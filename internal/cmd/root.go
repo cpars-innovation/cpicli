@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -70,6 +71,7 @@ Exit codes: 0 ok, 2 usage, 3 auth, 4 tenant HTTP error, 5 failed, 6 timeout,
 	rootCmd.PersistentFlags().String("oauth-clientid", "", "Client ID for using OAuth")
 	rootCmd.PersistentFlags().String("oauth-clientsecret", "", "Client Secret for using OAuth")
 	rootCmd.PersistentFlags().String("oauth-path", "/oauth/token", "Path for OAuth token server")
+	rootCmd.PersistentFlags().String("gateway", "", "URL of a cpictl gateway including the SAP tenant (https://gw.example.com/t/dev), instead of --tmn-host and a service key; the token comes from $CPICTL_GATEWAY_TOKEN")
 
 	rootCmd.PersistentFlags().String("tier", "", "Tier of the tenant (dev, test, prod, ...), usually set in the profile; on prod, sending test messages and test runs are refused unless --allow-production")
 	rootCmd.PersistentFlags().Bool("allow-production", false, "Allow test messages and test runs on a tenant whose tier is prod")
@@ -550,6 +552,11 @@ func checkProjectConfig(files []configFile) error {
 			return fmt.Errorf("%s contains %s: set it in the profile or $HOME/cpictl.yaml (a repository file must not change the production guard)", project.path, k)
 		}
 	}
+	// the user's gateway token is sent to the gateway: a repository file
+	// must not choose where
+	if project.v.InConfig("gateway") {
+		return fmt.Errorf("%s contains gateway: set it in the profile or $HOME/cpictl.yaml (a repository file must not choose where your token is sent)", project.path)
+	}
 	if home == nil {
 		return nil
 	}
@@ -655,7 +662,7 @@ func initializeConfig(cmd *cobra.Command) error {
 		log.Debug().Msgf("Config file %s", f.path)
 	}
 	if profile != "" && !isOffline(cmd) {
-		log.Info().Msgf("Profile %s (%s)", profile, viper.GetString("tmn-host"))
+		log.Info().Msgf("Profile %s (%s)", profile, cmp.Or(viper.GetString("gateway"), viper.GetString("tmn-host")))
 	}
 	if err := configPermissionError(files); err != nil {
 		return err
@@ -668,6 +675,22 @@ func initializeConfig(cmd *cobra.Command) error {
 		log.Warn().Msg(legacy)
 	}
 
+	if gw := config.GetString(cmd, "gateway"); gw != "" && !isOffline(cmd) {
+		// gateway mode: the gateway holds the SAP key; a key here would
+		// be a way around it
+		hasAuth := config.GetString(cmd, "oauth-host") != "" || config.GetString(cmd, "tmn-userid") != ""
+		switch {
+		case hasAuth:
+			return output.Usagef("--gateway and SAP credentials (--oauth-host, --tmn-userid) exclude each other: in gateway mode the gateway holds the key")
+		case os.Getenv(gatewayTokenEnv) == "":
+			return output.Usagef("gateway mode: set %s to your token for %s", gatewayTokenEnv, gw)
+		}
+		// http is only honoured on loopback (ParseHost): never a token in clear text
+		if _, host, _, path := cpi.ParseGateway(gw); host == "" || path == "" {
+			return output.Usagef("--gateway %q: the gateway's URL with the SAP tenant, e.g. https://gw.example.com/t/dev", gw)
+		}
+		return nil
+	}
 	if !isOffline(cmd) {
 		hasAuth := config.GetString(cmd, "oauth-host") != "" || config.GetString(cmd, "tmn-userid") != ""
 		switch {

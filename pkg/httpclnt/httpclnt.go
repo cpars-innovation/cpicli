@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -35,6 +36,10 @@ type HTTPExecuter struct {
 	csrfOnDemand bool
 	readRetries  int
 	readBackoff  time.Duration
+	// basePath prefixes every request path (gateway mode: /t/<tenant>);
+	// bearer is sent as the Authorization of every request.
+	basePath string
+	bearer   string
 }
 
 // ForEndpoint configures the executer for a runtime endpoint of an integration
@@ -85,6 +90,12 @@ type Options struct {
 	HTTPClient *http.Client
 	// ShowLogs writes debug logs of requests.
 	ShowLogs bool
+	// BearerToken, when set, is sent with every request instead of OAuth or
+	// Basic Auth (gateway mode: the user's token for the cpictl gateway).
+	// BasePath prefixes every request path (the gateway's /t/<tenant>); the
+	// guard of a local scope still sees the tenant's own paths.
+	BearerToken string
+	BasePath    string
 }
 
 // New returns an initialised HTTPExecuter instance.
@@ -95,10 +106,15 @@ func New(oauthHost string, oauthPath string, clientId string, clientSecret strin
 
 // NewWithOptions returns an executer configured by o.
 func NewWithOptions(o Options) *HTTPExecuter {
-	e := &HTTPExecuter{host: o.Host, scheme: o.Scheme, port: o.Port, showLogs: o.ShowLogs, csrf: &csrf{}}
+	e := &HTTPExecuter{host: o.Host, scheme: o.Scheme, port: o.Port, showLogs: o.ShowLogs, csrf: &csrf{},
+		basePath: strings.TrimSuffix(o.BasePath, "/")}
 	base := o.HTTPClient
 	if base == nil {
 		base = &http.Client{Timeout: DefaultTimeout, Transport: secureTransport()}
+	}
+	if o.BearerToken != "" {
+		e.httpClient, e.bearer, e.AuthType = base, o.BearerToken, "BEARER"
+		return e
 	}
 	if o.OAuthHost != "" {
 		if e.showLogs {
@@ -209,7 +225,7 @@ func withCSRF(headers map[string]string, token string) map[string]string {
 }
 
 func (e *HTTPExecuter) send(method string, path string, payload []byte, headers map[string]string, cookies []*http.Cookie) (*http.Response, error) {
-	url := fmt.Sprintf("%v://%v:%d%v", e.scheme, e.host, e.port, path)
+	url := fmt.Sprintf("%v://%v:%d%v%v", e.scheme, e.host, e.port, e.basePath, path)
 	if e.showLogs {
 		log.Debug().Msgf("Executing HTTP request: %v %v", method, url)
 	}
@@ -224,6 +240,9 @@ func (e *HTTPExecuter) send(method string, path string, payload []byte, headers 
 	}
 	if e.basicUserId != "" {
 		req.SetBasicAuth(e.basicUserId, e.basicPassword)
+	}
+	if e.bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+e.bearer)
 	}
 	for k, v := range headers {
 		// as given: header names are case-insensitive in HTTP, but flows
