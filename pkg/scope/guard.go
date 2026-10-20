@@ -120,19 +120,45 @@ func (g *Guard) refuse(r *Refusal) error {
 
 // Before implements httpclnt.Guard.
 func (g *Guard) Before(r *httpclnt.GuardRequest) error {
+	_, err := g.Check(r)
+	return err
+}
+
+// Access is one permission a request needed.
+type Access struct {
+	Resource Resource
+	Action   string
+}
+
+// Checked describes a request Check allowed.
+type Checked struct {
+	// Accesses are the permissions the request needed (for an audit
+	// record); empty for lists, which are filtered after the answer, and for
+	// requests that need none ($metadata, CSRF token).
+	Accesses []Access
+	// ReadsAnswer: After filters the answer or remembers IDs from it, so a
+	// proxy must pass the whole answer through After. Otherwise the answer
+	// may be streamed to the caller unchanged.
+	ReadsAnswer bool
+}
+
+// Check decides r like Before and reports what the request touches.
+func (g *Guard) Check(r *httpclnt.GuardRequest) (Checked, error) {
 	if isInternal(r.Ctx) && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
-		return nil
+		return Checked{}, nil
 	}
 	d, err := g.classify(r)
 	if err != nil {
-		return err
+		return Checked{}, err
 	}
+	c := Checked{ReadsAnswer: d.filter != nil || d.record != nil}
 	for _, n := range d.need {
 		if err := g.check(r.Ctx, n); err != nil {
-			return err
+			return Checked{}, err
 		}
+		c.Accesses = append(c.Accesses, Access{Resource: n.res, Action: n.action})
 	}
-	return nil
+	return c, nil
 }
 
 // After implements httpclnt.Guard.
@@ -329,9 +355,12 @@ func collectIDs(v any, into map[string]bool) {
 // --- classification -------------------------------------------------------
 
 var (
-	reKey      = `'((?:[^']|'')*)'`
-	rePackage  = regexp.MustCompile(`^IntegrationPackages\(` + reKey + `\)(?:/(\w+)DesigntimeArtifacts)?$`)
-	reArtifact = regexp.MustCompile(`^(\w+)DesigntimeArtifacts\(Id=` + reKey + `,Version=` + reKey + `\)(/.*)?$`)
+	reKey = `'((?:[^']|'')*)'`
+	// the designtime types the guard knows (designtimeTypes): another type
+	// is an unknown URL
+	reTypes    = `(Integration|ValueMapping|MessageMapping|ScriptCollection)`
+	rePackage  = regexp.MustCompile(`^IntegrationPackages\(` + reKey + `\)(?:/` + reTypes + `DesigntimeArtifacts)?$`)
+	reArtifact = regexp.MustCompile(`^` + reTypes + `DesigntimeArtifacts\(Id=` + reKey + `,Version=` + reKey + `\)(/.*)?$`)
 	reRuntime  = regexp.MustCompile(`^IntegrationRuntimeArtifacts\(` + reKey + `\)(/.*)?$`)
 	reMessage  = regexp.MustCompile(`^MessageProcessingLogs\(` + reKey + `\)(/.*)?$`)
 	reChild    = regexp.MustCompile(`^(MessageProcessingLogAttachments|MessageStoreEntries|MessageProcessingLogRuns|MessageProcessingLogRunSteps|TraceMessages)\(` + `([^)]*)` + `\)(/.*)?$`)
@@ -379,7 +408,16 @@ const (
 
 func (g *Guard) classify(r *httpclnt.GuardRequest) (decision, error) {
 	p, rawQuery, _ := strings.Cut(r.Path, "?")
-	q, _ := url.ParseQuery(rawQuery)
+	api := strings.HasPrefix(p, apiPrefix) || p+"/" == apiPrefix || strings.HasPrefix(p, opsPrefix)
+	if reason := unsafeRequest(p, r.Header, api); reason != "" {
+		return decision{}, g.refuse(&Refusal{Reason: reason})
+	}
+	q, err := url.ParseQuery(rawQuery)
+	if api {
+		if reason := unsafeQuery(q, err); reason != "" {
+			return decision{}, g.refuse(&Refusal{Reason: reason})
+		}
+	}
 	switch {
 	case strings.HasPrefix(p, apiPrefix) || p+"/" == apiPrefix:
 		g.mu.Lock()
@@ -394,6 +432,59 @@ func (g *Guard) classify(r *httpclnt.GuardRequest) (decision, error) {
 		return decision{}, g.refuse(&Refusal{Reason: "API Management is not available under a scope"})
 	}
 	return g.classifyEndpoint(r)
+}
+
+// unsafeRequest refuses what a server could read differently from the
+// guard, which decides on the literal path: dot segments (also encoded, or
+// with a path parameter as Tomcat reads "..;"), encoded slashes,
+// backslashes and percent signs, empty segments, control characters, and
+// in API paths any ";" (no ID contains one). Also method overrides, which
+// make a checked POST a DELETE, and compressed bodies the guard cannot read.
+func unsafeRequest(path string, header map[string]string, api bool) string {
+	for k, v := range header {
+		switch strings.ToLower(k) {
+		case "x-http-method", "x-http-method-override", "x-method-override":
+			return "method override headers are not available under a scope"
+		case "content-encoding":
+			if v != "" && !strings.EqualFold(v, "identity") {
+				return "compressed request bodies are not available under a scope"
+			}
+		}
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "the request path is not accepted under a scope"
+	}
+	segs := strings.Split(path[1:], "/")
+	for i, seg := range segs {
+		dec, err := url.PathUnescape(seg)
+		bad := err != nil || strings.ContainsAny(dec, "/\\%") || strings.ContainsFunc(dec, func(r rune) bool { return r < 0x20 || r == 0x7f }) ||
+			(seg == "" && i < len(segs)-1) || (api && strings.Contains(dec, ";"))
+		if name, _, _ := strings.Cut(dec, ";"); name == "." || name == ".." {
+			bad = true
+		}
+		if bad {
+			return "the request path is not accepted under a scope"
+		}
+	}
+	return ""
+}
+
+// unsafeQuery refuses query strings the guard and the tenant could read
+// differently: unparsable ones and repeated parameters (also differing in
+// case), where the guard reads the first and the tenant may take the last.
+func unsafeQuery(q url.Values, parseErr error) string {
+	if parseErr != nil {
+		return "the query is not accepted under a scope"
+	}
+	seen := map[string]bool{}
+	for k, v := range q {
+		lk := strings.ToLower(k)
+		if len(v) > 1 || seen[lk] {
+			return "repeated query parameter " + k + " is not accepted under a scope"
+		}
+		seen[lk] = true
+	}
+	return ""
 }
 
 // expandAllowed lists the $expand values a request may carry, by collection:
@@ -442,7 +533,7 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		}
 		var needs []need
 		for _, op := range ops {
-			d, err := g.classify(&httpclnt.GuardRequest{Ctx: r.Ctx, Method: op.method, Base: r.Base, Path: op.path, Body: op.body})
+			d, err := g.classify(&httpclnt.GuardRequest{Ctx: r.Ctx, Method: op.method, Base: r.Base, Path: op.path, Header: op.header, Body: op.body})
 			if err != nil {
 				return decision{}, err
 			}
@@ -500,6 +591,9 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 	case reArtifact.MatchString(p):
 		mm := reArtifact.FindStringSubmatch(p)
 		id, sub := key(mm[2]), mm[4]
+		if !ValidID(key(mm[3])) { // "active" or "1.0.3"
+			return decision{}, g.refuse(&Refusal{Reason: "the artifact version is not accepted under a scope"})
+		}
 		switch {
 		case m == http.MethodDelete && sub == "":
 			return art(id, ActionDelete), nil
@@ -653,7 +747,9 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 		}
 		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: to}, action: ActionTest}}}, nil
 	}
-	return decision{allow: true}, nil
+	// the entry point was seen in a list of flows the scope may read; with
+	// grants, read on a package does not mean test on it
+	return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: flow}, action: ActionTest}}}, nil
 }
 
 // endpointCovers reports whether target is the entry point ep or below it
@@ -722,13 +818,42 @@ func withoutDefaultPort(u string) string {
 
 // --- helpers for decisions -------------------------------------------------
 
+// bodyField reads a top-level string field of a JSON body. A body that
+// repeats a top-level key (also differing in case) gives "": which one the
+// tenant takes is its choice, and every decision that reads a body needs a
+// valid ID from it, so an empty one is refused.
 func bodyField(body []byte, field string) string {
-	var v map[string]any
-	if json.Unmarshal(body, &v) != nil {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
 		return ""
 	}
-	s, _ := v[field].(string)
-	return s
+	seen := map[string]bool{}
+	value := ""
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+		k, _ := t.(string)
+		if seen[strings.ToLower(k)] {
+			return ""
+		}
+		seen[strings.ToLower(k)] = true
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			return ""
+		}
+		if k == field {
+			value, _ = v.(string)
+		}
+	}
+	if t, err := dec.Token(); err != nil || t != json.Delim('}') {
+		return ""
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return "" // trailing data
+	}
+	return value
 }
 
 func (g *Guard) lookupField(ctx context.Context, path, field string) string {
@@ -892,8 +1017,12 @@ func init() {
 			return false
 		}
 		// the test tooling's own recordings (stub requests) come with "test"
-		tooling := toolingFlow(flow) && g.Scope.Grants(ActionTest)
-		return g.Scope.Grants(n.action) || tooling
+		if toolingFlow(flow) && g.Scope.Grants(ActionTest) {
+			return true
+		}
+		// decided on the message's flow: with grants, reading a flow's
+		// messages does not mean downloading their payloads
+		return g.Scope.Grants(n.action) && g.allowsArtifact(ctx, flow, n.action)
 	}
 }
 
@@ -902,6 +1031,7 @@ var checkKind = map[string]func(g *Guard, ctx context.Context, n need) bool{}
 
 type batchOp struct {
 	method, path string
+	header       map[string]string
 	body         []byte
 }
 
@@ -964,7 +1094,14 @@ func readBatchParts(mr *multipart.Reader, depth int, ops *[]batchOp) error {
 			if !strings.HasPrefix(path, "/") {
 				path = apiPrefix + path
 			}
-			*ops = append(*ops, batchOp{method: req.Method, path: path, body: b})
+			h := map[string]string{}
+			for k, v := range req.Header {
+				if len(v) != 1 {
+					return fmt.Errorf("operation header %q repeated", k)
+				}
+				h[k] = v[0]
+			}
+			*ops = append(*ops, batchOp{method: req.Method, path: path, header: h, body: b})
 		default:
 			return fmt.Errorf("part of type %q not accepted", mt)
 		}

@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -123,4 +124,85 @@ func containsStar(s string) bool {
 		}
 	}
 	return false
+}
+
+// A gateway policy: deploy on SD_*, only read on FI_Shared, HR_* denied
+// whatever a broad grant says.
+const policyScope = `
+version: 1
+grants:
+  - packages: ["SD_*"]
+    artifacts: ["!*_Legacy"]
+    actions: [read, download, deploy]
+  - packages: ["FI_Shared"]
+    actions: [read]
+  - packages: ["*"]
+    actions: [read]
+deny:
+  - packages: ["HR_*"]
+  - packages: ["SD_*"]
+    artifacts: ["*_Secret"]
+    actions: [download]
+`
+
+func TestGrantsAndDeny(t *testing.T) {
+	sc := mustParse(t, policyScope)
+	art := func(id, pkg string) Resource { return Resource{Kind: KindArtifact, ID: id, Package: pkg} }
+	pkg := func(id string) Resource { return Resource{Kind: KindPackage, ID: id} }
+
+	assert.True(t, sc.Allows(art("SD_In", "SD_Orders"), ActionDeploy))
+	assert.False(t, sc.Allows(art("SD_In_Legacy", "SD_Orders"), ActionDeploy), "the grant's artifact patterns")
+	assert.True(t, sc.Allows(art("SD_In_Legacy", "SD_Orders"), ActionRead), "another grant reads every package")
+	assert.True(t, sc.Allows(art("FI_Post", "FI_Shared"), ActionRead))
+	assert.False(t, sc.Allows(art("FI_Post", "FI_Shared"), ActionDeploy), "actions are per grant")
+	assert.False(t, sc.Allows(art("FI_Post", "FI_Shared"), ActionDownload))
+
+	// deny wins over every grant, packages and their artifacts alike
+	assert.False(t, sc.Allows(pkg("HR_Payroll"), ActionRead))
+	assert.False(t, sc.Allows(art("HR_In", "HR_Payroll"), ActionRead))
+	assert.False(t, sc.SeesPackage("HR_Payroll"))
+	// a deny with artifacts and actions: only those
+	assert.False(t, sc.Allows(art("SD_Key_Secret", "SD_Orders"), ActionDownload))
+	assert.True(t, sc.Allows(art("SD_Key_Secret", "SD_Orders"), ActionRead))
+	assert.True(t, sc.Allows(pkg("SD_Orders"), ActionDownload), "an artifact deny leaves the package alone")
+
+	assert.True(t, sc.Grants(ActionDeploy), "granted somewhere")
+	assert.False(t, sc.Grants(ActionUpload))
+	assert.False(t, sc.Allows(art("SD_In", ""), ActionRead), "unknown package: refused")
+	assert.False(t, sc.Allows(Resource{Kind: KindPartner, ID: "SD_X"}, ActionRead), "partners only through the top level")
+
+	// top level and grants add up
+	both := mustParse(t, `{"version":1,"packages":["A"],"actions":["deploy"],"grants":[{"packages":["B"],"actions":["read"]}]}`)
+	assert.True(t, both.Allows(pkg("A"), ActionDeploy))
+	assert.True(t, both.Allows(pkg("B"), ActionRead))
+	assert.False(t, both.Allows(pkg("B"), ActionDeploy))
+	assert.False(t, both.Allows(pkg("A"), ActionRead))
+}
+
+func TestParseGrants(t *testing.T) {
+	for in, msg := range map[string]string{
+		`{"version":1,"grants":[{"actions":["read"]}]}`:                         "grants[0]: packages and actions are required",
+		`{"version":1,"grants":[{"packages":["A"]}]}`:                           "grants[0]: packages and actions are required",
+		`{"version":1,"grants":[{"packages":["A/B"],"actions":["read"]}]}`:      "only letters",
+		`{"version":1,"grants":[{"packages":["A"],"actions":["publish"]}]}`:     `unknown action "publish"`,
+		`{"version":1,"grants":[{"packages":["A"],"actions":["read"],"x":1}]}`:  "field x not found",
+		`{"version":1,"deny":[{"actions":["read"]}]}`:                           "deny[0]: packages or artifacts are required",
+		`{"version":1,"deny":[{"packages":["HR_*"],"artifacts":["Ä"]}]}`:        "only letters",
+		`{"version":1,"deny":[{"packages":["HR_*"],"except":{"roles":["x"]}}]}`: "field except not found",
+	} {
+		_, err := Parse([]byte(in))
+		assert.ErrorContains(t, err, msg, in)
+	}
+	a := mustParse(t, policyScope)
+	b := mustParse(t, `{"version":1,"grants":[{"packages":["SD_*"],"actions":["read"]}]}`)
+	assert.NotEqual(t, a.Hash(), b.Hash(), "grants and deny are part of the hash")
+	flat := mustParse(t, `{"version":1,"packages":["A"],"actions":["read"]}`)
+	assert.Equal(t, "{\"version\":1,\"packages\":[\"A\"],\"actions\":[\"read\"]}", mustJSON(t, flat), "flat scopes hash as before")
+}
+
+func mustJSON(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return string(b)
 }
