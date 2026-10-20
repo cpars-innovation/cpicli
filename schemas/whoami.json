@@ -45,6 +45,9 @@
     },
     "cmd.WhoAmIScope": {
       "properties": {
+        "credential": {
+          "type": "string"
+        },
         "scope": {
           "anyOf": [
             {

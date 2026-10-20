@@ -35,7 +35,7 @@ func fakeGateway(t *testing.T, mock *cpitest.Tenant) (*httptest.Server, func() [
 		if r.URL.Path == "/whoami" && r.Header.Get("Authorization") == "Bearer user-token" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"org":"contoso","user":"oid-anna","name":"anna@contoso.com","roles":["CPI.SD"],"expires":"2099-01-01T00:00:00Z",
-				"sapTenants":{"dev":{"scopeHash":"abc","scope":{"version":1,"grants":[{"packages":["SD_*"],"actions":["read","deploy"]}]}}}}`))
+				"sapTenants":{"dev":{"scopeHash":"abc","credential":"sd","scope":{"version":1,"grants":[{"packages":["SD_*"],"actions":["read","deploy"]}]}}}}`))
 			return
 		}
 		if r.Header.Get("Authorization") != "Bearer user-token" || !strings.HasPrefix(r.URL.Path, "/t/dev/") {
@@ -150,7 +150,7 @@ func TestGatewayMode(t *testing.T) {
 			code, stderr := projectRun(t, home, t.TempDir(), append([]string{"--profile", "gw"}, args...)...)
 			assert.Equal(t, 0, code, "%v: %s", args, stderr)
 			assert.Contains(t, stderr, "anna@contoso.com (oid-anna) in contoso")
-			assert.Contains(t, stderr, "SAP tenant dev: read,deploy on SD_*")
+			assert.Contains(t, stderr, "SAP tenant dev (via SAP key sd): read,deploy on SD_*")
 			assert.NotContains(t, stderr, "user-token")
 		}
 

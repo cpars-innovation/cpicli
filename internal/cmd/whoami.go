@@ -30,6 +30,9 @@ type WhoAmI struct {
 type WhoAmIScope struct {
 	ScopeHash string       `json:"scopeHash"`
 	Scope     *scope.Scope `json:"scope"`
+	// Credential names the SAP key the gateway uses for this caller on this
+	// tenant: SAP's own audit names that key, not the user.
+	Credential string `json:"credential,omitempty"`
 }
 
 // NewAuthStatusCommand is cpictl auth status (alias whoami).
@@ -87,7 +90,12 @@ user (cpictl auth login) and what an agent working for you can do.`,
 			}
 			sort.Strings(names)
 			for _, n := range names {
-				log.Info().Msgf("SAP tenant %s: %s", n, describeScope(who.Tenants[n].Scope))
+				t := who.Tenants[n]
+				via := ""
+				if t.Credential != "" {
+					via = " (via SAP key " + t.Credential + ")"
+				}
+				log.Info().Msgf("SAP tenant %s%s: %s", n, via, describeScope(t.Scope))
 			}
 			if len(names) == 0 {
 				log.Warn().Msg("no SAP tenant grants you anything")
