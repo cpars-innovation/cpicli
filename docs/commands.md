@@ -17,6 +17,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`backup`](#backup) | Back up a tenant into one archive, compare backups, verify them |
 | [`backup create`](#backup-create) | Write a backup of the tenant into one archive |
 | [`backup diff`](#backup-diff) | Compare two backups, or a backup with the tenant |
+| [`backup restore`](#backup-restore) | Restore a backup into the tenant (--dry-run: write the plan only) |
 | [`backup verify`](#backup-verify) | Check a backup archive: checksums, artifact zips, completeness |
 | [`compare`](#compare) | Compare two tiers, Git refs or content trees per artifact (content, version, parameters, files) |
 | [`components`](#components) | Component catalogue: the adapter and step versions the tenant offers |
@@ -365,6 +366,7 @@ lists every file with its checksum, index.json what a comparison needs.
 
 backup diff compares two backups, or a backup with the tenant (metadata only,
 quick). backup verify checks an archive's checksums and artifact zips.
+backup restore puts a backup back into a tenant (--dry-run: the plan only).
 
 Uploading to S3 or Azure Blob Storage and rotation are done by the pipeline and
 the storage's lifecycle rules (docs/backup.md has examples).
@@ -433,6 +435,58 @@ Directory parameters, number ranges, variables, data stores, JMS queues.
   cpictl backup diff backups/monday.tar.gz backups/tuesday.tar.gz
   cpictl backup diff backups/last.tar.gz                # against the tenant
   cpictl backup diff backups/last.tar.gz --fail-on-change
+```
+
+## backup restore
+
+Restore a backup into the tenant (--dry-run: write the plan only)
+
+```
+Restores what the tenant API can take back, in this order: packages, artifacts
+(the zips as backed up), externalised parameters, the Partner Directory,
+credentials whose secret is set in its environment variable (credentials.yml),
+certificates, access policies, number ranges, and deploys what was running.
+Everything else is a manual step in the plan: secrets you have not set, key
+pairs (their private keys never left the tenant), standard packages from
+Discover, artifacts on integration cells.
+
+Nothing is deleted: content the backup does not have stays on the tenant.
+Existing objects are only changed where they differ. Artifact content is
+restored as backed up; the tenant's designtime version stays (a new artifact
+gets the backup's version). Number ranges are never lowered (numbers already
+issued would repeat).
+
+--dry-run writes nothing and shows the plan; --plan-file saves the plan (or,
+without --dry-run, the report) as Markdown, or as JSON for a .json name.
+A restore that writes needs --confirm. The archive is verified first: a
+damaged archive is refused.
+
+Exit code 0 when everything was restored, 7 when steps failed (listed), 2
+without --confirm.
+```
+
+**Usage:** `cpictl backup restore <archive> [flags]`
+
+**Flags:**
+
+```
+      --confirm                 Confirm a restore that writes to the tenant
+      --delay-length int        Seconds between deployment status checks (default 10)
+      --deploy-timeout string   How long to wait for the deployments, e.g. 30m (default 10m; config: deploy.timeout)
+      --dry-run                 Show what the restore would do; write nothing
+      --only strings            Only these areas: packages, artifacts, parameters, partner-directory, credentials, certificates, access-policies, number-ranges, deploy
+      --packages strings        Only these packages (patterns with *) for packages, artifacts, parameters and deploy
+      --parallel int            Artifacts uploaded at a time (default 4)
+      --plan-file string        Write the plan (dry run) or the report to this file: Markdown, or JSON for a .json name
+```
+
+**Examples:**
+
+```
+  cpictl backup restore nightly.tar.gz --dry-run --plan-file restore-plan.md
+  CPI_SECRET_USER_ERP_USER=... cpictl backup restore nightly.tar.gz --confirm --plan-file restore-report.md
+  cpictl backup restore nightly.tar.gz --only packages,artifacts,parameters --packages 'SD_*' --confirm
+  cpictl backup restore nightly.tar.gz --only number-ranges --dry-run
 ```
 
 ## backup verify

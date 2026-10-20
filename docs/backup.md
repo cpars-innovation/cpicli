@@ -2,14 +2,15 @@
 
 `cpictl backup create` writes everything needed to rebuild a Cloud Integration tenant into one
 archive. The pipeline uploads it to S3 or Azure Blob Storage, and the storage's lifecycle rules
-rotate it. `backup diff` compares backups with each other or with the tenant, and `backup verify`
-checks an archive.
+rotate it. `backup diff` compares backups with each other or with the tenant, `backup verify`
+checks an archive, and `backup restore` puts it back ([Restore](#restore)).
 
 ```bash
 cpictl backup create --dir ./backups --schedule-folders     # nightly
 cpictl backup verify backups/daily/cpi-backup_mytenant_2026-10-17T02-00-00Z.tar.gz
 cpictl backup diff backups/daily/<yesterday>.tar.gz backups/daily/<today>.tar.gz
 cpictl backup diff backups/daily/<today>.tar.gz              # against the tenant now (metadata only)
+cpictl backup restore backups/daily/<today>.tar.gz --dry-run --plan-file restore-plan.md
 ```
 
 ## What a backup contains
@@ -173,15 +174,52 @@ Azure lifecycle management policy:
 - **Drift:** `cpictl backup diff <last>.tar.gz --fail-on-change` in the morning shows what
   changed on production since the night, outside of transports.
 
+## Restore
+
+`cpictl backup restore` puts a backup back into a tenant: the same one after a loss, or a new one
+after a disaster. Always run it with `--dry-run` first and keep the plan:
+
+```bash
+cpictl backup restore nightly.tar.gz --dry-run --plan-file restore-plan.md     # review, nothing changes
+export CPI_SECRET_USER_ERP_USER=...                                            # secrets from your vault
+cpictl backup restore nightly.tar.gz --confirm --plan-file restore-report.md
+```
+
+**What it restores**, in this order:
+
+| Area (`--only`) | What happens |
+|-----------------|--------------|
+| `packages` | missing packages are created from `package.json`; standard packages from Discover (`READ_ONLY`) are a manual step: copy them from Discover, then run the restore again |
+| `artifacts` | every artifact zip is uploaded where the tenant's content differs; a missing one is created. The tenant's designtime version stays; a new artifact gets the backup's version. Running artifacts keep running until the deploy step |
+| `parameters` | externalised parameters are set where they differ |
+| `partner-directory` | string and binary parameters are created or updated (never deleted) |
+| `credentials` | a credential whose secret variable is set (`credentials.yml`) is created or updated with it; one without it stays as it is, or, when missing, is a manual step naming the variable |
+| `certificates` | missing certificates are imported from `security/certs/`; key pairs and SSH keys are manual steps (their private keys never left the tenant) |
+| `access-policies` | missing policies are created, missing artifact references added |
+| `number-ranges` | missing ranges are created; an existing counter is only ever raised to the backup's value, never lowered (numbers already issued would repeat) |
+| `deploy` | what `runtime/deployed.json` lists is deployed again, script collections and mappings before flows: artifacts not running, and those this restore changed. Artifacts that were in error at backup time are left out; artifacts on integration cells are manual steps |
+
+- **Nothing is deleted.** Content the backup does not have stays on the tenant.
+- **Idempotent.** A second run changes nothing, except credentials whose secret is set: the tenant
+  cannot tell whether a secret is the same, so it is written again.
+- **Safe to start.** The archive is verified first; a damaged one is refused. A restore that writes
+  needs `--confirm`.
+- **Partial.** `--only artifacts,parameters --packages 'SD_*'` restores part of it.
+- **Into another tenant.** The plan notes when the backup is from another tenant; a disaster restore
+  into a new tenant is the same command with that tenant's profile.
+
+**The plan** (`--plan-file`): Markdown with a checklist of the manual steps first, then one table
+per area. A `.json` name writes the JSON result instead. With `--output json`, the same result goes
+to stdout. Without `--dry-run`, the file is the report of what was done.
+
+**Limits:**
+- The backup holds designtime content. If an older version was running at backup time, the restore
+  deploys the designtime version; the plan says so for those artifacts.
+- Message logs, JMS messages, data store entries and variable values are runtime data, not in the
+  backup (the plan lists them as information).
+- Exit codes: 0 restored; 7 some steps failed (listed in the result and the plan); 2 without
+  `--confirm`; 5 for a damaged archive.
+
 ## Still to come
 
-`backup restore`, with `--dry-run` and a list of the manual steps, comes next. Until then a
-restore uses the existing commands:
-1. `update artifact` / `snapshot restore` from the unpacked zips.
-2. `configure` with the parameters.
-3. `pd deploy` from `partner-directory/`.
-4. `credentials apply`.
-5. `keystore import-cert`.
-6. `deploy` of what `runtime/deployed.json` lists.
-
-Optional client-side encryption of the archive (off by default) follows after that.
+Optional client-side encryption of the archive (off by default).

@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "ops.RestoreResult": {
+      "properties": {
+        "archive": {
+          "type": "string"
+        },
+        "areas": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backupCreatedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "counts": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "sourceHost": {
+          "type": "string"
+        },
+        "sourceTenant": {
+          "type": "string"
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.RestoreStep"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "targetHost": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "archive",
+        "areas",
+        "backupCreatedAt",
+        "counts",
+        "dryRun",
+        "sourceTenant",
+        "steps"
+      ],
+      "type": "object"
+    },
+    "ops.RestoreStep": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "area": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "object": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "area",
+        "object"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/backup_restore.json",
+  "$ref": "#/$defs/ops.RestoreResult",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl backup restore.",
+  "title": "cpictl backup restore result",
+  "x-schemaVersion": 1
+}

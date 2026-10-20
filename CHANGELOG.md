@@ -5,6 +5,20 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`cpictl backup restore`** ([backup.md](docs/backup.md#restore)): puts a backup back into a
+  tenant, the same one or a new one.
+  - **Restored:** packages, artifacts (as backed up), externalised parameters, the Partner
+    Directory, credentials whose secret is set in its environment variable, certificates, access
+    policies, number ranges (never lowered), and the deployments that were running.
+  - **Manual steps,** listed as a checklist: secrets not given, key pairs and SSH keys, standard
+    packages from Discover, integration cells.
+  - **Dry run:** `--dry-run` writes nothing; `--plan-file` saves the plan, or the report of a real
+    restore, as Markdown (JSON for a `.json` name).
+  - **Safe and repeatable:** writing needs `--confirm`; a damaged archive is refused; nothing is
+    deleted; a second run changes nothing. `--only` and `--packages` restore part of a backup.
+  - Tested on a real tenant: a deleted flow, a changed Partner Directory value and a deleted number
+    range came back, and the flow was deployed again.
+
 ## 0.29.0
 
 **Who is affected:** only users of an access scope (`--scope-file`, `--scope-*`, MCP servers started
