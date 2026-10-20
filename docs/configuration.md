@@ -191,8 +191,14 @@ cpictl --profile dev packages              # uses the stored token, refreshed si
 cpictl --profile dev auth logout           # clears the stored token
 ```
 
-The token is stored per profile under `$HOME/.cpictl/tokens/<profile>.json` (mode `0600`; on Windows the user
-profile's permissions protect it) and refreshed with the refresh token, so a long-running `cpictl mcp` session does
+**Entra app registration for cpictl** (once per organisation, by an Entra admin): a public-client app with the
+platform **Mobile and desktop applications** and the redirect URI `http://localhost` (Entra accepts any port on
+it; cpictl listens on a free one). Give it the delegated permission on the gateway API's scope. Leave **Allow
+public client flows** off unless you need `--device-code` on headless hosts: device code sign-in is a common
+phishing path, and with it off only the browser sign-in works.
+
+The token is stored per profile under `$HOME/.cpictl/tokens/<profile>.json` (mode `0600`; on Windows the mode
+sets no ACL, so the file is protected by the user profile's permissions until an OS-keychain store follows) and refreshed with the refresh token, so a long-running `cpictl mcp` session does
 not stop working after an hour. The file holds the refresh token, the long-lived credential: treat it like a
 password, and run `cpictl auth logout` on shared machines. `login.authority` (default: Entra's public cloud) must use https. Without a `login` block,
 or before the first `cpictl auth login`, cpictl falls back to the `CPICTL_GATEWAY_TOKEN` environment variable:

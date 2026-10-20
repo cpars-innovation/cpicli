@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -37,6 +39,11 @@ func newFakeIssuer(t *testing.T) *fakeIssuer {
 		q := r.URL.Query()
 		if q.Get("code_challenge") == "" || q.Get("code_challenge_method") != "S256" {
 			http.Error(w, "missing PKCE challenge", http.StatusBadRequest)
+			return
+		}
+		// like Entra with http://localhost registered: any port, nothing else
+		if !entraLoopback.MatchString(q.Get("redirect_uri")) {
+			http.Error(w, "AADSTS50011: redirect URI mismatch", http.StatusBadRequest)
 			return
 		}
 		loc := q.Get("redirect_uri") + "?code=the-code&state=" + url.QueryEscape(q.Get("state"))
@@ -67,6 +74,8 @@ func newFakeIssuer(t *testing.T) *fakeIssuer {
 	return f
 }
 
+var entraLoopback = regexp.MustCompile(`^http://localhost:[0-9]+$`)
+
 func (f *fakeIssuer) config() Config {
 	return Config{TenantID: "tid", ClientID: "client", Scopes: []string{"api://gw/access"}, Authority: f.srv.URL + "/"}
 }
@@ -79,12 +88,29 @@ func writeJSON(w http.ResponseWriter, v any) {
 func TestLoginInteractive(t *testing.T) {
 	f := newFakeIssuer(t)
 	tok, err := LoginInteractive(context.Background(), f.config(), func(authURL string) error {
-		// a browser would load this; the fake redirects to the loopback callback
+		u, err := url.Parse(authURL)
+		if err != nil {
+			return err
+		}
+		redirect := u.Query().Get("redirect_uri")
+		assert.Regexp(t, entraLoopback, redirect, "must match a registered http://localhost")
+		// what a browser or another local process sends first must not end
+		// the sign-in
+		for _, stray := range []string{"/favicon.ico", "/", "/?foo=bar", "/callback?code=x"} {
+			resp, err := http.Get(redirect + stray)
+			if err != nil {
+				return err
+			}
+			resp.Body.Close()
+			assert.Equal(t, http.StatusNotFound, resp.StatusCode, stray)
+		}
+		// a browser would load this; the fake redirects to the loopback
 		resp, err := http.Get(authURL)
 		if err != nil {
 			return err
 		}
 		resp.Body.Close()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		return nil
 	})
 	require.NoError(t, err)
@@ -185,4 +211,35 @@ func TestTokenSourceParallel(t *testing.T) {
 	if got, err := s.Load("p"); err != nil || got.AccessToken != "b" {
 		t.Errorf("refreshed token not persisted: %v %v", got, err)
 	}
+}
+
+// An expired or revoked refresh token says what to do, and stays an
+// authentication error (exit code 3).
+func TestTokenSourceExpiredSignIn(t *testing.T) {
+	issuer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":"invalid_grant","error_description":"AADSTS700082: The refresh token has expired"}`)
+	}))
+	defer issuer.Close()
+	s := &Store{Dir: t.TempDir()}
+	require.NoError(t, s.Save("dev", &oauth2.Token{AccessToken: "a", RefreshToken: "r", Expiry: time.Now().Add(-time.Minute)}))
+	src, err := s.TokenSource(context.Background(), Config{TenantID: "t", ClientID: "c", Authority: issuer.URL + "/"}, "dev")
+	require.NoError(t, err)
+	_, err = src.Token()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expired for profile dev: run cpictl auth login")
+	var re *oauth2.RetrieveError
+	assert.ErrorAs(t, err, &re)
+}
+
+// Sign-in and refresh use cpictl's client (with a timeout), not
+// http.DefaultClient; a client the caller put in the context is kept.
+func TestWithClient(t *testing.T) {
+	c, ok := withClient(context.Background()).Value(oauth2.HTTPClient).(*http.Client)
+	require.True(t, ok)
+	assert.Equal(t, httpclnt.DefaultTimeout, c.Timeout)
+	mine := &http.Client{}
+	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, mine)
+	assert.Same(t, mine, withClient(ctx).Value(oauth2.HTTPClient))
 }

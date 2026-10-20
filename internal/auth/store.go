@@ -118,7 +118,7 @@ func (s *Store) TokenSource(ctx context.Context, c Config, key string) (oauth2.T
 	if err != nil {
 		return nil, err
 	}
-	base := c.oauth2Config("").TokenSource(ctx, tok)
+	base := c.oauth2Config("").TokenSource(withClient(ctx), tok)
 	return &persistingSource{store: s, key: key, src: base, last: tok.AccessToken}, nil
 }
 
@@ -138,6 +138,12 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 	defer p.mu.Unlock()
 	tok, err := p.src.Token()
 	if err != nil {
+		var re *oauth2.RetrieveError
+		if errors.As(err, &re) {
+			// the refresh token expired or was revoked: say what to do, not
+			// Entra's invalid_grant (still an auth error, exit code 3)
+			return nil, fmt.Errorf("sign-in to the cpictl gateway expired for profile %s: run cpictl auth login (%w)", p.key, err)
+		}
 		return nil, err
 	}
 	if tok.AccessToken != p.last {

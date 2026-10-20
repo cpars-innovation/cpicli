@@ -2,16 +2,16 @@ package cpi
 
 import (
 	"bytes"
-	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
-	"github.com/rs/zerolog/log"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"golang.org/x/oauth2"
 	"time"
+
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/rs/zerolog/log"
+	"golang.org/x/oauth2"
 )
 
 type ServiceDetails struct {

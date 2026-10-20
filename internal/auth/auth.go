@@ -1,7 +1,7 @@
 // Package auth signs a user in to Entra ID for a cpictl gateway and keeps the
 // resulting tokens, so cpictl (CLI and MCP) talks to the gateway as that user
 // without a CPI service key. Two flows: an interactive one (Authorization Code
-// + PKCE, a localhost callback) and a device-code one for headless and SSH.
+// + PKCE, a localhost redirect) and a device-code one for headless and SSH.
 // Tokens are kept by Store and refreshed silently with the refresh token.
 package auth
 
@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"golang.org/x/oauth2"
 )
 
@@ -61,6 +62,16 @@ func (c Config) endpoint() oauth2.Endpoint {
 	return oauth2.Endpoint{AuthURL: a + "authorize", TokenURL: a + "token", DeviceAuthURL: a + "devicecode"}
 }
 
+// withClient makes the oauth2 package use cpictl's client (timeout, TLS 1.2,
+// the environment's proxy and CAs) instead of http.DefaultClient, which has
+// no timeout: a hung token endpoint must not hang a long cpictl mcp session.
+func withClient(ctx context.Context) context.Context {
+	if _, ok := ctx.Value(oauth2.HTTPClient).(*http.Client); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, oauth2.HTTPClient, httpclnt.NewDefaultClient())
+}
+
 // oauth2Config always asks for openid and offline_access (the latter is what
 // makes Entra return a refresh token) on top of the resource scopes.
 func (c Config) oauth2Config(redirect string) *oauth2.Config {
@@ -80,13 +91,25 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	ctx = withClient(ctx)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("opening a loopback listener for the sign-in redirect: %w", err)
 	}
 	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+	// The browser may resolve localhost to ::1 first; listen there too when
+	// the host has IPv6 (it falls back to 127.0.0.1 otherwise).
+	listeners := []net.Listener{ln}
+	if ln6, err := net.Listen("tcp", fmt.Sprintf("[::1]:%d", port)); err == nil {
+		defer ln6.Close()
+		listeners = append(listeners, ln6)
+	}
 
-	conf := c.oauth2Config(fmt.Sprintf("http://%s/callback", ln.Addr().String()))
+	// Entra matches a loopback redirect URI ignoring only the port, and only
+	// for localhost: the registered http://localhost matches this, a path or
+	// 127.0.0.1 would not (AADSTS50011). MSAL and az do the same.
+	conf := c.oauth2Config(fmt.Sprintf("http://localhost:%d", port))
 	verifier := oauth2.GenerateVerifier()
 	state, err := randString()
 	if err != nil {
@@ -99,8 +122,9 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 		err  error
 	}
 	ch := make(chan result, 1)
-	// one answer only, and only on /callback: a browser's favicon request or
-	// another local process must neither block nor decide the sign-in
+	// one answer only, and only a redirect from the sign-in (a code or an
+	// error on /): a browser's favicon request, a prefetch or another local
+	// process must neither block nor decide the sign-in
 	send := func(res result) {
 		select {
 		case ch <- res:
@@ -108,11 +132,11 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 		}
 	}
 	srv := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/callback" {
+		q := r.URL.Query()
+		if r.URL.Path != "/" || (!q.Has("code") && !q.Has("error")) {
 			http.NotFound(w, r)
 			return
 		}
-		q := r.URL.Query()
 		switch {
 		case q.Get("error") != "":
 			msg := q.Get("error")
@@ -129,7 +153,9 @@ func LoginInteractive(ctx context.Context, c Config, visit func(authURL string) 
 			fmt.Fprintln(w, "Signed in to cpictl. You can close this tab and return to the terminal.")
 		}
 	})}
-	go srv.Serve(ln)
+	for _, l := range listeners {
+		go srv.Serve(l)
+	}
 	defer srv.Close()
 
 	if err := visit(authURL); err != nil {
@@ -158,6 +184,7 @@ func LoginDeviceCode(ctx context.Context, c Config, show func(*oauth2.DeviceAuth
 	if err := c.Validate(); err != nil {
 		return nil, err
 	}
+	ctx = withClient(ctx)
 	conf := c.oauth2Config("")
 	da, err := conf.DeviceAuth(ctx)
 	if err != nil {

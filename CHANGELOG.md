@@ -14,6 +14,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
     expiry, and your scope per SAP tenant (#43).
   - `CPICTL_GATEWAY_TOKEN` still works without signing in. A project `cpictl.yaml` may not set
     `login`. Profiles that talk to SAP directly are not affected.
+  - Sign-in fits the Entra registration (#46): the redirect URI is `http://localhost:<port>`, which
+    matches a registered `http://localhost` (before, `127.0.0.1/callback` would have been refused with
+    AADSTS50011). An expired or revoked sign-in says "run cpictl auth login" instead of Entra's
+    `invalid_grant`. Token requests use cpictl's HTTP client with its timeout, so a hung token
+    endpoint cannot hang `cpictl mcp`. The Entra app registration is documented.
 - **Gateway refusals are reported as such** (#40): a request the cpictl gateway refuses reads
   "refused by the cpictl gateway: …" (it no longer says "the tenant says") and exits with code 9
   (scope), not 3 (authentication). `tenant-settings` / MCP `get_tenant_settings` fail when no part

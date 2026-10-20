@@ -117,7 +117,7 @@ func NewWithOptions(o Options) *HTTPExecuter {
 		basePath: strings.TrimSuffix(o.BasePath, "/")}
 	base := o.HTTPClient
 	if base == nil {
-		base = &http.Client{Timeout: DefaultTimeout, Transport: secureTransport()}
+		base = NewDefaultClient()
 	}
 	if o.BearerTokenSource != nil {
 		// oauth2's transport attaches the bearer and refreshes it per
@@ -309,6 +309,13 @@ var MaxResponseBytes int64 = 1 << 30
 // replaced http.DefaultTransport with another RoundTripper gets that one as
 // it is; ServiceDetails.HTTPClient / Options.HTTPClient pass a client of
 // your own instead.
+// NewDefaultClient returns the client the executer uses when none is given:
+// DefaultTimeout per request and secureTransport. Other HTTP calls of cpictl
+// (the gateway sign-in and its token refresh) use it too, so they cannot hang.
+func NewDefaultClient() *http.Client {
+	return &http.Client{Timeout: DefaultTimeout, Transport: secureTransport()}
+}
+
 func secureTransport() http.RoundTripper {
 	base, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {
