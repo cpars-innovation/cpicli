@@ -24,7 +24,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
 - **Gateway refusals are reported as such** (#40): a request the cpictl gateway refuses reads
   "refused by the cpictl gateway: …" (it no longer says "the tenant says") and exits with code 9
   (scope), not 3 (authentication). `tenant-settings` / MCP `get_tenant_settings` fail when no part
-  could be read instead of answering ok with three warnings.
+  could be read instead of answering ok with three warnings. **Go:** `ops.GetTenantSettings` now
+  returns `(*TenantSettingsResult, error)`; `httpclnt.IsGatewayRefusal(err)` tells a gateway
+  refusal from a tenant error.
 - **Docs:** secrets from a vault in the pipeline (Azure Key Vault, AWS Secrets Manager), masking,
   and a nightly coverage check with `credentials apply --dry-run`
   ([backup.md](docs/backup.md#secrets-from-a-vault-pipeline)).
