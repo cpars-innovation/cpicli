@@ -90,6 +90,8 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`locks unlock`](#locks-unlock) | Remove the edit lock of an artifact (requires --confirm) |
 | [`log-files archive`](#log-files-archive) | Download the latest log files of a type as one zip |
 | [`log-files get`](#log-files-get) | Print the end of a log file |
+| [`login`](#login) | Sign in to the cpictl gateway with Entra ID |
+| [`logout`](#logout) | Clear the stored cpictl gateway login token for the active profile |
 | [`logs`](#logs) | Query message processing logs |
 | [`logs attachment`](#logs-attachment) | Download a log attachment (ID from 'logs get') |
 | [`logs files`](#logs-files) | List system and HTTP log files of the runtime |
@@ -2093,6 +2095,40 @@ Print the end of a log file
       --out string           Write the content to this file instead of stdout / the JSON result
       --tail-bytes int       Bytes from the end of the file (default 65536)
 ```
+
+## login
+
+Sign in to the cpictl gateway with Entra ID
+
+```
+Sign in to the cpictl gateway with Entra ID and store the token for the
+active profile, so cpictl (and cpictl mcp) talk to the gateway as you without a
+CPI service key. The token is refreshed silently; run again if sign-in expires.
+
+The profile needs a gateway and a login block:
+
+  gateway: https://cpi-gateway.example.com/t/dev
+  login:
+    tenantId: <entra directory id>
+    clientId: <public-client app registration>
+    scope: api://<gateway app>/access
+
+By default a browser opens for sign-in; use --device-code on a headless host.
+```
+
+**Usage:** `cpictl login [flags]`
+
+**Flags:**
+
+```
+      --device-code   Sign in with a device code (headless/SSH) instead of opening a browser
+```
+
+## logout
+
+Clear the stored cpictl gateway login token for the active profile
+
+**Usage:** `cpictl logout`
 
 ## logs
 

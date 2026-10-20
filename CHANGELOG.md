@@ -18,6 +18,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
     deleted; a second run changes nothing. `--only` and `--packages` restore part of a backup.
   - Tested on a real tenant: a deleted flow, a changed Partner Directory value and a deleted number
     range came back, and the flow was deployed again.
+- **`cpictl login` / `logout` for gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)): sign in
+  with Entra ID in the browser (or `--device-code` on a headless host); the token is kept per profile and refreshed
+  silently, so a long-running `cpictl mcp` keeps working past the first token's hour. `CPICTL_GATEWAY_TOKEN` still
+  works without a login. A project `cpictl.yaml` may not set `login`.
 
 ## 0.29.0
 

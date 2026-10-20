@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"golang.org/x/oauth2"
 	"time"
 )
 
@@ -28,6 +30,11 @@ type ServiceDetails struct {
 	// the user's token, instead of to the tenant with a service key.
 	Gateway      string
 	GatewayToken string
+	// GatewayTokenSource, when set, supplies the gateway bearer per request
+	// and is preferred over GatewayToken: it refreshes the token silently so a
+	// long-running session does not fail when the first token expires. Set by
+	// gateway mode from a cpictl login token.
+	GatewayTokenSource oauth2.TokenSource
 }
 
 // ReadRetries and ReadBackoff apply to every executer created by
@@ -42,7 +49,8 @@ func InitHTTPExecuter(serviceDetails *ServiceDetails) *httpclnt.HTTPExecuter {
 	if serviceDetails.Gateway != "" {
 		scheme, host, port, path := ParseGateway(serviceDetails.Gateway)
 		exe := httpclnt.NewWithOptions(httpclnt.Options{Host: host, Scheme: scheme, Port: port, BasePath: path,
-			BearerToken: serviceDetails.GatewayToken, HTTPClient: serviceDetails.HTTPClient, ShowLogs: true})
+			BearerToken: serviceDetails.GatewayToken, BearerTokenSource: serviceDetails.GatewayTokenSource,
+			HTTPClient: serviceDetails.HTTPClient, ShowLogs: true})
 		return exe.RetryReads(ReadRetries, ReadBackoff)
 	}
 	scheme, host, port := ParseHost(serviceDetails.Host)
