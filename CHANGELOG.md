@@ -15,6 +15,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
   request bodies, JSON bodies that repeat a key, designtime types other than the four cpictl uses, and artifact
   versions that are not plain IDs. cpictl itself never sends these; under a scope they could address another
   package than the one checked.
+- **Fixed: under a scope, message contents were reachable through a message's own path** (for example
+  `MessageProcessingLogs('…')/Attachments('…')/$value`), checked only as `read`. Below a message and a runtime
+  artifact only the lists cpictl reads are allowed now, and every path naming `$value` or `TraceMessages` needs
+  `download`.
 - `pkg/scope`: `Guard.Check` decides a request like `Before` and reports what it touches (`Access`) and whether the
   answer must pass through `After` (`ReadsAnswer`), for proxies that audit requests and stream content.
 

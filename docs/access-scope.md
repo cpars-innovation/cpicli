@@ -129,3 +129,9 @@ Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`, `Guard.Check`) 
   directly; for them it is a guardrail.
 - Local files are not filtered: if an earlier, unscoped `discover` wrote `.cpi/graph.json`, the graph tools serve
   it. Run discover under the scope.
+- Below a message and a runtime artifact only the lists cpictl reads are allowed (`ErrorInformation`, `Attachments`,
+  `MessageStoreEntries`, `Runs`, `CustomHeaderProperties`, `AdapterAttributes`): the tenant navigates from there into
+  contents, which are only read through their own IDs and need `download`.
+- The test tooling flows (`CPICTL_Test_*`) and their partners are shared: with `test` on any package, their messages
+  and recordings are readable, also those of tests against other packages. For one person that is their own; for a
+  gateway serving several teams it is not yet decided per target flow.

@@ -394,3 +394,80 @@ func FuzzGuardPaths(f *testing.F) {
 		}
 	})
 }
+
+// The tenant navigates from a message or a runtime artifact into its
+// children: content must not be reachable through a path checked as read
+// (review of #38: verified on a tenant for Attachments('…')/$value).
+func TestGuardMessageSubPathsAreAllowlisted(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	logs := `{"d":{"results":[{"MessageGuid":"G2","IntegrationArtifact":{"Id":"FI_B","PackageId":"FI_Billing"}}]}}`
+	_, err := g.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
+	require.NoError(t, err)
+	for _, p := range []string{
+		"/api/v1/MessageProcessingLogs('G2')/Attachments('ATT_G2')/$value",
+		"/api/v1/MessageProcessingLogs('G2')/MessageStoreEntries('E1')/$value",
+		"/api/v1/MessageProcessingLogs('G2')/Runs('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages(1)/$value",
+		"/api/v1/MessageProcessingLogs('G2')/Attachments('ATT_G2')",
+		"/api/v1/MessageProcessingLogs('G2')/Runs('R1')",
+		"/api/v1/MessageProcessingLogs('G2')/Unknown",
+		"/api/v1/IntegrationRuntimeArtifacts('FI_B')/Something",
+		"/api/v1/IntegrationRuntimeArtifacts('FI_B')/ErrorInformation/x",
+	} {
+		refused(t, g.Before(req("GET", p, "")))
+	}
+	refused(t, g.Before(req("DELETE", "/api/v1/MessageProcessingLogs('G2')/Attachments", "")))
+	for _, p := range []string{"", "/ErrorInformation", "/ErrorInformation/$value", "/Attachments", "/MessageStoreEntries",
+		"/Runs", "/CustomHeaderProperties", "/AdapterAttributes"} {
+		assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('G2')"+p+"?$format=json", "")), p)
+	}
+	for _, p := range []string{"", "/ErrorInformation", "/ErrorInformation/$value"} {
+		assert.NoError(t, g.Before(req("GET", "/api/v1/IntegrationRuntimeArtifacts('FI_B')"+p, "")), p)
+	}
+	// content below children and artifacts is a download wherever $value sits
+	g.children = map[string]string{"R1": "FI_B", "E1": "FI_B"}
+	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogRuns('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages", "")))
+	refused(t, g.Before(req("GET", "/api/v1/MessageStoreEntries('E1')/Attachments('x')/$value", "")))
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageStoreEntries('E1')", "")), "metadata is a read")
+}
+
+// Independent of the guard's own classification: any allowed request that
+// names content ($value, TraceMessages) must have needed download.
+func FuzzGuardContentNeedsDownload(f *testing.F) {
+	for _, s := range []string{
+		"MessageProcessingLogs('G1')/Attachments('A1')/$value",
+		"MessageProcessingLogs('G1')/Runs('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages(1)/$value",
+		"MessageProcessingLogs('G1')/ErrorInformation/$value",
+		"MessageProcessingLogRuns('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages",
+		"MessageStoreEntries('E1')/$value",
+		"IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/Resources('x')/$value",
+		"IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/$value/x",
+		"IntegrationRuntimeArtifacts('SD_A')/ErrorInformation/$value",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, rest string) {
+		// read everywhere, download nowhere: content must always be refused
+		g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read"]}`)
+		g.messages = map[string]string{"G1": "SD_A"}
+		g.children = map[string]string{"R1": "SD_A", "E1": "SD_A", "A1": "SD_A"}
+		p := "/api/v1/" + rest
+		c, err := g.Check(req("GET", p, ""))
+		if err != nil {
+			return
+		}
+		path, _, _ := strings.Cut(p, "?")
+		dec, _ := url.PathUnescape(path)
+		if !strings.Contains(dec, "$value") && !strings.Contains(dec, "TraceMessages") {
+			return
+		}
+		if regexp.MustCompile(`^/api/v1/(MessageProcessingLogs|IntegrationRuntimeArtifacts)\('[^/]*'\)/ErrorInformation/\$value$`).MatchString(dec) {
+			return // the error text of a message or runtime artifact
+		}
+		for _, a := range c.Accesses {
+			if a.Action == ActionDownload {
+				return
+			}
+		}
+		t.Fatalf("content allowed without download: %q (%+v)", p, c.Accesses)
+	})
+}

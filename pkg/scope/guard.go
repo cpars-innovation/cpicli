@@ -487,6 +487,15 @@ func unsafeQuery(q url.Values, parseErr error) string {
 	return ""
 }
 
+// messageSubPaths and runtimeSubPaths are the sub-paths of a message and a
+// runtime artifact a scope allows: the lists cpictl reads. Anything below
+// them could navigate to content checked only as a read.
+var (
+	messageSubPaths = []string{"", "/ErrorInformation", "/ErrorInformation/$value", "/Attachments", "/MessageStoreEntries",
+		"/Runs", "/CustomHeaderProperties", "/AdapterAttributes"}
+	runtimeSubPaths = []string{"", "/ErrorInformation", "/ErrorInformation/$value"}
+)
+
 // expandAllowed lists the $expand values a request may carry, by collection:
 // an expansion can return related entities the scope does not grant (the
 // artifacts of a package past the artifact patterns).
@@ -601,7 +610,7 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 			return art(id, ActionConfigure), nil
 		case write(m):
 			return art(id, ActionUpload), nil
-		case strings.HasSuffix(sub, "/$value") || sub == "/$value":
+		case strings.Contains(sub, "$value"): // the artifact, or one of its resources
 			return art(id, ActionDownload), nil
 		}
 		return art(id, ActionRead), nil
@@ -619,6 +628,9 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		}}, nil
 	case reRuntime.MatchString(p):
 		mm := reRuntime.FindStringSubmatch(p)
+		if !slices.Contains(runtimeSubPaths, mm[2]) {
+			return decision{}, g.refuse(&Refusal{Reason: m + " /api/v1/IntegrationRuntimeArtifacts(…)" + mm[2] + " is not available under a scope"})
+		}
 		if m == http.MethodDelete {
 			return art(key(mm[1]), ActionDeploy), nil
 		}
@@ -637,13 +649,19 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		}, record: (*Guard).recordMessages}, nil
 	case reMessage.MatchString(p):
 		mm := reMessage.FindStringSubmatch(p)
+		// the tenant navigates into children (Attachments('…')/$value is the
+		// attachment's content): only the lists cpictl reads, whose
+		// contents are then read through their own IDs (download)
+		if !slices.Contains(messageSubPaths, mm[2]) || write(m) {
+			return decision{}, g.refuse(&Refusal{Reason: m + " /api/v1/MessageProcessingLogs(…)" + mm[2] + " is not available under a scope"})
+		}
 		guid := key(mm[1])
 		// the message and its lists; contents are read through their own IDs (download)
 		return decision{need: []need{{res: Resource{Kind: "message", ID: guid}, action: ActionRead}}, record: (*Guard).recordChildren}, nil
 	case reChild.MatchString(p):
 		mm := reChild.FindStringSubmatch(p)
 		action := ActionRead
-		if strings.Contains(mm[3], "$value") || mm[1] == "TraceMessages" {
+		if strings.Contains(mm[3], "$value") || strings.Contains(mm[3], "TraceMessages") || mm[1] == "TraceMessages" {
 			action = ActionDownload
 		}
 		return decision{need: []need{{res: Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action: action}}, record: (*Guard).recordChildren}, nil
