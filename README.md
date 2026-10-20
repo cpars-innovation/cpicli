@@ -235,7 +235,8 @@ are not written, and reads, uploads and parameter reads run 8 at a time. Details
 | Inspect | `packages`, `artifacts`, `status`, `endpoints`, `resources`, `discover`, `graph`, `drift`, `compare` (tiers, Git refs, trees) |
 | Runtime data | `datastore`, `variables`, `jms`, `number-ranges`, `logs files`, `idempotent`, `id-mappings` |
 | Testing and monitoring | `send`, `logs level`, `logs`, `logs get`, `logs steps`, `logs trace`, `logs trace-message`, `logs attachment`, `logs payload` |
-| Quality | `validate`, `guidelines`, `lint` (reuse, Partner Directory candidates, dead weight, best practices; `--fix`) |
+| Quality | `validate`, `guidelines`, `lint` (reuse, Partner Directory candidates, dead weight, best practices, security material; `--fix`) |
+| Security audit | `secret-scan` (passwords, tokens and keys in the Partner Directory and in flow configuration parameters; values are never shown) |
 | Designtime | `download`, `iflow copy`, `iflow layout` (tidy the diagram), `packages create`, `update artifact`, `update package`, `version bump` |
 | Runtime | `deploy`, `undeploy` |
 | Parameters | `params get`, `params set`, `configure`, `configure pull` |
@@ -393,7 +394,7 @@ Tools cover the whole loop: `doctor`, `create_package`, `download_artifact`, `dr
 `deploy` (`dry_run`: what would be deployed and why), `send_test_message`, `list_runtime_artifacts`,
 `list_message_logs`, `get_message_log` (with the failing step), `get_message_content`, parameters, resources, `discover_tenant`, `graph_search`, `graph_neighbors`,
 `graph_path`, `list_credentials`,
-`list_keystore`, key pairs and CSRs, PGP keys, access policies, the audit log, Partner Directory
+`list_keystore`, key pairs and CSRs, PGP keys, access policies, the audit log, `scan_secrets`, Partner Directory
 partners, `undeploy` and `pd_deploy`. Secrets and private keys never pass through the agent.
 Every result carries `ok`, an `errorCategory` matching the exit codes, and the structured result.
 See [docs/mcp.md](docs/mcp.md).
@@ -486,7 +487,7 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 | [Mock tenant](docs/mock-tenant.md) | An in-memory CPI tenant with a demo landscape per tier, for local development, demos and tests |
 | [Content graph](docs/graph.md) | `.cpi/graph.json`: which flows call which, shared credentials, scripts, PD parameters |
 | [Testing](docs/testing.md) | Test messages by trigger type, test harness, test entries, tracing |
-| [Lint and improvements](docs/lint.md) | `lint` rules, `.cpi/lint.yaml`, baseline and CI gate, `--fix` (script collections), [diagram layout](docs/lint.md#diagram-layout) (`iflow layout`), the `cpi-improve` skill |
+| [Lint and improvements](docs/lint.md) | `lint` rules, `.cpi/lint.yaml`, [security material](docs/lint.md#security-material) (`secret-*` rules, `secret-scan`), baseline and CI gate, `--fix` (script collections), [diagram layout](docs/lint.md#diagram-layout) (`iflow layout`), the `cpi-improve` skill |
 | [Script comments](docs/script-docs.md) | Comment template for Groovy scripts, how discover, the graph and lint use it, `script-doc` and the agent hook |
 | [Backup and disaster recovery](docs/backup.md) | `backup create`, `verify`, `diff`: what is in a backup, secrets and keys, pipelines to S3 and Azure, rotation |
 | [Deployments](docs/deployments.md) | How deploy, configure and orchestrator wait (one runtime list, one timeout), migrating pipeline settings, `runtimes watch` events and webhooks |

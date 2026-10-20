@@ -606,6 +606,11 @@
       "typed": true
     },
     {
+      "command": "secret-scan",
+      "file": "secret-scan.json",
+      "typed": true
+    },
+    {
       "command": "send",
       "file": "send.json",
       "typed": true

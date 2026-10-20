@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/pkg/catalog"
-	"net/url"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
+	"github.com/cpars-innovation/cpicli/pkg/secretscan"
 )
 
 // Lint rule groups.
@@ -28,6 +28,7 @@ const (
 	GroupPerformance   = "performance"
 	GroupConfiguration = "configuration"
 	GroupHygiene       = "hygiene"
+	GroupSecurity      = "security"
 )
 
 // lintRule is one check: per artifact or across all artifacts.
@@ -109,6 +110,12 @@ var lintRules = []lintRule{
 	{id: "configure-unknown-parameter", group: GroupConfiguration, severity: SevError, title: "A configure file sets a parameter the flow does not have (configure fails)", artifact: ruleConfigureUnknownParameter},
 	{id: "configure-missing-parameter", group: GroupConfiguration, severity: SevWarning, title: "A configure file covering the package sets no value for a parameter of the flow", artifact: ruleConfigureMissingParameter},
 	{id: "flow-without-deployment", group: GroupConfiguration, severity: SevWarning, title: "A flow in a package folder the deploy config covers has no entry of its own", artifact: ruleFlowWithoutDeployment},
+	// security material: read from the secure store, kept in named headers and properties, never logged or sent on
+	{id: "secret-target-name", group: GroupSecurity, severity: SevError, title: "Security material is put into a header or property not named for it (.cpi/lint.yaml security)", artifact: ruleSecretTarget},
+	{id: "secret-logged", group: GroupSecurity, severity: SevError, title: "Security material reaches the message processing log, an error text or standard output", artifact: ruleSecretLogged},
+	{id: "secret-in-body", group: GroupSecurity, severity: SevWarning, title: "Security material is written into the message body", artifact: ruleSecretInBody},
+	{id: "secret-header-sent", group: GroupSecurity, severity: SevError, title: "A receiver passes a secret header on (JMS, ProcessDirect, broker, or a wildcard in its request headers)", artifact: ruleSecretHeaderSent},
+	{id: "secret-header-inbound", group: GroupSecurity, severity: SevWarning, title: "The flow's Allowed Header(s) let senders set a secret header", artifact: ruleSecretHeaderInbound},
 	// hygiene
 	{id: "prefer-script-v2", group: GroupHygiene, severity: SevInfo, title: "A Groovy script step uses version 1 (prefer 2.x, Groovy 4)", artifact: rulePreferScriptV2},
 	{id: "outdated-component", group: GroupHygiene, severity: SevInfo, title: "A step or adapter uses an older version than the tenant offers or other flows use", cross: ruleOutdatedComponents},
@@ -1044,37 +1051,6 @@ func ruleURLsInScripts(lc *lintContext, a *lintArtifact) []Finding {
 
 var reSecret = regexp.MustCompile(`(?i)\b(password|passwd|pwd|secret|apikey|api_key|client_secret|token)\b\s*[=:]\s*["']([^"'\s]{4,})["']`)
 
-var (
-	reSecretRefKey = regexp.MustCompile(`(?i)(_ref|_alias|_name|credential|_id)$`)
-	reIdentifier   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.\-]*$`)
-)
-
-// reAddressKey matches parameter names of addresses: TokenURL, Token_Uri,
-// TokenEndpoint, TokenPath, TokenHost.
-var reAddressKey = regexp.MustCompile(`(?i)(url|uri|endpoint|path|host|address)$`)
-
-// secretQueryParams are query parameters that carry a secret.
-var secretQueryParams = map[string]bool{"token": true, "access_token": true, "signature": true, "sig": true, "key": true,
-	"apikey": true, "api_key": true, "password": true, "pwd": true, "secret": true, "client_secret": true, "code": true}
-
-// urlSecret reports whether v is an absolute URL and whether it carries a
-// secret: a password in the user info or a secret query parameter.
-func urlSecret(v string) (isURL, carries bool) {
-	u, err := url.Parse(v)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return false, false
-	}
-	if _, ok := u.User.Password(); ok {
-		return true, true
-	}
-	for k := range u.Query() {
-		if secretQueryParams[strings.ToLower(k)] {
-			return true, true
-		}
-	}
-	return true, false
-}
-
 func ruleSecrets(lc *lintContext, a *lintArtifact) []Finding {
 	var out []Finding
 	for _, file := range sortedKeys(a.Scripts) {
@@ -1087,33 +1063,34 @@ func ruleSecrets(lc *lintContext, a *lintArtifact) []Finding {
 		}
 	}
 	for _, key := range sortedKeys(a.Params) {
-		lk := strings.ToLower(key)
-		v := strings.TrimSpace(a.Params[key])
-		if v == "" || strings.HasPrefix(v, "{{") {
-			continue
+		if h := secretscan.Value(key, a.Params[key]); h != nil {
+			out = append(out, a.finding("hardcoded-secret", ops.ResourcesDir+"/parameters.prop", "", "", key,
+				"the parameter "+key+" holds "+secretMessage(h), "use a credential name instead of the value"))
 		}
-		// the name of a credential or secure parameter, not the secret itself
-		if reSecretRefKey.MatchString(key) && reIdentifier.MatchString(v) {
-			continue
-		}
-		// an address (CI_ODataAPI_TokenURL = https://.../oauth/token) is
-		// not a secret unless it carries one
-		if isURL, carries := urlSecret(v); isURL || reAddressKey.MatchString(key) {
-			if carries {
-				out = append(out, a.finding("hardcoded-secret", ops.ResourcesDir+"/parameters.prop", "", "", key,
-					"the parameter "+key+" holds a URL with credentials (user info or a secret query parameter)", "use a credential name instead of the value"))
-			}
-			continue
-		}
-		for _, s := range []string{"password", "secret", "apikey", "api_key", "token"} {
-			if strings.Contains(lk, s) {
-				out = append(out, a.finding("hardcoded-secret", ops.ResourcesDir+"/parameters.prop", "", "", key,
-					"the parameter "+key+" holds a value that looks like a secret", "use a credential name instead of the value"))
-				break
+	}
+	// the values configure sets on the tenant
+	entries, _ := configureEntries(lc, a)
+	for _, file := range sortedKeys(entries) {
+		for _, p := range entries[file].Parameters {
+			if h := secretscan.Value(p.Key, p.Value); h != nil {
+				out = append(out, a.finding("hardcoded-secret", "src/main/resources/parameters.prop", "", "", file+":"+p.Key,
+					fmt.Sprintf("%s sets the parameter %s to %s", file, p.Key, secretMessage(h)),
+					"keep security material in the secure store and set the credential name instead"))
 			}
 		}
 	}
 	return out
+}
+
+// secretMessage says what a parameter holds.
+func secretMessage(h *secretscan.Hit) string {
+	switch h.Kind {
+	case secretscan.KindNamed:
+		return "a value that looks like a secret"
+	case secretscan.KindURL:
+		return "a URL with credentials (user info or a secret query parameter)"
+	}
+	return h.Reason
 }
 
 // --- hygiene -----------------------------------------------------------------

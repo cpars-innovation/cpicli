@@ -45,6 +45,8 @@ var jmsReceiver = map[string]string{"ComponentType": "JMS", "direction": "Receiv
 type sapModel struct {
 	channels  []string
 	processes []string
+	// props are the integration flow's own properties (allowedHeaderList, ...).
+	props map[string]string
 }
 
 // channel connects a step (or event) to a receiver or a sender to an event.
@@ -84,10 +86,17 @@ func (m *sapModel) process(id, kind string, els ...tEl) {
 func (m *sapModel) String() string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:ifl="http:///com.sap.ifl.model/Ifl.xsd" id="Definitions_1">
-<bpmn2:collaboration id="Collaboration_1" name="Default Collaboration">` + strings.Join(m.channels, "\n") + `</bpmn2:collaboration>
+<bpmn2:collaboration id="Collaboration_1" name="Default Collaboration">` + collabProps(m.props) + strings.Join(m.channels, "\n") + `</bpmn2:collaboration>
 ` + strings.Join(m.processes, "\n") + `
 </bpmn2:definitions>
 `
+}
+
+func collabProps(p map[string]string) string {
+	if p == nil {
+		return ""
+	}
+	return props(p)
 }
 
 func start(id string) tEl { return tEl{tag: "startEvent", id: id, name: "Start"} }

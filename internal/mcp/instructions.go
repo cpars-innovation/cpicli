@@ -113,6 +113,10 @@ artifacts to a role. Secrets and private keys never pass through this server (cr
 key import and PGP keyrings: ask the user to run cpictl). The delete tools (delete_keystore_entry,
 delete_access_policy, delete_artifact_reference, delete_alternative_partner,
 delete_authorized_user) need confirm and are offered only when --opt-in or --tools names them.`},
+	{[]string{"security", "partner-directory"}, `Audit: scan_secrets finds passwords, tokens and keys in the Partner Directory and in flow
+configuration parameters (they belong in the secure store or keystore; values are never returned).
+lint's security rules check that flows keep security material in the headers and properties named
+for it (.cpi/lint.yaml security), never log it, and never pass a secret header on.`},
 }
 
 // Instructions is sent to the client on initialize: all fragments.

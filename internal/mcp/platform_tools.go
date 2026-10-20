@@ -36,6 +36,37 @@ func platformTools(cfg Config, readOnly map[string]any) []Tool {
 			},
 		},
 		{
+			Name: "scan_secrets", Title: "Find passwords, tokens and keys outside the secure store",
+			Description: "Reads the Partner Directory (string and binary parameters, files inside ZIPs) and the configuration parameters of every integration flow, and reports values that are security material: " +
+				"private keys, JSON web tokens, provider access keys, HTTP authorization values, URLs with credentials, values of parameters named like a password, secret, token or key that are not a credential name. " +
+				"Never returns a value: kind, reason and a fingerprint (SHA-256 prefix). only limits the areas, packages the flows read. Security material belongs in the secure store or keystore.",
+			InputSchema: object(props{"only": enum("Only this area", ops.AreaPartnerDirectory, ops.AreaConfiguration),
+				"packages": strArray("Configuration: only these packages (IDs or patterns)")}),
+			Annotations: readOnly,
+			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				var a struct {
+					Only     string   `json:"only"`
+					Packages []string `json:"packages"`
+				}
+				if err := decode(raw, &a); err != nil {
+					return nil, err
+				}
+				res := &ops.SecretScanResult{Source: "tenant", Findings: []ops.SecretFinding{}}
+				if a.Only != ops.AreaConfiguration {
+					if err := ops.ScanTenantPartnerDirectory(cfg.Exe, res); err != nil {
+						return nil, err
+					}
+				}
+				if a.Only != ops.AreaPartnerDirectory {
+					if err := ops.ScanTenantConfigurations(ctx, cfg.Exe, a.Packages, 8, res); err != nil {
+						return nil, err
+					}
+				}
+				ops.SortSecretFindings(res.Findings)
+				return res, nil
+			},
+		},
+		{
 			Name: "download_log_archive", Title: "Download the latest log files as a zip",
 			Description: "Saves the zip of the latest runtime log files of a type (http: HTTP access logs, trace: trace logs) to a file below the server root; use list_log_files / get_log_file to read single files.",
 			InputSchema: object(props{"type": enum("Log file type", "http", "trace"), "path": str("Zip file to write, relative to the server root")}, "type", "path"),

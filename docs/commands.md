@@ -141,6 +141,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`runtimes`](#runtimes) | List the tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each |
 | [`runtimes watch`](#runtimes-watch) | Report deployments, status changes and undeployments on the tenant's runtime as events |
 | [`script-doc`](#script-doc) | Check the comments of Groovy scripts against the script doc template |
+| [`secret-scan`](#secret-scan) | Find passwords, tokens and keys in the Partner Directory and in flow configuration parameters |
 | [`send`](#send) | Send a test message to a deployed integration flow |
 | [`skills`](#skills) | List, read and install the cpi skills built into cpictl |
 | [`skills install`](#skills-install) | Copy the skills into the skill folder of an agent |
@@ -3320,6 +3321,52 @@ comments end silently with 0. The cpi plugin installs this hook.
   cpictl script-doc packages/Common/Common_Scripts/src/main/resources/script/DateUtils.groovy
   cpictl script-doc --output json script/*.groovy
   cpictl script-doc --hook < hook-input.json
+```
+
+## secret-scan
+
+Find passwords, tokens and keys in the Partner Directory and in flow configuration parameters
+
+```
+Security material belongs in the secure store (user credentials, secure
+parameters, OAuth2 credentials) and the keystore, where flows read it by name.
+secret-scan reads the tenant's Partner Directory (string and binary
+parameters, including files inside ZIPs) and the configuration parameters of
+every integration flow, and reports values that are security material:
+private keys, JSON web tokens, access keys of known providers, HTTP
+authorization values, URLs with credentials, and values of parameters named
+like a password, secret, token or key that are not references (a credential
+or alias name).
+
+Findings never carry the value: the kind, the reason and a short fingerprint
+(the first 12 hex digits of its SHA-256), so the report can be shared and the
+same value recognised across runs.
+
+--pd-dir scans a Partner Directory folder written by pd snapshot instead of
+the tenant. Externalised parameters in the content repository and configure
+files are checked by lint (rule hardcoded-secret).
+
+Exits with code 5 (failed) when it finds something, so a pipeline stops.
+```
+
+**Usage:** `cpictl secret-scan [flags]`
+
+**Flags:**
+
+```
+      --only string        Scan only this area: partner-directory or configuration
+      --packages strings   Configuration: only these packages (IDs or patterns)
+      --parallel int       Configuration: artifacts read at a time (default 8)
+      --pd-dir string      Scan this local Partner Directory folder (pd snapshot) instead of the tenant
+```
+
+**Examples:**
+
+```
+  cpictl secret-scan
+  cpictl secret-scan --only partner-directory
+  cpictl secret-scan --only configuration --packages 'Finance*'
+  cpictl secret-scan --pd-dir partner-directory
 ```
 
 ## send

@@ -62,13 +62,18 @@ cpictl lint --list-rules
 | | `component-newer-than-tenant` | error | a step or adapter version newer than the tenant's editor offers (needs a [component catalogue](components.md) from the editor metadata): the tenant's Check and deploy fail. Typical after copying a flow from a newer tenant | |
 | configuration | `hardcoded-endpoint` | warning | a receiver address that is not a `{{parameter}}` or `${...}` (HTTP, SOAP, OData, IDoc, SFTP, ...) | |
 | | `hardcoded-url-in-script` | warning | a URL in a script (namespaces excluded) | |
-| | `hardcoded-secret` | error | a password, token or key assigned in a script or parameter; a URL only when it carries credentials (user info, `token=`, `sig=`, `key=` ...) | |
+| | `hardcoded-secret` | error | a password, token or key assigned in a script, in `parameters.prop` or in a configure file (`repository.configure`); a private key, JSON web token, provider access key or `Basic`/`Bearer` value anywhere; a URL only when it carries credentials (user info, `token=`, `sig=`, `key=` ...). Credential and alias names, token URLs and `{{placeholders}}` are references, not secrets | |
 | | `odata-hardcoded-query` | info | literal OData query options or resource path with environment-specific values: `sap-client=<nnn>`, `CompanyCode`/`BUKRS`, `SalesOrganization`/`VKORG`, `Plant`/`WERKS`, `ControllingArea`/`KOKRS eq '<literal>'` | |
 | | `idoc-sap-client-literal` | warning | an IDoc receiver address that is partly externalised but keeps a literal host or `sap-client` (a fully literal address is `hardcoded-endpoint`, reported once) | |
 | | `idoc-control-record-literal` | info | the control record partners `EDI_DC40` `SNDPRN`, `RCVPRN`, `SNDPOR`, `RCVPOR` set to literals: in a content modifier body, an XSLT (literal result element) or a message mapping (target field from the `const` function) | |
 | | `configure-unknown-parameter` | error | a configure file (`repository.configure`, `--configure`) sets a parameter the flow does not have: configure fails | |
 | | `configure-missing-parameter` | warning | a configure file covering the flow's package sets no value for one of its parameters (or has no entry for the flow): that tier keeps the design-time value | |
 | | `flow-without-deployment` | warning | a flow in a package folder the deploy config (`repository.deployConfig`, `--deploy-config`, `orchestrator.deployConfig`) covers, without an entry of its own | |
+| security | `secret-target-name` | error | a script or content modifier puts security material into a header or property not named for it in `security` ([below](#security-material)): a value read with the SecureStoreService (`getUserCredential`, password, access token, secure parameter), the KeystoreService (`getKey`, `getKeyPair`), a token from a token endpoint's response (`access_token`), or a secret header or property copied under another name | |
+| | `secret-logged` | error | security material passed to the message processing log (`addAttachmentAsString`, `setStringProperty`, `addCustomHeaderProperty`), a logger, `println` or an exception text (error texts end up in the log) | |
+| | `secret-in-body` | warning | security material written into the message body (`setBody`, a content modifier body with `${header.Authorization}`): fine for a token request, but replace the body right after that call | |
+| | `secret-header-sent` | error | a secret header the flow sets and does not remove reaches a receiver that passes headers on: JMS (stored in the queue), ProcessDirect (the called flow gets every header), AMQP, Kafka, or a request header list with a wildcard (`*`, `X-*`). A header named explicitly in a receiver's request headers is meant for that receiver | |
+| | `secret-header-inbound` | warning | the flow's Allowed Header(s) name a secret header (or a pattern matching one): senders could set or replace it | |
 | hygiene | `prefer-script-v2` | info | a Groovy script step of version 1 (Groovy 2.4, `com.sap.gateway…Message`): new and changed scripts use version 2 (Groovy 4, `package script.v2`, `com.sap.it.script.v2.api.Message`, files under `script/v2/`); moving is a rewrite, not a version change | |
 | hygiene | `outdated-component` | info | a step or adapter older than the tenant offers (with a [component catalogue](components.md)), else older than the newest version used in the repository (not Groovy 1 → 2: that is `prefer-script-v2`) | |
 | | `script-doc` | info | a flow's local script with no comment saying what it does (at the top or above its function), or one whose first sentence is a placeholder | |
@@ -117,6 +122,9 @@ scriptTests:                # paths relative to the project root (the folder hol
 repository:                 # offline checks against the pipeline files (relative to the project root)
   configure: configuration/  # configure file or folder: configure-unknown-parameter, configure-missing-parameter
   deployConfig: deploy.yml   # deploy config: flow-without-deployment (default: orchestrator.deployConfig)
+security:                   # where flows may keep security material (secret-* rules); * matches any characters
+  secretHeaders: [Authorization, Proxy-Authorization, X-API-Key, APIKey]  # default
+  secretProperties: ["secret*"]                                           # default: properties starting with secret
 ignoreVendors: [SAP]        # default: SAP-delivered content is not checked; [] checks every vendor
 ignore:                     # findings that stay (say why in a comment)
   - artifact: Legacy_*
@@ -131,6 +139,39 @@ result says how many artifacts were left out (`skippedVendor`). A copy of an SAP
 edit keeps vendor SAP: set `ignoreVendors: []`, or give the copy your own vendor.
 
 `--rules` points to another file. An unknown rule or severity is an error (exit code 2).
+
+## Security material
+
+Passwords, tokens and keys belong in the secure store (user credentials, secure parameters, OAuth2
+credentials) and the keystore. A flow reads them by name when it needs them and keeps them in a few
+known places:
+
+- **Only in the headers and properties named in `security`.** `secretHeaders` are the headers that
+  carry credentials to a receiver (`Authorization` for a script-built Basic or Bearer value).
+  `secretProperties` are for everything else. Prefer properties: no adapter sends them, and they
+  do not cross ProcessDirect. A value read from the secure store or keystore, a token read from a
+  token endpoint's response, and a secret header or property copied to another name must land in
+  one of those names (`secret-target-name`). Reading the user name or the certificate of a
+  credential is not security material.
+- **Never in a log.** Not in the message processing log, not in a logger or `println`, not in an
+  exception text (`secret-logged`). Log that a credential was read, never its value.
+- **Not passed on.** A receiver gets a secret header only when it names it in its request headers.
+  A wildcard (`*`) sends it to whatever the receiver is, and JMS, ProcessDirect, AMQP and Kafka
+  receivers pass every header on. Remove the header before such a channel (content modifier,
+  Delete), or keep the value in a property (`secret-header-sent`).
+- **Not accepted from senders.** Allowed Header(s) of the flow must not name a secret header
+  (`secret-header-inbound`).
+
+The script checks follow values through variables in the same script (`def pwd =
+cred.getPassword()`, `def auth = "Basic " + ...`). A value passed between scripts in a
+property is followed by its name: name it in `secretProperties`. The receiver check reads every
+receiver property whose name speaks of headers and whose value is a list of header names (SAP
+names it differently per adapter, e.g. the HTTP adapter's Request Headers). It counts a header as
+removed when any content modifier deletes it or a script calls `removeHeader`, wherever that step
+is.
+
+Values outside the flows (the Partner Directory, configuration parameters on the tenant) are
+checked by `cpictl secret-scan` (MCP `scan_secrets`).
 
 ## Script collection tests
 

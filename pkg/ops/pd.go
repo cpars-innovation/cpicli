@@ -14,9 +14,10 @@ import (
 
 // PDDeployResult is the result of PDDeploy.
 type PDDeployResult struct {
-	DryRun  bool             `json:"dryRun"`
-	String  *cpi.BatchResult `json:"string"`
-	Binary  *cpi.BatchResult `json:"binary"`
+	DryRun bool             `json:"dryRun"`
+	String *cpi.BatchResult `json:"string"`
+	Binary *cpi.BatchResult `json:"binary"`
+	// Deleted are the parameters full sync deleted (DryRun: would delete).
 	Deleted *cpi.BatchResult `json:"deleted,omitempty"`
 	// Keys is the per-key outcome of a single-key deployment (opts.Keys).
 	Keys []PDKeyResult `json:"keys,omitempty"`
@@ -101,17 +102,25 @@ func PDDeploy(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, opts PDDeployOpt
 
 	// Full sync - delete remote entries not in local (only for managed PIDs)
 	var deletionResults *cpi.BatchResult
-	if fullSync && !dryRun {
-		log.Info().Msg("Executing full sync - deleting remote entries not present locally...")
+	if fullSync {
+		if dryRun {
+			log.Info().Msg("DRY RUN: full sync would delete the remote parameters below (not present locally)")
+		} else {
+			log.Info().Msg("Executing full sync - deleting remote entries not present locally...")
+		}
 		var deletionErr error
-		deletionResults, deletionErr = deleteRemoteEntriesNotInLocal(pdAPI, pdRepo, managedPIDs)
+		deletionResults, deletionErr = deleteRemoteEntriesNotInLocal(pdAPI, pdRepo, managedPIDs, dryRun)
 		if deletionErr != nil {
 			log.Error().Msgf("Error during full sync deletion: %v", deletionErr)
 			failures = append(failures, fmt.Sprintf("full sync: %v", deletionErr))
 		} else {
-			log.Info().Msgf("Parameters Deleted: %d", len(deletionResults.Deleted))
+			verb := "Deleted"
+			if dryRun {
+				verb = "Would delete"
+			}
+			log.Info().Msgf("Parameters %s: %d", verb, len(deletionResults.Deleted))
 			if len(deletionResults.Deleted) > 0 {
-				log.Info().Msg("Deleted parameters:")
+				log.Info().Msgf("%s parameters:", verb)
 				for _, deleted := range deletionResults.Deleted {
 					log.Info().Msgf("  - %s", deleted)
 				}
@@ -124,10 +133,6 @@ func PDDeploy(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, opts PDDeployOpt
 				failures = append(failures, deletionResults.Errors...)
 			}
 		}
-	} else if fullSync && dryRun {
-		log.Info().Msg("DRY RUN: Would execute full sync deletion")
-		log.Warn().Msgf("Would delete remote parameters not in local for PIDs:):\n  - %s",
-			strings.Join(managedPIDs, "\n  - "))
 	}
 
 	// Log summary
@@ -341,7 +346,9 @@ func deployBinaryParameters(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, re
 	return results, nil
 }
 
-func deleteRemoteEntriesNotInLocal(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, managedPIDs []string) (*cpi.BatchResult, error) {
+// deleteRemoteEntriesNotInLocal deletes the remote parameters of the
+// managed PIDs that are not present locally; dryRun only lists them.
+func deleteRemoteEntriesNotInLocal(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, managedPIDs []string, dryRun bool) (*cpi.BatchResult, error) {
 	results := &cpi.BatchResult{
 		Deleted: []string{},
 		Errors:  []string{},
@@ -400,7 +407,9 @@ func deleteRemoteEntriesNotInLocal(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.R
 
 		if !localStringParams[param.Pid][param.ID] {
 			key := fmt.Sprintf("%s/%s", param.Pid, param.ID)
-			if err := pdAPI.DeleteStringParameter(param.Pid, param.ID); err != nil {
+			if dryRun {
+				results.Deleted = append(results.Deleted, key)
+			} else if err := pdAPI.DeleteStringParameter(param.Pid, param.ID); err != nil {
 				results.Errors = append(results.Errors, fmt.Sprintf("Failed to delete string %s: %v", key, err))
 			} else {
 				results.Deleted = append(results.Deleted, key)
@@ -423,7 +432,9 @@ func deleteRemoteEntriesNotInLocal(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.R
 
 		if !localBinaryParams[param.Pid][param.ID] {
 			key := fmt.Sprintf("%s/%s", param.Pid, param.ID)
-			if err := pdAPI.DeleteBinaryParameter(param.Pid, param.ID); err != nil {
+			if dryRun {
+				results.Deleted = append(results.Deleted, key)
+			} else if err := pdAPI.DeleteBinaryParameter(param.Pid, param.ID); err != nil {
 				results.Errors = append(results.Errors, fmt.Sprintf("Failed to delete binary %s: %v", key, err))
 			} else {
 				results.Deleted = append(results.Deleted, key)

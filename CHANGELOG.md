@@ -5,6 +5,31 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Security material audit.** Passwords, tokens and keys belong in the secure store and the
+  keystore; new checks find them elsewhere ([lint.md](docs/lint.md#security-material)):
+  - New lint rules (group `security`) follow values read from the SecureStoreService
+    (credentials, secure parameters, OAuth2 tokens), the KeystoreService and token endpoint
+    responses through scripts and content modifiers:
+    - `secret-target-name` (error): stored only in the headers and properties named in
+      `.cpi/lint.yaml` `security` (default headers `Authorization`, `Proxy-Authorization`,
+      `X-API-Key`, `APIKey`; properties `secret*`).
+    - `secret-logged` (error): never in the message processing log, a logger, `println` or an
+      exception text.
+    - `secret-header-sent` (error): a secret header is not passed on by a JMS, ProcessDirect,
+      AMQP or Kafka receiver or by a wildcard in a receiver's request headers.
+    - `secret-header-inbound` (warning): Allowed Header(s) of the flow do not accept a secret
+      header from senders.
+    - `secret-in-body` (warning): security material in the message body.
+  - `hardcoded-secret` also checks configure files (`repository.configure`) and recognises
+    private keys, JSON web tokens, provider access keys and `Basic`/`Bearer` values whatever the
+    parameter's name.
+  - New command `cpictl secret-scan` and MCP tool `scan_secrets`: the tenant's Partner Directory
+    (string and binary parameters, files inside ZIPs) and the configuration parameters of every
+    integration flow; `--pd-dir` scans a pd snapshot folder. Findings carry the kind, the reason
+    and a fingerprint, never the value. Exits with code 5 when it finds something.
+- **Fixed: `pd deploy --full-sync --dry-run` did not say what it would delete.** It now lists the
+  parameters (`deleted` in the result) and deletes nothing, as before.
+
 ## 0.27.0
 
 - **Removed: the seven MCP tool names deprecated in 0.25.0** (announced in 0.26.0):

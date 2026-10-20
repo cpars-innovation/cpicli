@@ -99,6 +99,9 @@ type Config struct {
 		Configure    string `yaml:"configure" json:"configure,omitempty"`
 		DeployConfig string `yaml:"deployConfig" json:"deployConfig,omitempty"`
 	} `yaml:"repository" json:"repository"`
+	// Security names the headers and properties that may hold security
+	// material (secret-* rules).
+	Security SecurityConfig `yaml:"security" json:"security"`
 	// IgnoreVendors leaves the artifacts of these package vendors out of
 	// the findings (default SAP: content SAP delivers, which customers do
 	// not edit); [] checks every vendor. Cross-flow rules still see them.
@@ -184,6 +187,7 @@ func DefaultConfig() *Config {
 		ScriptCollections: ScriptCollectionConfig{PackageCollection: "{package}_Scripts",
 			SharedPackage: "SharedScripts", SharedCollection: "Shared_Scripts"},
 		IgnoreVendors: []string{"SAP"},
+		Security:      defaultSecurity(),
 		ScriptTests:   ScriptTestConfig{Dir: "tests/scripts", CoverageReport: "build/reports/jacoco/test/jacocoTestReport.xml", MinCoverage: 80},
 	}
 }
@@ -326,6 +330,8 @@ type lintArtifact struct {
 	Params  map[string]string
 	Vendor  string
 	inScope bool
+	// secretUses caches where each script puts security material.
+	secretUses map[string][]secretUse
 }
 
 func (a *lintArtifact) finding(rule, file, element, elementName, key, msg, suggestion string) Finding {

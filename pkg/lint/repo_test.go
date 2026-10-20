@@ -14,7 +14,7 @@ func TestRepositoryRules(t *testing.T) {
 	root := t.TempDir()
 	tree := filepath.Join(root, "packages")
 	for _, f := range []tFlow{
-		{pkg: "Orders", id: "Orders_In", params: "Host=dev.example\nUser=dev\n"},
+		{pkg: "Orders", id: "Orders_In", params: "Host=dev.example\nUser=dev\nApi_Token=\n"},
 		{pkg: "Orders", id: "Orders_Out", params: "Target=dev.example\n"},
 		{pkg: "Billing", id: "Billing_Post", params: "Host=dev.example\n"},
 	} {
@@ -34,6 +34,7 @@ func TestRepositoryRules(t *testing.T) {
         parameters:
           - {key: Host, value: prod.example}
           - {key: Password, value: x}
+          - {key: Api_Token, value: tok-5f3a9c2e}
 `)
 	write("deploy.yml", `packages:
   - integrationSuiteId: Orders
@@ -62,6 +63,8 @@ func TestRepositoryRules(t *testing.T) {
 	f = has("configure-missing-parameter", "Orders_Out", 1)
 	assert.Contains(t, f[0].Message, "covers package Orders but has no entry for this flow")
 	has("configure-missing-parameter", "Billing_Post", 0) // the file does not cover Billing
+	f = has("hardcoded-secret", "Orders_In", 1)
+	assert.Equal(t, "prod.yml sets the parameter Api_Token to a value that looks like a secret", f[0].Message)
 
 	f = has("flow-without-deployment", "Orders_Out", 1)
 	assert.Contains(t, f[0].Message, "package folder Orders")

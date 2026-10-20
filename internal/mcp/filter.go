@@ -36,7 +36,7 @@ var toolEffects = map[string]Effect{
 	"pd_dependencies": EffectRead, "config_diff": EffectRead,
 	"list_data_stores": EffectRead, "list_data_store_entries": EffectRead, "get_data_store_entry": EffectRead,
 	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "list_runtimes": EffectRead, "list_value_mappings": EffectRead, "get_value_mapping": EffectRead, "set_value_mapping": EffectTenant,
-	"delete_artifact": EffectTenant, "delete_package": EffectTenant, "list_components": EffectRead, "list_integration_connections": EffectRead, "get_tenant_settings": EffectRead, "download_log_archive": EffectLocal, "unlock_artifact": EffectTenant, "list_variables": EffectRead,
+	"delete_artifact": EffectTenant, "delete_package": EffectTenant, "list_components": EffectRead, "list_integration_connections": EffectRead, "get_tenant_settings": EffectRead, "scan_secrets": EffectRead, "download_log_archive": EffectLocal, "unlock_artifact": EffectTenant, "list_variables": EffectRead,
 	"list_jms_queues": EffectRead, "get_jms_broker": EffectRead, "list_number_ranges": EffectRead,
 	"list_jms_messages": EffectRead, "find_messages_by_header": EffectRead,
 	"retry_jms_messages": EffectTenant, "move_jms_messages": EffectTenant, "delete_jms_messages": EffectTenant, "set_jms_queue_state": EffectTenant,
@@ -371,11 +371,11 @@ var Toolsets = map[string][]string{
 		"bump_versions", "list_artifacts", "get_resource"},
 	"partner-directory": {
 		"list_pd_partners", "get_pd_parameters", "pd_diff", "pd_dependencies", "pd_deploy", "config_diff", "graph_search",
-		"list_alternative_partners", "create_alternative_partner", "list_authorized_users", "create_authorized_user"},
+		"list_alternative_partners", "create_alternative_partner", "list_authorized_users", "create_authorized_user", "scan_secrets"},
 	"security": {
 		"list_credentials", "list_keystore", "list_keystore_history", "get_certificate_chain", "get_csr", "get_ssh_public_key",
 		"generate_key_pair", "upload_certificate_chain", "list_pgp_keys", "list_access_policies", "create_access_policy",
-		"add_artifact_reference", "list_audit_logs"},
+		"add_artifact_reference", "list_audit_logs", "scan_secrets", "lint"},
 }
 
 // ToolsetDescriptions say what each toolset is for.

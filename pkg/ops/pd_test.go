@@ -143,3 +143,16 @@ func TestPDDeploySucceedsWhenNothingFails(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, mock.deletes)
 }
+
+// A dry run of full sync lists what it would delete and deletes nothing.
+func TestPDDeployFullSyncDryRunListsDeletions(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "P1", "String.properties"), "OK=1\n")
+
+	mock, pdAPI := newPDMock(t, []cpi.StringParameter{{Pid: "P1", ID: "OK", Value: "1"}, {Pid: "P1", ID: "Old", Value: "x"}, {Pid: "P9", ID: "Other", Value: "y"}})
+	res, err := PDDeploy(pdAPI, pdrepo.New(dir), PDDeployOptions{Replace: true, FullSync: true, DryRun: true})
+	require.NoError(t, err)
+	require.NotNil(t, res.Deleted)
+	assert.Equal(t, []string{"P1/Old"}, res.Deleted.Deleted)
+	assert.Empty(t, mock.deletes)
+}

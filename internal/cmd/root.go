@@ -137,6 +137,7 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewStatsCommand())
 	rootCmd.AddCommand(NewDoctorCommand())
 	rootCmd.AddCommand(NewLintCommand())
+	rootCmd.AddCommand(NewSecretScanCommand())
 	rootCmd.AddCommand(NewCompareCommand())
 	rootCmd.AddCommand(NewTransportCommand())
 	rootCmd.AddCommand(NewMatrixCommand())

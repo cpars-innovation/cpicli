@@ -166,8 +166,8 @@ mode still applies on top (the more restrictive wins). `doctor` and `help` are a
 | `monitor` | operations | `message_summary`, message logs and traces, `find_messages_by_header`, runtime status, log files, data stores, variables, JMS queues and messages (`list_jms_messages`, `retry_jms_messages`, `move_jms_messages`, `set_jms_queue_state`), number ranges, idempotency, ID mappings, keystore, `list_audit_logs` |
 | `promote` | moving between tiers | `compare`, `transport_check`, `drift`, `config_diff`, parameters, credentials, keystore, Partner Directory dependencies and diff, runtime status |
 | `improve` | quality | `lint`, `lint_fix`, `layout_iflow`, graph, `drift`, `compare`, `bump_versions` |
-| `partner-directory` | Partner Directory | `list_pd_partners`, `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff`, alternative partners and authorized users (list, create) |
-| `security` | security material | `list_credentials`, `list_keystore`, `list_keystore_history`, `get_certificate_chain`, `get_csr`, `get_ssh_public_key`, `generate_key_pair`, `upload_certificate_chain`, `list_pgp_keys`, access policies (list, create, add reference), `list_audit_logs` |
+| `partner-directory` | Partner Directory | `list_pd_partners`, `get_pd_parameters`, `pd_diff`, `pd_dependencies`, `pd_deploy`, `config_diff`, alternative partners and authorized users (list, create), `scan_secrets` |
+| `security` | security material | `list_credentials`, `list_keystore`, `list_keystore_history`, `get_certificate_chain`, `get_csr`, `get_ssh_public_key`, `generate_key_pair`, `upload_certificate_chain`, `list_pgp_keys`, access policies (list, create, add reference), `list_audit_logs`, `scan_secrets`, `lint` |
 
 `undeploy`, `delete_data_store_entry` and the opt-in tools (`unlock_artifact`, the delete tools
 above) are in no toolset: offer them explicitly with `--tools`. `list_locks` is in `inspect` and
@@ -334,6 +334,7 @@ change) in v0.25.0 and removed in v0.27.0. A call to an old name fails with `err
 | `list_runtimes` | `artifacts`, `runtime` | The tenant's runtimes (Cloud Integration, integration cells) and what is deployed on each. The public API lists only Cloud Integration: a flow bound to an integration cell looks undeployed everywhere else |
 | `list_integration_connections` | | Sender host -> flows -> receiver host, as the tenant computes it from the deployed flows (`refresh` recomputes) |
 | `get_tenant_settings` | | External logging and archiving on/off, last archiving runs |
+| `scan_secrets` | | Passwords, tokens and keys in the Partner Directory (strings, binaries, ZIP entries) and in flow configuration parameters; `only`, `packages`. Never returns a value: kind, reason, fingerprint |
 | `download_log_archive` | local file | Zip of the latest `http` or `trace` log files, below the server root |
 | `list_components` | | Adapter and step variants (cmdVariantUri, version) the tenant offers, from `.cpi/components.json` ([components.md](components.md)); filter by name, kind, direction |
 | `unlock_artifact` | tenant, **destructive**, opt-in | Remove an artifact's edit lock (the holder's unsaved changes are lost); requires `confirm: true` and `--opt-in unlock_artifact` |
