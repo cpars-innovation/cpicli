@@ -3,6 +3,9 @@ package scope
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"path"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -70,7 +73,10 @@ func TestGuardRefusesHostileIDsAndUnknownPaths(t *testing.T) {
 	r := refused(t, g.Before(req("GET", "/api/v1/SomethingNew", "")))
 	assert.Contains(t, r.Error(), "is not available under a scope")
 	refused(t, g.Before(req("GET", "/apiportal/api/1.0/Management.svc/APIProxies", "")))
-	refused(t, g.Before(req("GET", "/api/v1/IntegrationDesigntimeArtifacts", ""))) // no tenant-wide artifact list
+	refused(t, g.Before(req("GET", "/api/v1/IntegrationDesigntimeArtifacts", "")))                   // no tenant-wide artifact list
+	refused(t, g.Before(req("GET", "/api/v1/0DesigntimeArtifacts(Id='SD_A',Version='active')", ""))) // only the known designtime types
+	refused(t, g.Before(req("GET", "/api/v1/IntegrationPackages('SD_Orders')/XDesigntimeArtifacts", "")))
+	refused(t, g.Before(req("GET", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='a%20b')", "")))
 }
 
 // batchReq builds a $batch request as cpictl writes it: one changeset with
@@ -225,4 +231,243 @@ func TestGuardHarnessTargets(t *testing.T) {
 	g.ProcessDirectAddresses = nil
 	g.pdFlows = nil
 	refused(t, g.Before(call("/sd/in")))
+}
+
+// With grants, actions differ per package: reading FI's messages and seeing
+// its entry points must not allow downloading their payloads or sending to
+// them.
+const grantsRW = `{"version":1,"grants":[{"packages":["SD_*"],"actions":["read","download","test"]},{"packages":["FI_*"],"actions":["read"]}]}`
+
+func TestGuardGrantsDecideMessageContentPerFlow(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	logs := `{"d":{"results":[{"MessageGuid":"G1","IntegrationArtifact":{"Id":"SD_A","PackageId":"SD_Orders"}},
+		{"MessageGuid":"G2","IntegrationArtifact":{"Id":"FI_B","PackageId":"FI_Billing"}}]}}`
+	out, err := g.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "G2", "FI is readable")
+	for _, guid := range []string{"G1", "G2"} {
+		r := req("GET", "/api/v1/MessageProcessingLogs('"+guid+"')/Attachments", "")
+		require.NoError(t, g.Before(r))
+		_, err := g.After(r, 200, nil, []byte(`{"d":{"results":[{"Id":"ATT_`+guid+`"}]}}`))
+		require.NoError(t, err)
+	}
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_G1')/$value", "")))
+	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_G2')/$value", "")))
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_G2')", "")), "its metadata is read")
+}
+
+func TestGuardGrantsDecideEndpointsPerFlow(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/fi"}]}}]}}`
+	out, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "FI_B", "FI's endpoints are readable")
+	send := func(p string) *httpclnt.GuardRequest {
+		return &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: p}
+	}
+	assert.NoError(t, g.Before(send("/http/sd")))
+	r := refused(t, g.Before(send("/http/fi")))
+	assert.Equal(t, "scope: test of artifact FI_B is not granted", r.Error())
+}
+
+func TestGuardCheckReportsAccesses(t *testing.T) {
+	g := testGuard(t, sdRW)
+	c, err := g.Check(req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'", ""))
+	require.NoError(t, err)
+	assert.Equal(t, []Access{{Resource: Resource{Kind: KindArtifact, ID: "SD_A"}, Action: ActionDeploy}}, c.Accesses)
+	assert.False(t, c.ReadsAnswer)
+	c, err = g.Check(req("GET", "/api/v1/IntegrationPackages", ""))
+	require.NoError(t, err)
+	assert.Empty(t, c.Accesses)
+	assert.True(t, c.ReadsAnswer, "a list is filtered")
+	c, err = g.Check(req("GET", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/$value", ""))
+	refused(t, err)
+	assert.Empty(t, c.Accesses)
+}
+
+// Requests a server could read differently from the guard are refused,
+// also inside a $batch.
+func TestGuardRefusesAmbiguousRequests(t *testing.T) {
+	g := testGuard(t, sdRW)
+	art := "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')"
+	for _, p := range []string{
+		art + "/../../IntegrationPackages('FI_Billing')",
+		art + "/%2e%2e/%2E%2E/IntegrationPackages('FI_Billing')",
+		art + "/..;/..;/IntegrationPackages('FI_Billing')",
+		art + "/.%2e/x",
+		art + "/x%2F..%2F..%2FIntegrationPackages('FI_Billing')",
+		art + "/x%5C..",
+		art + "/x\\..",
+		art + "/%252e%252e/x",
+		art + "//x",
+		art + ";jsessionid=1",
+		"/api/v1/IntegrationPackages('SD_Orders');x=1",
+		"/api/v1/IntegrationPackages('SD_Orders')/%00",
+		"/api/v1/./IntegrationPackages('SD_Orders')",
+		"/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Id='FI_B'&Version='active'",
+		"/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&ID='FI_B'&Version='active'",
+		"/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A';Id='FI_B'",
+		"api/v1/IntegrationPackages",
+	} {
+		_, err := g.Check(req("POST", p, ""))
+		refused(t, err)
+	}
+	for _, h := range []map[string]string{{"X-HTTP-Method": "DELETE"}, {"x-http-method-override": "DELETE"}, {"Content-Encoding": "gzip"}} {
+		r := req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'", "")
+		r.Header = h
+		refused(t, g.Before(r))
+	}
+	ok := req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'", "")
+	ok.Header = map[string]string{"Content-Encoding": "identity"}
+	assert.NoError(t, g.Before(ok))
+
+	// bodies that repeat a key: the tenant may take the other one
+	for _, body := range []string{
+		`{"Id":"SD_New","PackageId":"SD_Orders","PackageId":"FI_Billing"}`,
+		`{"Id":"SD_New","PackageId":"SD_Orders","packageid":"FI_Billing"}`,
+		`{"Id":"FI_X","Id":"SD_New","PackageId":"SD_Orders"}`,
+		`{"Id":"SD_New","PackageId":"SD_Orders"}{"PackageId":"FI_Billing"}`,
+	} {
+		refused(t, g.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", body)))
+	}
+	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", `{"Id":"SD_New","PackageId":"SD_Orders","Nested":{"Id":"x","id":"y"}}`)))
+
+	// inside a $batch: paths and the operations' own headers
+	refused(t, g.Before(batchReq("PUT /api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/../../IntegrationPackages('FI_Billing') HTTP/1.1")))
+	refused(t, g.Before(batchReq("PUT /api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/$links/Configurations('P') HTTP/1.1\r\nX-HTTP-Method: DELETE")))
+
+	// runtime endpoints may carry ";" (OData services), never dot segments
+	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/gw/odata/SD/Orders;v=1"}]}}]}}`
+	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
+	require.NoError(t, err)
+	g.Scope.Actions = append(g.Scope.Actions, ActionTest)
+	send := func(p string) *httpclnt.GuardRequest {
+		return &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: p}
+	}
+	assert.NoError(t, g.Before(send("/gw/odata/SD/Orders;v=1/Items")))
+	refused(t, g.Before(send("/gw/odata/SD/Orders;v=1/../../../http/fi")))
+	refused(t, g.Before(send("/gw/odata/SD/Orders;v=1/..;/x")))
+}
+
+// Whatever the guard allows is already a normal path (nothing for a server
+// to resolve differently) and never addresses FI_Billing's content.
+func FuzzGuardPaths(f *testing.F) {
+	for _, s := range []string{
+		"IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/$value",
+		"IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/../../IntegrationPackages('FI_Billing')",
+		"IntegrationDesigntimeArtifacts(Id='SD_A%27)%2F..%2F(%27FI_B',Version='active')",
+		"IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts",
+		"DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'",
+		"MessageProcessingLogs('G1')/Attachments",
+		"$batch",
+	} {
+		f.Add("GET", s)
+		f.Add("POST", s)
+	}
+	f.Fuzz(func(t *testing.T, method, rest string) {
+		g := testGuard(t, sdRW)
+		g.Scope.Actions = append(g.Scope.Actions, ActionDownload, ActionDelete)
+		p := "/api/v1/" + rest
+		if g.Before(req(method, p, `{"Id":"SD_New","PackageId":"SD_Orders"}`)) != nil {
+			return
+		}
+		raw, _, _ := strings.Cut(p, "?")
+		var dec []string
+		for _, seg := range strings.Split(raw, "/") {
+			d, err := url.PathUnescape(seg)
+			if err != nil {
+				t.Fatalf("allowed with a bad escape: %q", p)
+			}
+			dec = append(dec, d)
+		}
+		decoded := strings.Join(dec, "/")
+		if clean := path.Clean(decoded); clean != strings.TrimSuffix(decoded, "/") && clean+"/" != decoded {
+			t.Fatalf("allowed a path a server would normalise: %q -> %q", p, clean)
+		}
+		// below the addressed entity, segments are its navigations: decide
+		// on the entity itself
+		entity, _, _ := strings.Cut(strings.TrimPrefix(decoded, "/api/v1/"), "/")
+		entity = regexp.MustCompile(`,Version='[^']*'`).ReplaceAllString(entity, "")
+		if strings.Contains(entity, "FI_") {
+			t.Fatalf("allowed a path addressing FI content: %q", p)
+		}
+	})
+}
+
+// The tenant navigates from a message or a runtime artifact into its
+// children: content must not be reachable through a path checked as read
+// (review of #38: verified on a tenant for Attachments('…')/$value).
+func TestGuardMessageSubPathsAreAllowlisted(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	logs := `{"d":{"results":[{"MessageGuid":"G2","IntegrationArtifact":{"Id":"FI_B","PackageId":"FI_Billing"}}]}}`
+	_, err := g.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
+	require.NoError(t, err)
+	for _, p := range []string{
+		"/api/v1/MessageProcessingLogs('G2')/Attachments('ATT_G2')/$value",
+		"/api/v1/MessageProcessingLogs('G2')/MessageStoreEntries('E1')/$value",
+		"/api/v1/MessageProcessingLogs('G2')/Runs('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages(1)/$value",
+		"/api/v1/MessageProcessingLogs('G2')/Attachments('ATT_G2')",
+		"/api/v1/MessageProcessingLogs('G2')/Runs('R1')",
+		"/api/v1/MessageProcessingLogs('G2')/Unknown",
+		"/api/v1/IntegrationRuntimeArtifacts('FI_B')/Something",
+		"/api/v1/IntegrationRuntimeArtifacts('FI_B')/ErrorInformation/x",
+	} {
+		refused(t, g.Before(req("GET", p, "")))
+	}
+	refused(t, g.Before(req("DELETE", "/api/v1/MessageProcessingLogs('G2')/Attachments", "")))
+	for _, p := range []string{"", "/ErrorInformation", "/ErrorInformation/$value", "/Attachments", "/MessageStoreEntries",
+		"/Runs", "/CustomHeaderProperties", "/AdapterAttributes"} {
+		assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('G2')"+p+"?$format=json", "")), p)
+	}
+	for _, p := range []string{"", "/ErrorInformation", "/ErrorInformation/$value"} {
+		assert.NoError(t, g.Before(req("GET", "/api/v1/IntegrationRuntimeArtifacts('FI_B')"+p, "")), p)
+	}
+	// content below children and artifacts is a download wherever $value sits
+	g.children = map[string]string{"R1": "FI_B", "E1": "FI_B"}
+	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogRuns('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages", "")))
+	refused(t, g.Before(req("GET", "/api/v1/MessageStoreEntries('E1')/Attachments('x')/$value", "")))
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageStoreEntries('E1')", "")), "metadata is a read")
+}
+
+// Independent of the guard's own classification: any allowed request that
+// names content ($value, TraceMessages) must have needed download.
+func FuzzGuardContentNeedsDownload(f *testing.F) {
+	for _, s := range []string{
+		"MessageProcessingLogs('G1')/Attachments('A1')/$value",
+		"MessageProcessingLogs('G1')/Runs('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages(1)/$value",
+		"MessageProcessingLogs('G1')/ErrorInformation/$value",
+		"MessageProcessingLogRuns('R1')/RunSteps(RunId='R1',ChildCount=1)/TraceMessages",
+		"MessageStoreEntries('E1')/$value",
+		"IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/Resources('x')/$value",
+		"IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/$value/x",
+		"IntegrationRuntimeArtifacts('SD_A')/ErrorInformation/$value",
+	} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, rest string) {
+		// read everywhere, download nowhere: content must always be refused
+		g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read"]}`)
+		g.messages = map[string]string{"G1": "SD_A"}
+		g.children = map[string]string{"R1": "SD_A", "E1": "SD_A", "A1": "SD_A"}
+		p := "/api/v1/" + rest
+		c, err := g.Check(req("GET", p, ""))
+		if err != nil {
+			return
+		}
+		path, _, _ := strings.Cut(p, "?")
+		dec, _ := url.PathUnescape(path)
+		if !strings.Contains(dec, "$value") && !strings.Contains(dec, "TraceMessages") {
+			return
+		}
+		if regexp.MustCompile(`^/api/v1/(MessageProcessingLogs|IntegrationRuntimeArtifacts)\('[^/]*'\)/ErrorInformation/\$value$`).MatchString(dec) {
+			return // the error text of a message or runtime artifact
+		}
+		for _, a := range c.Accesses {
+			if a.Action == ActionDownload {
+				return
+			}
+		}
+		t.Fatalf("content allowed without download: %q (%+v)", p, c.Accesses)
+	})
 }
