@@ -41,6 +41,35 @@ never from a config file, so a session that can edit `cpictl.yaml` cannot widen 
   `credentials`, `jms`, `variables`, `numberranges`, `datastores`, `accesspolicies`, `logfiles`, `settings`,
   `auditlog`, `idmappings`, `idempotency`, `locks` and `components`. Without a grant they are refused.
 
+## Grants and deny
+
+The top-level `packages`, `artifacts` and `actions` give the same actions on every package. When packages need
+different actions, `grants` adds package-bound permissions, and `deny` removes some whatever is granted. This is the
+form the cpictl gateway builds from its policy, one grant per matching rule; it works in a scope file as well.
+
+```yaml
+version: 1
+grants:
+  - packages: ["SD_*"]
+    artifacts: ["!*_Legacy"]          # optional, as at the top level
+    actions: [read, download, upload, deploy, test]
+  - packages: ["FI_Shared"]
+    actions: [read]
+deny:
+  - packages: ["HR_*"]                # every action; also hides the packages
+  - packages: ["SD_*"]
+    artifacts: ["*_Keys"]
+    actions: [download]
+```
+
+- Each grant needs `packages` and `actions`. The top level counts as one more grant; grants add up.
+- A `deny` entry names `packages`, `artifacts` or both, and optionally `actions` (none: every action). It is applied
+  after all grants and cannot be overridden. An entry that names artifacts applies to those artifacts only, not to
+  the package that holds them.
+- Partners and tenant areas take the top-level `actions` only.
+- Message contents (attachments, payloads, traces) and test messages are decided per flow: reading `FI_Shared`'s
+  message logs does not allow downloading their payloads, and seeing its entry points does not allow sending to them.
+
 ## Actions
 
 | Action | Covers |
@@ -81,13 +110,17 @@ whichever command or MCP tool sends it, including tools added later:
   partners `CPICTL_Test` and `CPICTL_Stub`, whose parameters `test` may change (stub responses). Messages of tooling
   flows, and their children, are readable with `test`.
 - **API Management**, tenant-wide artifact lists and any request the guard does not know are refused.
+- **Requests a server could read differently** are refused, also inside a `$batch`: dot segments (also encoded or as
+  `..;`), encoded slashes, backslashes and `%`, `;` in API paths, repeated query parameters, method override headers,
+  compressed request bodies and JSON bodies that repeat a key. The guard decides on the literal request; these would
+  let the tenant or a proxy in between address something else.
 
 A refusal has exit code **9** and `errorCategory: "scope"`, and names the action and the resource:
 `scope: deploy of artifact FI_Post is not granted`. With `--events`, each refusal is also a `scope.refused` line.
 MCP `help` (topic `server`) shows the active scope and its SHA-256, so the caller can verify which scope a server it
 started enforces.
 
-Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`) is the same matcher the CLI uses, so other tools
+Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`, `Guard.Check`) is the same matcher the CLI uses, so other tools
 (CPI Studio) decide identically.
 
 ## Limits
@@ -96,3 +129,9 @@ Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`) is the same mat
   directly; for them it is a guardrail.
 - Local files are not filtered: if an earlier, unscoped `discover` wrote `.cpi/graph.json`, the graph tools serve
   it. Run discover under the scope.
+- Below a message and a runtime artifact only the lists cpictl reads are allowed (`ErrorInformation`, `Attachments`,
+  `MessageStoreEntries`, `Runs`, `CustomHeaderProperties`, `AdapterAttributes`): the tenant navigates from there into
+  contents, which are only read through their own IDs and need `download`.
+- The test tooling flows (`CPICTL_Test_*`) and their partners are shared: with `test` on any package, their messages
+  and recordings are readable, also those of tests against other packages. For one person that is their own; for a
+  gateway serving several teams it is not yet decided per target flow.

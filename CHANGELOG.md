@@ -5,6 +5,22 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Access scope: `grants` and `deny`** ([access-scope.md](docs/access-scope.md#grants-and-deny)). A scope can give
+  different actions on different packages (deploy on `SD_*`, only read on `FI_Shared`) and deny packages or artifacts
+  whatever is granted. Message contents and test messages are now decided on the message's flow, not only on whether
+  the action is granted at all. This is the form the cpictl gateway builds per user from its policy.
+- **Access scope: requests a server could read differently from the guard are refused**, also inside a `$batch`:
+  dot segments (also encoded, or as `..;`), encoded slashes, backslashes and `%`, empty path segments, `;` in API
+  paths, repeated query parameters (also differing in case), method override headers (`X-HTTP-Method`), compressed
+  request bodies, JSON bodies that repeat a key, designtime types other than the four cpictl uses, and artifact
+  versions that are not plain IDs. cpictl itself never sends these; under a scope they could address another
+  package than the one checked.
+- **Fixed: under a scope, message contents were reachable through a message's own path** (for example
+  `MessageProcessingLogs('…')/Attachments('…')/$value`), checked only as `read`. Below a message and a runtime
+  artifact only the lists cpictl reads are allowed now, and every path naming `$value` or `TraceMessages` needs
+  `download`.
+- `pkg/scope`: `Guard.Check` decides a request like `Before` and reports what it touches (`Access`) and whether the
+  answer must pass through `After` (`ReadsAnswer`), for proxies that audit requests and stream content.
 - **Gateway mode** ([configuration.md](docs/configuration.md#gateway-mode)): `gateway: https://gw.example.com/t/dev`
   in a profile (or `--gateway`) sends every API call to a cpictl gateway with the user's token from
   `CPICTL_GATEWAY_TOKEN` instead of to the tenant with a service key; the gateway decides per user which packages
