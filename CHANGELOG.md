@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.32.0
+
 - **Security material from a vault: one command for every type** ([vault.md](docs/vault.md)).
   `cpictl credentials apply` now also imports **key pairs** (PKCS#12 / PFX), **SSH keys** (OpenSSH or PEM) and
   **PGP secret keys**, next to user credentials, OAuth2 client credentials and secure parameters. A pipeline
