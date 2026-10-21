@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Fixed (#50):** `auth logout` with `CPICTL_TOKEN_STORE=file` left the refresh token in the OS keychain, when an
+  earlier login had put it there. The logout now removes it whatever the store setting.
+- **Access scope: test tooling lookups are bounded (#51).** A list of many other teams' test runs cost two
+  sequential SAP calls per row on every request (about 400 for `$top=200`). Now each message's correlation ID and
+  each correlation group are looked up once, 8 at a time, cached ("no flow of the scope" for 10 seconds), at most
+  100 of each per answer (rows beyond are hidden in that answer, fail closed).
+- **Access scope: a test message may not set its correlation ID.** `SAP_MplCorrelationId` /
+  `SAP_MessageProcessingLogID` on a request to a flow are refused under a scope (the cpictl gateway drops them as
+  of cpictl-gateway#18): with a chosen correlation ID, a message would join another team's test run (#48). cpictl
+  never sends them. The remaining limit, a team setting one inside its own flow, is in `docs/access-scope.md`.
+  **For Studio:** if Studio's backend sends test messages through `pkg/scope`, don't forward a user's
+  `SAP_MplCorrelationId`.
 ## 0.32.0
 
 - **Security material from a vault: one command for every type** ([vault.md](docs/vault.md)).

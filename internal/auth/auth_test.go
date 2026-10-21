@@ -330,3 +330,20 @@ func TestStoreKeychainLost(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "run cpictl auth login")
 }
+
+// A logout through a file-only store (CPICTL_TOKEN_STORE=file) still removes
+// the refresh token an earlier login put into the keychain (#50).
+func TestFileOnlyLogoutClearsKeychain(t *testing.T) {
+	kr := &fakeKeyring{m: map[string]string{}}
+	dir := t.TempDir()
+	withKeychain := &Store{Dir: dir, Keyring: kr}
+	require.NoError(t, withKeychain.Save("dev", &oauth2.Token{AccessToken: "a", RefreshToken: "long-lived", Expiry: time.Now().Add(time.Hour)}))
+	require.Len(t, kr.m, 1)
+	old := cleanupKeyring
+	cleanupKeyring = kr
+	t.Cleanup(func() { cleanupKeyring = old })
+	require.NoError(t, (&Store{Dir: dir}).Delete("dev"))
+	assert.Empty(t, kr.m, "the refresh token is gone from the keychain")
+	_, err := withKeychain.Load("dev")
+	assert.ErrorIs(t, err, ErrNotLoggedIn)
+}

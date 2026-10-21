@@ -72,17 +72,19 @@ type Guard struct {
 	// test harness are refused: the harness reaches any address.
 	ProcessDirectAddresses func(ctx context.Context, artifactID string) ([]string, error)
 
-	mu        sync.Mutex
-	artifacts map[string]string // artifact ID -> package (allowed packages only)
-	builtAt   time.Time
-	messages  map[string]string // message GUID -> flow, for messages seen in allowed answers (a tooling message: the flow it tested)
-	children  map[string]string // IDs of runs, steps, traces, attachments, store entries -> flow of their message
-	tooling   map[string]bool   // message GUIDs and child IDs of tooling messages: decided with "test" on the flow tested
-	targets   map[string]string // correlation ID -> allowed flow outside the tooling that shares it
-	endpoints map[string]string // entry point URL -> flow, for allowed flows
-	pdFlows   map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
-	pdBuiltAt time.Time
-	tenant    string // scheme://host:port of the tenant API
+	mu           sync.Mutex
+	artifacts    map[string]string // artifact ID -> package (allowed packages only)
+	builtAt      time.Time
+	messages     map[string]string    // message GUID -> flow, for messages seen in allowed answers (a tooling message: the flow it tested)
+	children     map[string]string    // IDs of runs, steps, traces, attachments, store entries -> flow of their message
+	tooling      map[string]bool      // message GUIDs and child IDs of tooling messages: decided with "test" on the flow tested
+	targets      map[string]string    // correlation ID -> allowed flow outside the tooling that shares it
+	noTarget     map[string]time.Time // correlation ID -> until when "no allowed flow" holds
+	correlations map[string]string    // tooling message GUID -> correlation ID ("": not looked up)
+	endpoints    map[string]string    // entry point URL -> flow, for allowed flows
+	pdFlows      map[string]string    // ProcessDirect address -> flow, for allowed flows (built on first harness call)
+	pdBuiltAt    time.Time
+	tenant       string // scheme://host:port of the tenant API
 }
 
 type internalKey struct{}
@@ -659,7 +661,8 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 
 	case p == "MessageProcessingLogs":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
-			return filterResults(b, func(e map[string]any) bool { return g.allowsLog(r.Ctx, e) })
+			hidden := g.prefetchTooling(r.Ctx, results(b))
+			return filterResults(b, func(e map[string]any) bool { return !hidden[str(e, "MessageGuid")] && g.allowsLog(r.Ctx, e) })
 		}, record: (*Guard).recordMessages}, nil
 	case reMessage.MatchString(p):
 		mm := reMessage.FindStringSubmatch(p)
@@ -681,9 +684,16 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		return decision{need: []need{{res: Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action: action}}, record: (*Guard).recordChildren}, nil
 	case p == "MessageProcessingLogCustomHeaderProperties":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
+			var logs []map[string]any
+			for _, e := range results(b) {
+				if l, _ := e["Log"].(map[string]any); l != nil {
+					logs = append(logs, l)
+				}
+			}
+			hidden := g.prefetchTooling(r.Ctx, logs)
 			return filterResults(b, func(e map[string]any) bool {
 				l, _ := e["Log"].(map[string]any)
-				return l != nil && g.allowsLog(r.Ctx, l)
+				return l != nil && !hidden[str(l, "MessageGuid")] && g.allowsLog(r.Ctx, l)
 			})
 		}}, nil
 
@@ -760,6 +770,14 @@ func (g *Guard) classifyOperations(r *httpclnt.GuardRequest, cmd string) (decisi
 func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 	if !g.Scope.Grants(ActionTest) {
 		return decision{}, g.refuse(&Refusal{Reason: "sending messages needs the test action"})
+	}
+	// The tenant continues a correlation ID the caller sends. The test
+	// tooling's messages are decided by their correlation group (#48), so a
+	// caller who chose one could join another team's test run and read it.
+	for k := range r.Header {
+		if strings.EqualFold(k, "SAP_MplCorrelationId") || strings.EqualFold(k, "SAP_MessageProcessingLogID") {
+			return decision{}, g.refuse(&Refusal{Reason: "a test message may not set " + k + " under a scope (it would join another message's correlation group)"})
+		}
 	}
 	target, _, _ := strings.Cut(withoutDefaultPort(r.Base)+r.Path, "?")
 	g.mu.Lock()
@@ -951,57 +969,202 @@ func (g *Guard) toolingTarget(ctx context.Context, guid, correlation string) str
 	if g.Fetch == nil {
 		return ""
 	}
-	ictx := internal(ctx)
-	if correlation == "" && reCorrelation.MatchString(guid) {
-		// the list may have left the field out ($select)
-		if b, err := g.Fetch(ictx, "/api/v1/MessageProcessingLogs("+httpKey(guid)+")?$select=CorrelationId"); err == nil {
-			var v struct {
-				D map[string]any `json:"d"`
-			}
-			if json.Unmarshal(b, &v) == nil {
-				correlation = str(v.D, "CorrelationId")
-			}
-		}
+	if correlation == "" {
+		correlation = g.correlationOf(ctx, guid)
 	}
 	if !reCorrelation.MatchString(correlation) {
 		return ""
 	}
-	g.mu.Lock()
-	target := g.targets[correlation]
-	g.mu.Unlock()
+	target := g.groupTarget(ctx, correlation)
 	if target != "" {
 		g.markTooling(guid, target)
+	}
+	return target
+}
+
+// noTargetTTL is how long "no allowed flow in this correlation group" is
+// kept: the tested flow's log may be written a moment after the tooling's
+// (a waiting test run sees it then), but a list of other teams' runs must
+// not cost two SAP calls per row on every request (#51).
+const noTargetTTL = 10 * time.Second
+
+// maxToolingLookups caps the message lookups and the group lookups one
+// answer may cause (each); rows beyond it are hidden in that answer (fail
+// closed). Filter the list by flow to see them.
+const maxToolingLookups = 100
+
+// correlationOf returns a message's correlation ID (the list may have left
+// the field out with $select), cached.
+func (g *Guard) correlationOf(ctx context.Context, guid string) string {
+	if !reCorrelation.MatchString(guid) {
+		return ""
+	}
+	g.mu.Lock()
+	c, ok := g.correlations[guid]
+	g.mu.Unlock()
+	if ok {
+		return c
+	}
+	b, err := g.Fetch(internal(ctx), "/api/v1/MessageProcessingLogs("+httpKey(guid)+")?$select=CorrelationId")
+	if err != nil {
+		return ""
+	}
+	var v struct {
+		D map[string]any `json:"d"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return ""
+	}
+	c = str(v.D, "CorrelationId")
+	g.mu.Lock()
+	if g.correlations == nil {
+		g.correlations = map[string]string{}
+	}
+	g.correlations[guid] = c
+	g.mu.Unlock()
+	return c
+}
+
+// groupTarget returns the allowed flow outside the tooling in a correlation
+// group, or "", cached both ways ("" for noTargetTTL).
+func (g *Guard) groupTarget(ctx context.Context, correlation string) string {
+	g.mu.Lock()
+	target := g.targets[correlation]
+	until, refused := g.noTarget[correlation]
+	g.mu.Unlock()
+	if target != "" {
 		return target
 	}
-	// not cached when none is found: the tested flow's log may come later
-	b, err := g.Fetch(ictx, "/api/v1/MessageProcessingLogs?$filter="+url.QueryEscape("CorrelationId eq '"+correlation+"'")+
+	if refused && time.Now().Before(until) {
+		return ""
+	}
+	b, err := g.Fetch(internal(ctx), "/api/v1/MessageProcessingLogs?$filter="+url.QueryEscape("CorrelationId eq '"+correlation+"'")+
 		"&$select=MessageGuid,IntegrationArtifact&$top=50")
 	if err != nil {
 		return ""
 	}
 	for _, e := range results(b) {
 		id := str(e, "IntegrationArtifact", "Id")
-		if id == "" || toolingFlow(id) {
+		if id == "" || toolingFlow(id) || !ValidID(id) {
 			continue
 		}
 		// decided without a refusal event: the other flows of the group
 		// are not what was asked for
 		pkg := str(e, "IntegrationArtifact", "PackageId")
-		if pkg == "" && ValidID(id) {
+		if pkg == "" {
 			pkg = g.packageOf(ctx, id)
 		}
-		if ValidID(id) && g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: pkg}, ActionTest) {
-			g.mu.Lock()
-			if g.targets == nil {
-				g.targets = map[string]string{}
-			}
-			g.targets[correlation] = id
-			g.mu.Unlock()
-			g.markTooling(guid, id)
-			return id
+		if g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: pkg}, ActionTest) {
+			target = id
+			break
 		}
 	}
-	return ""
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if target != "" {
+		if g.targets == nil {
+			g.targets = map[string]string{}
+		}
+		g.targets[correlation] = target
+		delete(g.noTarget, correlation)
+	} else {
+		if g.noTarget == nil {
+			g.noTarget = map[string]time.Time{}
+		}
+		g.noTarget[correlation] = time.Now().Add(noTargetTTL)
+	}
+	return target
+}
+
+// prefetchTooling resolves the tooling rows of one answer before it is
+// filtered: each correlation ID once, 8 lookups at a time, at most
+// maxToolingLookups. It returns the message GUIDs beyond that, which this
+// answer hides (a narrower list shows them).
+func (g *Guard) prefetchTooling(ctx context.Context, rows []map[string]any) map[string]bool {
+	hidden := map[string]bool{}
+	if g.Fetch == nil || !g.Scope.Grants(ActionTest) {
+		return hidden
+	}
+	var guids []string
+	seenGUID := map[string]bool{}
+	for _, e := range rows {
+		if !toolingFlow(str(e, "IntegrationArtifact", "Id")) || str(e, "CorrelationId") != "" {
+			continue
+		}
+		guid := str(e, "MessageGuid")
+		g.mu.Lock()
+		_, known := g.correlations[guid]
+		g.mu.Unlock()
+		if !known && reCorrelation.MatchString(guid) && !seenGUID[guid] {
+			seenGUID[guid] = true
+			guids = append(guids, guid)
+		}
+	}
+	budget := maxToolingLookups
+	if len(guids) > budget {
+		for _, guid := range guids[budget:] {
+			hidden[guid] = true
+		}
+		guids = guids[:budget]
+	}
+	parallel(guids, func(guid string) { g.correlationOf(ctx, guid) })
+	budget = maxToolingLookups // groups: their own budget
+
+	var groups []string
+	seen := map[string]bool{}
+	byGroup := map[string][]string{}
+	for _, e := range rows {
+		if !toolingFlow(str(e, "IntegrationArtifact", "Id")) || hidden[str(e, "MessageGuid")] {
+			continue
+		}
+		c := str(e, "CorrelationId")
+		if c == "" {
+			g.mu.Lock()
+			c = g.correlations[str(e, "MessageGuid")]
+			g.mu.Unlock()
+		}
+		if !reCorrelation.MatchString(c) {
+			continue
+		}
+		byGroup[c] = append(byGroup[c], str(e, "MessageGuid"))
+		if seen[c] {
+			continue
+		}
+		seen[c] = true
+		g.mu.Lock()
+		_, found := g.targets[c]
+		until, refused := g.noTarget[c]
+		g.mu.Unlock()
+		if !found && !(refused && time.Now().Before(until)) {
+			groups = append(groups, c)
+		}
+	}
+	if len(groups) > budget {
+		for _, c := range groups[max(budget, 0):] {
+			for _, guid := range byGroup[c] {
+				hidden[guid] = true
+			}
+		}
+		groups = groups[:max(budget, 0)]
+	}
+	parallel(groups, func(c string) { g.groupTarget(ctx, c) })
+	return hidden
+}
+
+// parallel runs fn for each item, 8 at a time.
+func parallel(items []string, fn func(string)) {
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for _, it := range items {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			fn(it)
+		}()
+	}
+	wg.Wait()
 }
 
 // toolingParamOwned reports whether a parameter of the tooling's partners

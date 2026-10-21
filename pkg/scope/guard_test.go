@@ -3,10 +3,13 @@ package scope
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"path"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
@@ -486,8 +489,11 @@ func TestGuardToolingMessagesByTargetFlow(t *testing.T) {
 	}
 	correlationOf := map[string]string{"H1": "C1", "S1": "C1", "H2": "C2", "S2": "C2", "X1": "C3"}
 	var fetched []string
+	var fmu sync.Mutex
 	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		fmu.Lock()
 		fetched = append(fetched, path)
+		fmu.Unlock()
 		for c, rows := range groups {
 			if strings.Contains(path, "%27"+c+"%27") {
 				return []byte(`{"d":{"results":` + rows + `}}`), nil
@@ -573,5 +579,64 @@ func TestGuardToolingParametersByOwner(t *testing.T) {
 		assert.NotContains(t, string(out), "FI_B.billing")
 		assert.NotContains(t, string(out), "FI_Bank.Map")
 		assert.NotContains(t, string(out), `"billing"`)
+	}
+}
+
+// A list of many other teams' tooling runs costs one lookup per message and
+// per correlation group, not two per row on every request (#51).
+func TestGuardToolingLookupsAreBounded(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	base := g.Fetch
+	var calls atomic.Int64
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if strings.HasPrefix(path, "/api/v1/MessageProcessingLogs") {
+			calls.Add(1)
+			if strings.Contains(path, "CorrelationId+eq") {
+				// another team's flow in every group
+				return []byte(`{"d":{"results":[{"MessageGuid":"X","IntegrationArtifact":{"Id":"FI_B"}}]}}`), nil
+			}
+			guid := path[len("/api/v1/MessageProcessingLogs('"):strings.Index(path, "')")]
+			return []byte(`{"d":{"MessageGuid":"` + guid + `","CorrelationId":"C` + guid[len(guid)-1:] + `"}}`), nil
+		}
+		return base(ctx, path)
+	}
+	var rows []string
+	for i := range 200 {
+		rows = append(rows, fmt.Sprintf(`{"MessageGuid":"G%03d%d","IntegrationArtifact":{"Id":"CPICTL_Test_Stub"}}`, i, i%5))
+	}
+	logs := `{"d":{"results":[` + strings.Join(rows, ",") + `]}}`
+	list := func() string {
+		out, err := g.After(req("GET", "/api/v1/MessageProcessingLogs?$top=200", ""), 200, nil, []byte(logs))
+		require.NoError(t, err)
+		return string(out)
+	}
+	out := list()
+	assert.NotContains(t, out, "CPICTL_Test_Stub", "other teams' runs stay hidden")
+	first := calls.Load()
+	assert.LessOrEqual(t, first, int64(maxToolingLookups+5), "at most one lookup per message (capped) and one per group")
+	// the rows beyond the cap were hidden in that answer only: the next
+	// request looks them up (and then nothing more)
+	list()
+	second := calls.Load()
+	assert.LessOrEqual(t, second-first, int64(maxToolingLookups))
+	list()
+	assert.Equal(t, second, calls.Load(), "all known now: a request within the cache time asks SAP nothing")
+}
+
+// A test message cannot choose its correlation ID under a scope: it would
+// join another team's test run, whose tooling messages are decided by their
+// correlation group.
+func TestGuardRefusesChosenCorrelation(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd"}]}}]}}`
+	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
+	require.NoError(t, err)
+	send := func(h map[string]string) *httpclnt.GuardRequest {
+		return &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt", Path: "/http/sd", Header: h}
+	}
+	assert.NoError(t, g.Before(send(map[string]string{"Content-Type": "application/xml"})))
+	for _, h := range []string{"SAP_MplCorrelationId", "sap_mplcorrelationid", "SAP_MessageProcessingLogID"} {
+		r := refused(t, g.Before(send(map[string]string{h: "AGrSWKfjlBddQU_blYCHKdnThF-G"})))
+		assert.Contains(t, r.Error(), "correlation group")
 	}
 }

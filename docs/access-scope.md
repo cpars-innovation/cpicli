@@ -142,3 +142,12 @@ Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`, `Guard.Check`) 
   contents, which are only read through their own IDs and need `download`.
 - The error text of a failed XSLT test run is read from its message, which a scope refuses (no tested flow): under
   a scope, such a run reports the failure without the tenant's error text.
+- With `test` (also without `read`), a scope reads the attachments, steps and traces of the test tooling's
+  messages of the flows it tests: that is how a test run checks what its flow sent to the stub.
+- A test message may not set `SAP_MplCorrelationId` or `SAP_MessageProcessingLogID` (the cpictl gateway drops
+  them too): with a chosen correlation ID, it would join another team's test run. A team that may change its own
+  flows (`upload`, `deploy`) could still set one inside a flow it calls; where teams must not see each other's
+  test runs, give `upload` only to people, not to agents, and review flows for that header.
+- A list with many test tooling messages costs SAP lookups (one per message without its correlation ID, one per
+  correlation group, 8 at a time, cached; "no flow of the scope" for 10 seconds). At most 100 of each per answer;
+  rows beyond are hidden in that answer: filter the list by flow.

@@ -46,6 +46,10 @@ const KeyringService = "cpictl"
 
 func keyringUser(key string) string { return "gateway-refresh-token:" + key }
 
+// cleanupKeyring is the keychain a file-only store removes a leftover
+// refresh token from (a test replaces it).
+var cleanupKeyring Keyring = osKeyring{}
+
 // osKeyring is the OS keychain through go-keyring.
 type osKeyring struct{}
 
@@ -172,8 +176,17 @@ func (s *Store) Delete(key string) error {
 	if err != nil {
 		return err
 	}
-	if s.Keyring != nil {
-		if err := s.Keyring.Delete(KeyringService, keyringUser(key)); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+	kr := s.Keyring
+	if kr == nil {
+		// a file-only store (CPICTL_TOKEN_STORE=file) still removes a refresh
+		// token an earlier login put into the keychain: the file says so
+		var ft fileToken
+		if b, err := os.ReadFile(p); err == nil && json.Unmarshal(b, &ft) == nil && ft.RefreshInKeychain {
+			kr = cleanupKeyring
+		}
+	}
+	if kr != nil {
+		if err := kr.Delete(KeyringService, keyringUser(key)); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 			log.Debug().Err(err).Msgf("removing the refresh token of profile %s from the OS keychain", key)
 		}
 	}
