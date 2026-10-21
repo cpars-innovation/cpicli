@@ -25,7 +25,7 @@ cpictl credentials list --kind oauth2
 ERP_PASSWORD=... cpictl credentials set-user --name ERP_User --user svc_erp --password-env ERP_PASSWORD
 cpictl credentials set-oauth2 --name Graph --token-url https://login.example.com/oauth/token \
   --client-id my-app --secret-file ./graph.secret [--client-auth header] [--scope ...]
-printf '%s' "$API_KEY" | cpictl credentials set-secure-param --name ApiKey --value-stdin   # Neo only
+printf '%s' "$API_KEY" | cpictl credentials set-secure-param --name ApiKey --value-stdin
 
 cpictl credentials delete --kind user --name ERP_User --confirm
 ```
@@ -62,8 +62,12 @@ All secrets are resolved before anything is written; a missing variable or file 
 run with exit code 2 and no changes. Inline values (`password: plain`) and unknown keys are
 rejected. If some credentials fail to deploy the exit code is 7 and the result lists each one.
 
-Secure parameters exist only in the Neo environment; on Cloud Foundry tenants `credentials
-list` shows a warning and `set-secure-param` fails.
+Secure parameters work on Neo and Cloud Foundry (verified on a Cloud Foundry tenant).
+
+`credentials apply` also imports **key pairs** (PKCS#12), **SSH keys** and **PGP secret keys**, and leaves those
+the tenant already has alone: it is the one command to sync security material from a vault. The full format, what
+can and cannot come from a vault, and pipeline examples for Azure Key Vault, AWS Secrets Manager, HashiCorp Vault
+and Google Secret Manager are in [vault.md](vault.md).
 
 ## Keystore
 

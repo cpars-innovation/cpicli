@@ -271,7 +271,12 @@ type KeystoreEntry struct {
 	Owner string `json:",omitempty"`
 	// Chain is the certificate chain of a key pair (DER, own certificate first).
 	Chain [][]byte `json:",omitempty"`
-	key   *ecdsa.PrivateKey
+	// Fingerprint is FingerprintSha256 of an imported key pair (the mock
+	// hashes the PKCS#12 it was given); SSHPublic the authorized_keys line
+	// of an imported SSH key.
+	Fingerprint string `json:",omitempty"`
+	SSHPublic   string `json:",omitempty"`
+	key         *ecdsa.PrivateKey
 }
 
 // Tenant is a mock CPI tenant.
@@ -283,6 +288,8 @@ type Tenant struct {
 	// SecureParametersUnavailable answers 404 for SecureParameters (Cloud Foundry).
 	SecureParametersUnavailable bool
 	Keystore                    []KeystoreEntry
+	// KeyPairImports counts key pairs written through KeyPairResources.
+	KeyPairImports int
 	// SecurityMaterial: key pairs history, PGP, access policies, audit log,
 	// alternative partners and authorized users.
 	SecurityMaterial

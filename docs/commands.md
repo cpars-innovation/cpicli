@@ -33,12 +33,12 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`configure`](#configure) | Set artifact parameters from YAML files and optionally deploy |
 | [`configure pull`](#configure-pull) | Write current tenant parameter values into configure YAML files |
 | [`connections`](#connections) | List the integration connections the tenant computes: sender host -> flows -> receiver host |
-| [`credentials`](#credentials) | List and deploy user credentials, OAuth2 client credentials and secure parameters |
-| [`credentials apply`](#credentials-apply) | Create or update all credentials of a YAML file |
+| [`credentials`](#credentials) | List and deploy credentials, secure parameters and key material (from a vault: credentials apply) |
+| [`credentials apply`](#credentials-apply) | Create or update all credentials and key material of a YAML file (vault sync) |
 | [`credentials delete`](#credentials-delete) | Delete a credential (requires --confirm) |
 | [`credentials list`](#credentials-list) | List credentials (names and metadata, never secrets) |
 | [`credentials set-oauth2`](#credentials-set-oauth2) | Create or update an OAuth2 client credential |
-| [`credentials set-secure-param`](#credentials-set-secure-param) | Create or update a secure parameter (Neo environment) |
+| [`credentials set-secure-param`](#credentials-set-secure-param) | Create or update a secure parameter |
 | [`credentials set-user`](#credentials-set-user) | Create or update a user credential |
 | [`datastore`](#datastore) | List data stores and their entries, read or delete an entry |
 | [`datastore delete`](#datastore-delete) | Delete a data store entry (requires --confirm) |
@@ -907,7 +907,7 @@ from the deployed flows instead of answering from its cache.
 
 ## credentials
 
-List and deploy user credentials, OAuth2 client credentials and secure parameters
+List and deploy credentials, secure parameters and key material (from a vault: credentials apply)
 
 ```
 Manage security material referenced by integration flows.
@@ -920,10 +920,12 @@ Listing never returns secrets.
 
 ## credentials apply
 
-Create or update all credentials of a YAML file
+Create or update all credentials and key material of a YAML file (vault sync)
 
 ```
-Deploy every credential listed in a YAML file. Secrets are references only:
+Deploy every credential and key listed in a YAML file: the one command to
+sync security material from a vault (a pipeline puts the vault's values into
+environment variables; see docs/vault.md). Secrets are references only:
 
   userCredentials:
     - name: ERP_User
@@ -937,9 +939,28 @@ Deploy every credential listed in a YAML file. Secrets are references only:
   secureParameters:
     - name: ApiKey
       value: {env: API_KEY}
+  keyPairs:                                     # PKCS#12 (.p12/.pfx), file or base64
+    - alias: partner_signing
+      pkcs12: {env: SIGNING_PFX}
+      password: {env: SIGNING_PFX_PASSWORD}     # leave out for a PFX without one
+  sshKeys:                                      # OpenSSH or PEM private key, or its base64
+    - alias: sftp_partner
+      privateKey: {env: SFTP_KEY}
+      passphrase: {env: SFTP_KEY_PASSPHRASE}    # only for an encrypted key
+  pgpSecretKeys:                                # armored, binary or base64; added to the keyring
+    - name: payroll
+      keys: {env: PAYROLL_PGP_KEY}
+      passphrase: {env: PAYROLL_PGP_PASSPHRASE}
 
-All secrets are resolved before anything is written. Inline secrets and
-unknown keys are rejected.
+All secrets are resolved before anything is written; a missing one stops the
+run with no change. Inline secrets and unknown keys are rejected. Secrets are
+never logged, not even with --debug, and never in the result.
+
+Key pairs, SSH keys and PGP keys the tenant already has are left as they are
+(same certificate fingerprint, same public key, same key ID), so a nightly
+sync does not rewrite the keystore. A changed key pair or SSH key replaces the
+old one. Credentials are written each time (a password cannot be read back to
+compare). --dry-run resolves everything and talks to no tenant.
 ```
 
 **Usage:** `cpictl credentials apply [flags]`
@@ -1009,7 +1030,7 @@ Create or update an OAuth2 client credential
 
 ## credentials set-secure-param
 
-Create or update a secure parameter (Neo environment)
+Create or update a secure parameter
 
 **Usage:** `cpictl credentials set-secure-param [flags]`
 

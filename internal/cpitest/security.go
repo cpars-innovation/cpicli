@@ -4,11 +4,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -17,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // SecurityMaterial is the security content of the mock tenant beyond
@@ -132,6 +136,9 @@ func keystoreRow(e KeystoreEntry) map[string]any {
 	if cert, err := x509.ParseCertificate(e.DER); err == nil {
 		row["SubjectDN"], row["IssuerDN"] = cert.Subject.String(), cert.Issuer.String()
 	}
+	if e.Fingerprint != "" {
+		row["FingerprintSha256"] = e.Fingerprint
+	}
 	return row
 }
 
@@ -195,6 +202,10 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 			_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString(csr)))
 		case get && mm[2] == "/Sshkey/$value":
 			w.Header().Set("Content-Type", "application/octet-stream")
+			if e.SSHPublic != "" {
+				_, _ = w.Write([]byte(e.SSHPublic + " mock\n"))
+				return true
+			}
 			_, _ = w.Write([]byte("ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ mock-" + e.Alias + "\n"))
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -250,6 +261,23 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 		}
 		if path == "/api/v1/SSHKeyGenerationRequests" {
 			e.Type = "SSHKey"
+			if f, _ := body["SSHFile"].(string); f != "" {
+				// like the tenant: the key file only as base64
+				key, err := base64.StdEncoding.DecodeString(f)
+				var signer ssh.Signer
+				if err == nil {
+					if pw, _ := body["Password"].(string); pw != "" {
+						signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(pw))
+					} else {
+						signer, err = ssh.ParsePrivateKey(key)
+					}
+				}
+				if err != nil {
+					odataError(w, http.StatusInternalServerError, "Internal Server Error", "SSHKeyConversionException: cannot load key: ")
+					return true
+				}
+				e.SSHPublic = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
+			}
 			rec := map[string]any{}
 			for k, v := range body {
 				if k == "Password" || k == "SSHFile" {
@@ -265,6 +293,68 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 			m.Keystore = append(m.Keystore, e)
 		}
 		w.WriteHeader(http.StatusCreated)
+
+	case post && path == "/api/v1/KeyPairResources":
+		// like the tenant: without fingerprintVerified a preview (409 with
+		// the certificate), nothing written
+		var body struct{ Hexalias, Alias, Resource, Password string }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Alias == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return true
+		}
+		p12, err := base64.StdEncoding.DecodeString(body.Resource)
+		if err != nil || body.Password == "" || body.Password == "wrong" {
+			odataError(w, http.StatusBadRequest, "Bad Request", "Password is invalid: PKCS12 verification error, incorrect password")
+			return true
+		}
+		i := m.keystoreIndex(body.Alias)
+		switch {
+		case i >= 0 && q.Get("update") != "true":
+			odataError(w, http.StatusBadRequest, "Bad Request", "Entry with alias \""+body.Alias+"\" already exists in keystore \"system\"")
+			return true
+		case i < 0 && q.Get("update") == "true":
+			odataError(w, http.StatusBadRequest, "Bad Request", "Entry with alias \""+body.Alias+"\" does not exist in keystore \"system\"")
+			return true
+		}
+		sum := sha256.Sum256(p12)
+		var parts []string
+		for _, b := range sum {
+			parts = append(parts, fmt.Sprintf("%02X", b))
+		}
+		fp := strings.Join(parts, ":")
+		if q.Get("fingerprintVerified") != "true" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{"d": map[string]any{"Alias": body.Alias, "Type": "Certificate", "Status": "notImported:",
+				"SubjectDN": "CN=" + body.Alias, "FingerprintSha256": fp}})
+			return true
+		}
+		e := KeystoreEntry{Alias: body.Alias, Type: "KeyPair", NotAfter: time.Now().AddDate(1, 0, 0), Fingerprint: fp}
+		if i >= 0 {
+			m.Keystore[i] = e
+		} else {
+			m.Keystore = append(m.Keystore, e)
+		}
+		m.KeyPairImports++
+		w.WriteHeader(http.StatusNoContent)
+
+	case put && path == "/api/v1/PgpKeyringSecretResources('secring')/$value":
+		// like the tenant: keys are added, a key ID already there is left
+		pass := r.Header.Get("Passphrase")
+		data, _ := io.ReadAll(r.Body)
+		if pass == "" {
+			odataError(w, http.StatusBadRequest, "Bad Request", "Passphrase Request Header missing or empty.")
+			return true
+		}
+		sum := sha256.Sum256(data)
+		id := strings.ToUpper(hex.EncodeToString(sum[:8]))
+		status, details := "added", ""
+		if slices.ContainsFunc(m.PGPKeys, func(k PGPKey) bool { return k.Keyring == "secring" && k.KeyID == id }) {
+			status, details = "not imported", "An entry with the same keyId already exists"
+		} else {
+			m.PGPKeys = append(m.PGPKeys, PGPKey{Keyring: "secring", ID: id, KeyID: id, ValidUntil: time.Now().AddDate(1, 0, 0)})
+		}
+		writeJSON(w, map[string]any{"d": map[string]any{"results": []map[string]any{{"KeyId": id, "Status": status, "StatusDetails": details}}}})
 
 	case get && path == "/api/v1/HistoryKeystoreEntries":
 		if len(q) > 0 {

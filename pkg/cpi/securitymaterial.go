@@ -84,7 +84,9 @@ type SSHKeyRequest struct {
 func (s *Security) GenerateSSHKey(r SSHKeyRequest, update bool) error {
 	b := r.body()
 	if r.SSHFile != "" {
-		b["SSHFile"] = r.SSHFile
+		// the tenant reads the key file only as base64 (raw text: "cannot
+		// load key"; verified on a tenant)
+		b["SSHFile"] = base64.StdEncoding.EncodeToString([]byte(r.SSHFile))
 	}
 	if r.Password != "" {
 		b["Password"] = r.Password
@@ -550,6 +552,105 @@ func (s *Security) AuditLogs(since time.Time, top int) ([]AuditLog, error) {
 		ts, _ := ParseODataTime(r.Timestamp)
 		out = append(out, AuditLog{ChangeID: r.ChangeId, Action: r.Action, Timestamp: ts, UserName: r.UserName, UserType: r.UserType,
 			ObjectName: r.ObjName, ObjectType: r.ObjType, Source: r.Source, NodeType: r.NodeType})
+	}
+	return out, nil
+}
+
+// KeyPairPreview is what the tenant reads from a PKCS#12 key pair before it
+// imports it: its certificate.
+type KeyPairPreview struct {
+	SubjectDN         string
+	FingerprintSha256 string
+	ValidNotAfter     time.Time
+}
+
+func keyPairPayload(alias string, pkcs12 []byte, password string) ([]byte, error) {
+	return json.Marshal(map[string]any{"Hexalias": HexAlias(alias), "Alias": alias,
+		"Resource": base64.StdEncoding.EncodeToString(pkcs12), "Password": password})
+}
+
+// PreviewKeyPair has the tenant read a PKCS#12 key pair without importing
+// it: without fingerprintVerified the tenant answers 409 with the parsed
+// certificate (verified on a tenant), or 400 for a wrong password or an
+// unreadable file. Nothing is written. exists must say whether the alias is
+// in the keystore (the tenant checks it first).
+func (s *Security) PreviewKeyPair(alias string, pkcs12 []byte, password string, exists bool) (*KeyPairPreview, error) {
+	payload, err := keyPairPayload(alias, pkcs12, password)
+	if err != nil {
+		return nil, err
+	}
+	// sent without request-body logging: it holds the private key and password
+	resp, err := s.exe.Exec(http.MethodPost, fmt.Sprintf("/api/v1/KeyPairResources?returnKeystoreEntries=false&update=%t", exists),
+		bytes.NewReader(payload), map[string]string{"Accept": "application/json", "Content-Type": "application/json"})
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusConflict {
+		_, err := s.exe.LogError(resp, "Read key pair")
+		return nil, err
+	}
+	body, err := s.exe.ReadRespBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	var v struct {
+		D struct{ SubjectDN, FingerprintSha256, ValidNotAfter string } `json:"d"`
+	}
+	if err := json.Unmarshal(body, &v); err != nil || v.D.FingerprintSha256 == "" {
+		return nil, fmt.Errorf("the tenant's answer to the key pair is not readable")
+	}
+	p := &KeyPairPreview{SubjectDN: v.D.SubjectDN, FingerprintSha256: v.D.FingerprintSha256}
+	p.ValidNotAfter, _ = ParseODataTime(v.D.ValidNotAfter)
+	return p, nil
+}
+
+// ImportKeyPair imports a PKCS#12 key pair (private key and certificate
+// chain) into the system keystore; update replaces an existing entry.
+func (s *Security) ImportKeyPair(alias string, pkcs12 []byte, password string, update bool) error {
+	payload, err := keyPairPayload(alias, pkcs12, password)
+	if err != nil {
+		return err
+	}
+	// sent without request-body logging: it holds the private key and password
+	return s.write(http.MethodPost, fmt.Sprintf("/api/v1/KeyPairResources?fingerprintVerified=true&returnKeystoreEntries=false&update=%t", update),
+		payload, "application/json", "Import key pair")
+}
+
+// PgpKeyStatus is the tenant's answer for one key of an uploaded keyring.
+type PgpKeyStatus struct {
+	KeyID   string `json:"keyId"`
+	UserID  string `json:"userId,omitempty"`
+	Status  string `json:"status"` // added, or "not imported" with Details
+	Details string `json:"details,omitempty"`
+}
+
+// AddPgpSecretKeys uploads OpenPGP secret keys (binary or ASCII-armored) with
+// their passphrase. The tenant adds them to its secret keyring and keeps the
+// keys already there (verified on a tenant).
+func (s *Security) AddPgpSecretKeys(data []byte, passphrase string) ([]PgpKeyStatus, error) {
+	// neither the keys nor the passphrase header are logged
+	resp, err := s.exe.Exec(http.MethodPut, "/api/v1/PgpKeyringSecretResources('secring')/$value", bytes.NewReader(data),
+		map[string]string{"Accept": "application/json", "Content-Type": "application/octet-stream", "Passphrase": passphrase})
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		_, err := s.exe.LogError(resp, "Upload PGP secret keys")
+		return nil, err
+	}
+	body, err := s.exe.ReadRespBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	var v struct {
+		D struct {
+			Results []struct{ KeyId, PrimaryUserId, Status, StatusDetails string } `json:"results"`
+		} `json:"d"`
+	}
+	_ = json.Unmarshal(body, &v)
+	out := make([]PgpKeyStatus, 0, len(v.D.Results))
+	for _, r := range v.D.Results {
+		out = append(out, PgpKeyStatus{KeyID: r.KeyId, UserID: r.PrimaryUserId, Status: r.Status, Details: r.StatusDetails})
 	}
 	return out, nil
 }

@@ -124,7 +124,9 @@ the plan does not cover.
   docs/components.md) for the exact list.
 - Externalise everything that differs between environments (hosts, paths, credential names,
   directories) as `{{Parameter}}`, with keys named as in the conventions.
-- Do not put secrets, tokens or productive data into files, parameters or test messages.
+- Do not put secrets, tokens or productive data into files, parameters or test messages. A flow
+  that needs a new credential or key: add its entry to `credentials.yml` with `{env: CPI_SECRET_...}`
+  and ask the user to put the value into the vault (docs/vault.md); never handle the value.
 - Security material: read it from the secure store or keystore by name, and keep it only in the
   headers and properties declared in `.cpi/lint.yaml` `security` (default `Authorization`,
   `Proxy-Authorization`, `X-API-Key`, `APIKey`, properties `secret*`; conventions.md names the

@@ -108,7 +108,8 @@ func TestGenerateKeyPairCSRAndChain(t *testing.T) {
 func TestGenerateSSHKeyNeverReturnsThePassword(t *testing.T) {
 	t.Setenv("CPICTL_TEST_SECRET", secret)
 	mock := cpitest.NewTenant(t, nil)
-	res, err := GenerateSSHKey(mock.Executer(), cpi.KeyPairRequest{Alias: "sftp", CommonName: "sftp"}, []byte("-----BEGIN OPENSSH PRIVATE KEY-----"),
+	// a real encrypted key: the tenant (and the mock) read it, sent as base64
+	res, err := GenerateSSHKey(mock.Executer(), cpi.KeyPairRequest{Alias: "sftp", CommonName: "sftp"}, sshKeyFile(t, secret),
 		&SecretSource{Env: "CPICTL_TEST_SECRET"}, false, time.Now())
 	require.NoError(t, err)
 	assert.Equal(t, "SSHKey", res.Entry.Type)

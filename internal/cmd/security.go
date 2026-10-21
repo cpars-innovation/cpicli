@@ -37,7 +37,7 @@ func logCredentialResult(r *ops.CredentialResult) {
 func NewCredentialsCommand() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "credentials",
-		Short: "List and deploy user credentials, OAuth2 client credentials and secure parameters",
+		Short: "List and deploy credentials, secure parameters and key material (from a vault: credentials apply)",
 		Long: `Manage security material referenced by integration flows.
 
 Secrets are never accepted as flag values (they would end up in shell history
@@ -131,7 +131,7 @@ Listing never returns secrets.`,
 
 	setParam := &cobra.Command{
 		Use:          "set-secure-param",
-		Short:        "Create or update a secure parameter (Neo environment)",
+		Short:        "Create or update a secure parameter",
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := ops.DeployCredential(tenantExecuter(cmd), ops.SecureParameterSpec{
@@ -147,9 +147,11 @@ Listing never returns secrets.`,
 
 	apply := &cobra.Command{
 		Use:          "apply",
-		Short:        "Create or update all credentials of a YAML file",
+		Short:        "Create or update all credentials and key material of a YAML file (vault sync)",
 		SilenceUsage: true,
-		Long: `Deploy every credential listed in a YAML file. Secrets are references only:
+		Long: `Deploy every credential and key listed in a YAML file: the one command to
+sync security material from a vault (a pipeline puts the vault's values into
+environment variables; see docs/vault.md). Secrets are references only:
 
   userCredentials:
     - name: ERP_User
@@ -163,9 +165,28 @@ Listing never returns secrets.`,
   secureParameters:
     - name: ApiKey
       value: {env: API_KEY}
+  keyPairs:                                     # PKCS#12 (.p12/.pfx), file or base64
+    - alias: partner_signing
+      pkcs12: {env: SIGNING_PFX}
+      password: {env: SIGNING_PFX_PASSWORD}     # leave out for a PFX without one
+  sshKeys:                                      # OpenSSH or PEM private key, or its base64
+    - alias: sftp_partner
+      privateKey: {env: SFTP_KEY}
+      passphrase: {env: SFTP_KEY_PASSPHRASE}    # only for an encrypted key
+  pgpSecretKeys:                                # armored, binary or base64; added to the keyring
+    - name: payroll
+      keys: {env: PAYROLL_PGP_KEY}
+      passphrase: {env: PAYROLL_PGP_PASSPHRASE}
 
-All secrets are resolved before anything is written. Inline secrets and
-unknown keys are rejected.`,
+All secrets are resolved before anything is written; a missing one stops the
+run with no change. Inline secrets and unknown keys are rejected. Secrets are
+never logged, not even with --debug, and never in the result.
+
+Key pairs, SSH keys and PGP keys the tenant already has are left as they are
+(same certificate fingerprint, same public key, same key ID), so a nightly
+sync does not rewrite the keystore. A changed key pair or SSH key replaces the
+old one. Credentials are written each time (a password cannot be read back to
+compare). --dry-run resolves everything and talks to no tenant.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f, err := ops.LoadCredentialsFile(config.GetString(cmd, "file"))
 			if err != nil {

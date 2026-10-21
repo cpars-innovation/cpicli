@@ -494,6 +494,7 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 | [Monitoring and checks](docs/monitoring.md) | Message logs, steps, attachments, payloads, validation, guidelines |
 | [Configure](docs/configure.md) | Parameters from YAML (`configure`, `configure pull`) |
 | [Security material](docs/security.md) | Credentials, `credentials apply`, keystore and certificate expiry |
+| [Security material from a vault](docs/vault.md) | Sync credentials, key pairs, SSH and PGP keys from Azure Key Vault, AWS, HashiCorp Vault or Google in a pipeline, without logging a value |
 | [Partner Directory](docs/partner-directory.md) | `pd snapshot`, `pd deploy`, full sync |
 | [CI/CD](docs/ci.md) | GitHub Actions, Azure Pipelines, the snapshot -> update -> configure -> deploy-once pipeline, job summary, exit codes |
 | [Examples](docs/examples) | Ready-to-copy configuration files |

@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -87,8 +88,10 @@ func TestRestoreIntoEmptyTenant(t *testing.T) {
 	assert.Equal(t, map[string]string{"A": RestoreCreate, "Lib": RestoreCreate}, steps(plan, RestoreArtifacts))
 	assert.Equal(t, map[string]string{"A": RestoreUpdate}, steps(plan, RestoreParameters))
 	assert.Equal(t, map[string]string{"ACME/Region": RestoreCreate}, steps(plan, RestorePartnerDirectory))
-	assert.Equal(t, map[string]string{"ERP_User": RestoreCreate, "Webhook_Key": RestoreManual}, steps(plan, RestoreCredentials))
-	assert.Equal(t, map[string]string{"partner_ca": RestoreCreate, "signing": RestoreManual}, steps(plan, RestoreCertificates))
+	// the key pair is in credentials.yml now: without its variables a manual
+	// step that names them, under credentials (not repeated under certificates)
+	assert.Equal(t, map[string]string{"ERP_User": RestoreCreate, "Webhook_Key": RestoreManual, "signing": RestoreManual}, steps(plan, RestoreCredentials))
+	assert.Equal(t, map[string]string{"partner_ca": RestoreCreate}, steps(plan, RestoreCertificates))
 	assert.Equal(t, map[string]string{"SD_Restricted": RestoreCreate}, steps(plan, RestoreAccessPolicies))
 	assert.Equal(t, map[string]string{"Invoice": RestoreCreate}, steps(plan, RestoreNumberRanges))
 	assert.Equal(t, map[string]string{"A": RestoreDeployIt}, steps(plan, RestoreDeploy))
@@ -110,7 +113,7 @@ func TestRestoreIntoEmptyTenant(t *testing.T) {
 	md := string(RestorePlanMarkdown(plan))
 	assert.Contains(t, md, "# Restore plan (dry run: nothing was changed)")
 	assert.Contains(t, md, "## Manual steps")
-	assert.Contains(t, md, "- [ ] **certificates** `signing`")
+	assert.Contains(t, md, "- [ ] **credentials** `signing`: key pair: set CPI_SECRET_KEYPAIR_SIGNING, CPI_SECRET_KEYPAIR_SIGNING_PASSWORD from your vault")
 
 	opts.DryRun = false
 	done, err := RestoreBackup(context.Background(), dst.Executer(), archive, opts)
@@ -183,4 +186,28 @@ func TestRestoreRefusesDamagedArchive(t *testing.T) {
 
 	_, err = RestoreBackup(context.Background(), m.Executer(), archive, RestoreOptions{DryRun: true, Areas: []string{"everything"}})
 	assert.ErrorContains(t, err, "unknown restore area")
+}
+
+// The backup lists key pairs in credentials.yml; with their variables set
+// from a vault, the restore imports them, and a second restore leaves them.
+func TestRestoreKeyPairFromVault(t *testing.T) {
+	src := restoreSource(t)
+	archive := filepath.Join(t.TempDir(), "b.tar.gz")
+	_, err := CreateBackup(context.Background(), src.Executer(), "source", BackupOptions{Output: archive})
+	require.NoError(t, err)
+
+	dst := cpitest.NewTenant(t, map[string]*cpitest.Artifact{})
+	p12 := append([]byte{0x30, 0x82, 0x01, 0x02}, []byte("signing-key")...)
+	env := map[string]string{"CPI_SECRET_KEYPAIR_SIGNING": base64.StdEncoding.EncodeToString(p12), "CPI_SECRET_KEYPAIR_SIGNING_PASSWORD": "pfx-pass"}
+	opts := RestoreOptions{Areas: []string{RestoreCredentials, RestoreCertificates}, Getenv: func(k string) string { return env[k] }}
+	res, err := RestoreBackup(context.Background(), dst.Executer(), archive, opts)
+	require.NoError(t, err)
+	assert.Equal(t, RestoreCreate, steps(res, RestoreCredentials)["signing"])
+	assert.NotContains(t, steps(res, RestoreCertificates), "signing")
+	assert.Equal(t, 1, dst.KeyPairImports)
+
+	again, err := RestoreBackup(context.Background(), dst.Executer(), archive, opts)
+	require.NoError(t, err)
+	assert.Equal(t, RestoreUnchanged, steps(again, RestoreCredentials)["signing"])
+	assert.Equal(t, 1, dst.KeyPairImports)
 }

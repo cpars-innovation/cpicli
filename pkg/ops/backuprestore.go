@@ -119,6 +119,9 @@ type restorer struct {
 	// created are artifacts this restore creates (a dry run cannot read
 	// their parameters yet)
 	created map[string]bool
+	// keyMaterial are keystore aliases credentials.yml lists (key pairs, SSH
+	// keys): the credentials step reports them, the certificates step not
+	keyMaterial map[string]bool
 	// skippedPackages are packages whose artifacts the restore leaves out
 	// (Discover content not on the tenant)
 	skippedPackages map[string]bool
@@ -569,6 +572,99 @@ func (r *restorer) credentials(ctx context.Context) error {
 		}
 		r.step(RestoreCredentials, c.name, action, c.what+", secret from "+c.env, derr)
 	}
+	return r.keyMaterialFromFile(f)
+}
+
+// keyMaterialFromFile restores the key pairs, SSH keys and PGP secret keys
+// of credentials.yml whose variables are set; the others are manual steps
+// that name the variables.
+func (r *restorer) keyMaterialFromFile(f *CredentialsFile) error {
+	if len(f.KeyPairs)+len(f.SSHKeys)+len(f.PGPSecretKeys) == 0 {
+		return nil
+	}
+	s := cpi.NewSecurity(r.exe)
+	have := map[string]bool{}
+	if entries, err := s.KeystoreEntries("system"); err == nil {
+		for _, e := range entries {
+			have[e.Alias] = true
+		}
+	}
+	if keys, err := s.PgpKeys("secring"); err == nil {
+		for _, k := range keys {
+			have["pgp/"+k.KeyID] = true
+		}
+	}
+	if r.keyMaterial == nil {
+		r.keyMaterial = map[string]bool{}
+	}
+	type item struct {
+		spec       keyMaterialSpec
+		name, what string
+		exists     bool
+		sources    []*SecretSource // required, in the order named
+	}
+	var items []item
+	for _, k := range f.KeyPairs {
+		r.keyMaterial[k.Alias] = true
+		src := []*SecretSource{&k.PKCS12}
+		if k.Password != nil {
+			src = append(src, k.Password)
+		}
+		items = append(items, item{&k, k.Alias, "key pair", have[k.Alias], src})
+	}
+	for _, k := range f.SSHKeys {
+		r.keyMaterial[k.Alias] = true
+		src := []*SecretSource{&k.PrivateKey}
+		if k.Passphrase != nil {
+			src = append(src, k.Passphrase)
+		}
+		items = append(items, item{&k, k.Alias, "SSH key", have[k.Alias], src})
+	}
+	for _, k := range f.PGPSecretKeys {
+		items = append(items, item{&k, k.Name, "PGP secret key", have["pgp/"+k.Name], []*SecretSource{&k.Keys, &k.Passphrase}})
+	}
+	for _, it := range items {
+		var missing []string
+		for _, src := range it.sources {
+			if src.Env == "" {
+				continue // a file source: read as it is
+			}
+			v := r.opts.Getenv(src.Env)
+			if v == "" {
+				missing = append(missing, src.Env)
+				continue
+			}
+			// the restore's Getenv may not be the process environment
+			*src = SecretSource{Stdin: strings.NewReader(v)}
+		}
+		if len(missing) > 0 {
+			if it.exists {
+				r.step(RestoreCredentials, it.name, RestoreUnchanged, it.what+": kept (set "+strings.Join(missing, ", ")+" to replace it)", nil)
+			} else {
+				r.step(RestoreCredentials, it.name, RestoreManual, it.what+": set "+strings.Join(missing, ", ")+" from your vault and run the restore again (or cpictl credentials apply)", nil)
+			}
+			continue
+		}
+		m, err := it.spec.resolve()
+		if err != nil {
+			r.step(RestoreCredentials, it.name, RestoreFailed, it.what, err)
+			continue
+		}
+		action := map[bool]string{true: RestoreUpdate, false: RestoreCreate}[it.exists]
+		detail := it.what + ", from your vault"
+		if r.opts.DryRun {
+			if it.exists {
+				detail += " (left as it is when the same)"
+			}
+			r.step(RestoreCredentials, it.name, action, detail, nil)
+			continue
+		}
+		res, err := m.deploy(r.exe, false)
+		if err == nil && res.Action == "UNCHANGED" {
+			action = RestoreUnchanged
+		}
+		r.step(RestoreCredentials, it.name, action, detail, err)
+	}
 	return nil
 }
 
@@ -610,6 +706,8 @@ func (r *restorer) certificates(ctx context.Context) error {
 		switch {
 		case it.Restore == "sap":
 			continue
+		case it.Restore != "certificate" && r.keyMaterial[it.Alias]:
+			continue // restored (or listed) by the credentials step from credentials.yml
 		case have[it.Alias]:
 			r.step(RestoreCertificates, it.Alias, RestoreUnchanged, "exists", nil)
 		case it.Restore == "certificate" && it.File != "":

@@ -110,8 +110,10 @@ list_keystore, list_keystore_history, get_certificate_chain, get_ssh_public_key,
 list_access_policies, list_audit_logs (who changed what; status missing_role = no role, do not
 retry). Certificates: generate_key_pair (the tenant creates the key) -> get_csr -> the user has
 it signed -> upload_certificate_chain. create_access_policy / add_artifact_reference restrict
-artifacts to a role. Secrets and private keys never pass through this server (credentials, SSH
-key import and PGP keyrings: ask the user to run cpictl). The delete tools (delete_keystore_entry,
+artifacts to a role. Secrets and private keys never pass through this server: when a flow needs a
+new credential, key pair, SSH key or PGP key, add its entry (name, metadata, {env: CPI_SECRET_...})
+to the project's credentials.yml and ask the user to put the value into the vault; the vault
+pipeline writes it with cpictl credentials apply (docs/vault.md). The delete tools (delete_keystore_entry,
 delete_access_policy, delete_artifact_reference, delete_alternative_partner,
 delete_authorized_user) need confirm and are offered only when --opt-in or --tools names them.`},
 	{[]string{"security", "partner-directory"}, `Audit: scan_secrets finds passwords, tokens and keys in the Partner Directory and in flow

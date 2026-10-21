@@ -5,6 +5,52 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Security material from a vault: one command for every type** ([vault.md](docs/vault.md)).
+  `cpictl credentials apply` now also imports **key pairs** (PKCS#12 / PFX), **SSH keys** (OpenSSH or PEM) and
+  **PGP secret keys**, next to user credentials, OAuth2 client credentials and secure parameters. A pipeline
+  reads the vault, exports the values, and runs the command; cpictl itself talks to no vault, so any vault works.
+  - Values may be base64 (vault-friendly, maskable in CI logs) or files. A PFX without a password (as Azure Key
+    Vault exports a certificate) works without `password`.
+  - Key pairs, SSH keys and PGP keys the tenant already has are left alone (same certificate fingerprint,
+    same public key, same key ID), so a nightly sync does not rewrite the keystore; a renewed key pair or a new
+    SSH key replaces the old one. Credentials are written each time.
+  - Never logged, not even with `--debug`, never in results. All secrets are resolved before anything is
+    written; `--dry-run` talks to no tenant. All of it was run against a real Cloud Foundry tenant, including
+    repeat runs, a renewed key pair and a scan of the `--debug` output for every secret.
+  - `docs/vault.md`: what can and cannot come from a vault, the pipeline rules, and examples for Azure Key Vault
+    (GitHub Actions, Azure DevOps), AWS Secrets Manager, HashiCorp Vault (GitLab) and Google Secret Manager.
+  - `backup create` lists key pairs and PGP secret keys in `credentials.yml` too
+    (`CPI_SECRET_KEYPAIR_<ALIAS>` + `_PASSWORD`, `CPI_SECRET_PGP_<KEYID>` + `_PASSPHRASE`), and `backup restore`
+    imports them when the variables are set; otherwise a manual step names the variables.
+- **Fixed: `keystore generate-ssh-key --ssh-file`** sent the key as text; the tenant reads it only as base64
+  ("cannot load key"). Importing an SSH key works now.
+- **Fixed: secure parameters are not Neo-only.** They work on Cloud Foundry too; the docs and help said
+  otherwise.
+- **Go:** `ops.KeyPairSpec`, `ops.SSHKeySpec`, `ops.PGPSecretKeySpec` in `ops.CredentialsFile`;
+  `cpi.Security.ImportKeyPair`, `PreviewKeyPair`, `AddPgpSecretKeys`; `cpi.KeystoreEntry.FingerprintSha256`.
+
+**What to do with this release:**
+- **Pipelines / platform team:**
+  - Put the vault sync from `docs/vault.md` into the pipeline of each tier.
+  - Run `credentials apply --dry-run` nightly after `backup create`, so a secret that exists only in SAP shows
+    up early.
+  - Keep key pairs you import (instead of generating them on the tenant) in the vault, so a restore can bring
+    them back.
+- **CPI Studio:**
+  - Nothing breaks: pin v0.32.0.
+  - When Studio creates credentials or keys, call `ops.ApplyCredentials` with
+    `ops.SecretSource{Stdin: strings.NewReader(value)}` per value. Do not log, store or echo the value, and never
+    let an agent see it.
+  - Agents add entries to `credentials.yml` (`{env: CPI_SECRET_...}`) and ask a person to put the value into the
+    vault.
+- **cpictl gateway:**
+  - Nothing to change.
+  - The vault sync is a pipeline job with the tier's SAP key, not a gateway call; users of the gateway need no
+    `credentials:write` / `keystore:write` for it.
+- **Agents (MCP, skills):** the server instructions and the cpi-build skill now say how to request security
+  material: add the entry to `credentials.yml` and ask the user to put the value into the vault. Values never
+  pass through MCP.
+
 ## 0.31.0
 
 - **MCP offers only the tools an access scope can allow** (#40): with `--scope-file` or in gateway mode (your scope

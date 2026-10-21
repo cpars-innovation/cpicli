@@ -264,6 +264,9 @@ type KeystoreEntry struct {
 	ValidNotBefore time.Time `json:"validNotBefore"`
 	ValidNotAfter  time.Time `json:"validNotAfter"`
 	LastModified   time.Time `json:"lastModified"`
+	// FingerprintSha256 is the certificate's SHA-256 fingerprint as the
+	// tenant writes it (AA:BB:...).
+	FingerprintSha256 string `json:"fingerprintSha256,omitempty"`
 }
 
 // KeystoreEntries lists the entries of a keystore ("" = system).
@@ -275,9 +278,9 @@ func (s *Security) KeystoreEntries(keystore string) ([]KeystoreEntry, error) {
 		return nil, fmt.Errorf("invalid keystore %q (valid: %s)", keystore, strings.Join(Keystores, ", "))
 	}
 	var rows []struct {
-		Hexalias, Alias, Type, Owner, KeyType, SubjectDN, IssuerDN, SerialNumber string
-		KeySize                                                                  int
-		ValidNotBefore, ValidNotAfter, LastModifiedTime                          string
+		Hexalias, Alias, Type, Owner, KeyType, SubjectDN, IssuerDN, SerialNumber, FingerprintSha256 string
+		KeySize                                                                                     int
+		ValidNotBefore, ValidNotAfter, LastModifiedTime                                             string
 	}
 	if err := getResults(s.exe, "/api/v1/KeystoreEntries?keystoreName="+url.QueryEscape(keystore), "Get keystore entries", &rows); err != nil {
 		return nil, err
@@ -285,7 +288,7 @@ func (s *Security) KeystoreEntries(keystore string) ([]KeystoreEntry, error) {
 	out := make([]KeystoreEntry, 0, len(rows))
 	for _, r := range rows {
 		e := KeystoreEntry{Alias: r.Alias, HexAlias: r.Hexalias, Type: r.Type, Owner: r.Owner, KeyType: r.KeyType, KeySize: r.KeySize,
-			SubjectDN: r.SubjectDN, IssuerDN: r.IssuerDN, SerialNumber: r.SerialNumber}
+			SubjectDN: r.SubjectDN, IssuerDN: r.IssuerDN, SerialNumber: r.SerialNumber, FingerprintSha256: r.FingerprintSha256}
 		e.ValidNotBefore, _ = ParseODataTime(r.ValidNotBefore)
 		e.ValidNotAfter, _ = ParseODataTime(r.ValidNotAfter)
 		e.LastModified, _ = ParseODataTime(r.LastModifiedTime)

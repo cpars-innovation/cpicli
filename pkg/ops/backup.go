@@ -538,7 +538,28 @@ func (b *backupBuilder) security() {
 			file.SecureParameters = append(file.SecureParameters, SecureParameterSpec{Name: c.Name, Description: c.Description, Value: SecretSource{Env: env}})
 		}
 	}
-	if len(b.idx.Credentials) > 0 {
+	// key pairs and PGP secret keys: their private keys never leave the
+	// tenant either. Listed with the variables a restore (or a vault sync)
+	// reads them from: the PKCS#12 of a key pair as base64 and its
+	// password, a PGP secret key (armored or base64) and its passphrase.
+	// An SSH key is a key pair in the keystore too: move it to sshKeys
+	// (privateKey, passphrase) if it is one.
+	if entries, err := s.KeystoreEntries("system"); err == nil {
+		for _, e := range entries {
+			if strings.EqualFold(e.Owner, "SAP") || strings.HasPrefix(e.Alias, "sap_") || !strings.Contains(strings.ToLower(strings.ReplaceAll(e.Type, " ", "")), "keypair") {
+				continue
+			}
+			env := secretEnv("keypair", e.Alias)
+			file.KeyPairs = append(file.KeyPairs, KeyPairSpec{Alias: e.Alias, PKCS12: SecretSource{Env: env}, Password: &SecretSource{Env: env + "_PASSWORD"}})
+		}
+	}
+	if keys, err := s.PgpKeys("secring"); err == nil {
+		for _, k := range keys {
+			env := secretEnv("pgp", k.KeyID)
+			file.PGPSecretKeys = append(file.PGPSecretKeys, PGPSecretKeySpec{Name: k.KeyID, Keys: SecretSource{Env: env}, Passphrase: SecretSource{Env: env + "_PASSPHRASE"}})
+		}
+	}
+	if len(b.idx.Credentials) > 0 || len(file.KeyPairs) > 0 || len(file.PGPSecretKeys) > 0 {
 		data, err := yaml.Marshal(file)
 		if err == nil {
 			header := "# Credentials of tenant " + b.man.Tenant + " (" + b.man.CreatedAt.Format(time.RFC3339) + ").\n" +

@@ -93,7 +93,8 @@ type OAuth2CredentialSpec struct {
 	Audience             string       `yaml:"audience,omitempty"`
 }
 
-// SecureParameterSpec describes a secure parameter to deploy (Neo only).
+// SecureParameterSpec describes a secure parameter to deploy (Neo and Cloud
+// Foundry; verified on a Cloud Foundry tenant).
 type SecureParameterSpec struct {
 	Name        string       `yaml:"name"`
 	Description string       `yaml:"description,omitempty"`
@@ -223,9 +224,12 @@ func DeleteCredential(exe *httpclnt.HTTPExecuter, kind, name string) (*Credentia
 // CredentialsFile is the format of `credentials apply`. Secrets are given as
 // sources only, e.g. `password: {env: ERP_PASSWORD}`.
 type CredentialsFile struct {
-	UserCredentials   []UserCredentialSpec   `yaml:"userCredentials"`
-	OAuth2Credentials []OAuth2CredentialSpec `yaml:"oauth2Credentials"`
-	SecureParameters  []SecureParameterSpec  `yaml:"secureParameters"`
+	UserCredentials   []UserCredentialSpec   `yaml:"userCredentials,omitempty"`
+	OAuth2Credentials []OAuth2CredentialSpec `yaml:"oauth2Credentials,omitempty"`
+	SecureParameters  []SecureParameterSpec  `yaml:"secureParameters,omitempty"`
+	KeyPairs          []KeyPairSpec          `yaml:"keyPairs,omitempty"`
+	SSHKeys           []SSHKeySpec           `yaml:"sshKeys,omitempty"`
+	PGPSecretKeys     []PGPSecretKeySpec     `yaml:"pgpSecretKeys,omitempty"`
 }
 
 // LoadCredentialsFile parses a credentials file strictly (unknown keys, e.g.
@@ -257,6 +261,22 @@ func LoadCredentialsFile(path string) (*CredentialsFile, error) {
 	for i := range f.SecureParameters {
 		fix(&f.SecureParameters[i].Value)
 	}
+	for i := range f.KeyPairs {
+		fix(&f.KeyPairs[i].PKCS12)
+		if f.KeyPairs[i].Password != nil {
+			fix(f.KeyPairs[i].Password)
+		}
+	}
+	for i := range f.SSHKeys {
+		fix(&f.SSHKeys[i].PrivateKey)
+		if f.SSHKeys[i].Passphrase != nil {
+			fix(f.SSHKeys[i].Passphrase)
+		}
+	}
+	for i := range f.PGPSecretKeys {
+		fix(&f.PGPSecretKeys[i].Keys)
+		fix(&f.PGPSecretKeys[i].Passphrase)
+	}
 	return &f, nil
 }
 
@@ -279,26 +299,53 @@ func ApplyCredentials(exe *httpclnt.HTTPExecuter, f *CredentialsFile, dryRun boo
 	for _, s := range f.SecureParameters {
 		specs = append(specs, s)
 	}
+	for _, s := range f.KeyPairs {
+		specs = append(specs, s)
+	}
+	for _, s := range f.SSHKeys {
+		specs = append(specs, s)
+	}
+	for _, s := range f.PGPSecretKeys {
+		specs = append(specs, s)
+	}
 	if len(specs) == 0 {
 		return nil, output.Usagef("the credentials file contains no credentials")
 	}
+	// validate and resolve all secrets before writing anything
 	seen := map[string]bool{}
-	for _, spec := range specs {
-		kind := specKind(spec)
-		name, _, err := credentialBody(kind, spec) // validate and resolve all secrets before writing anything
-		if err != nil {
-			return nil, err
+	resolved := make([]any, len(specs))
+	for i, spec := range specs {
+		var kind, name string
+		if km, ok := spec.(keyMaterialSpec); ok {
+			r, err := km.resolve()
+			if err != nil {
+				return nil, err
+			}
+			resolved[i], kind, name = r, r.kind, r.name
+		} else {
+			kind = specKind(spec)
+			n, _, err := credentialBody(kind, spec)
+			if err != nil {
+				return nil, err
+			}
+			resolved[i], name = spec, n
 		}
 		if seen[kind+"/"+name] {
-			return nil, output.Usagef("%s credential %s is listed twice", kind, name)
+			return nil, output.Usagef("%s %s is listed twice", kind, name)
 		}
 		seen[kind+"/"+name] = true
 	}
 
 	res := &CredentialsApplyResult{DryRun: dryRun, Results: []CredentialResult{}}
 	failed := 0
-	for _, spec := range specs {
-		r, err := DeployCredential(exe, spec, dryRun)
+	for _, spec := range resolved {
+		var r *CredentialResult
+		var err error
+		if km, ok := spec.(*resolvedKeyMaterial); ok {
+			r, err = km.deploy(exe, dryRun)
+		} else {
+			r, err = DeployCredential(exe, spec, dryRun)
+		}
 		if r != nil {
 			res.Results = append(res.Results, *r)
 		}

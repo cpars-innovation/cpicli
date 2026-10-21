@@ -45,53 +45,24 @@ them.
   store). On restore, set the variables from the vault and run
   `cpictl credentials apply --file credentials.yml`. The backup tells you exactly which secrets
   you need; the vault is their backup.
-- **Key pairs and SSH keys** (`restore: regenerate` in `keystore.json`): a private key generated
-  on the tenant cannot leave it. After a disaster:
-  - generate the key pair again and have it signed (`keystore generate-key-pair`, `csr`,
-    `upload-chain`; the backed-up certificate shows subject and issuer);
-  - or upload the original key from where you keep it;
-  - partners that trust the old certificate then need the new one.
+- **Key pairs, SSH keys and PGP secret keys** are in `credentials.yml` too, with the variables they are read
+  from (`CPI_SECRET_KEYPAIR_<ALIAS>` with `_PASSWORD`, `CPI_SECRET_PGP_<KEYID>` with `_PASSPHRASE`). Keep the
+  originals in the vault ([vault.md](vault.md)), and the restore imports them. A private key generated on the
+  tenant cannot leave it: generate it again and have it signed (`keystore generate-key-pair`, `csr`,
+  `upload-chain`; the backed-up certificate shows subject and issuer); partners that trust the old certificate
+  then need the new one.
 - **Certificates** (`restore: certificate`) are restored from `security/certs/`.
 
 ### Secrets from a vault (pipeline)
 
-The vault holds the secrets; CPI keeps a copy. A pipeline reads the vault with the vault's own
-tools, puts each secret into the environment variable `credentials.yml` names, and cpictl writes
-them to CPI. cpictl itself never talks to a vault, so any vault works.
-
-- **Name the vault entries after the variables**, e.g. Key Vault secret `CPI-SECRET-USER-ERP-USER`
-  for `CPI_SECRET_USER_ERP_USER` (Key Vault allows no `_`). Then one loop covers every credential.
-- **Mask every value** before it can reach the log (`::add-mask::` in GitHub Actions, secret
-  variables in Azure DevOps), never `echo` a value, no `set -x`.
-- **Log in to the vault with OIDC** (no stored vault password), with read access to that tier's
-  secrets only.
-
-GitHub Actions with Azure Key Vault:
-
-```yaml
-- uses: azure/login@v2
-  with: {client-id: ${{ vars.AZURE_CLIENT_ID }}, tenant-id: ${{ vars.AZURE_TENANT_ID }}, subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}}
-- name: Secrets from Key Vault
-  run: |
-    for var in $(grep -o 'CPI_SECRET_[A-Z0-9_]*' security/credentials.yml | sort -u); do
-      value=$(az keyvault secret show --vault-name cpi-prod --name "${var//_/-}" --query value -o tsv) || continue
-      echo "::add-mask::$value"
-      { echo "$var<<__CPI_EOF__"; echo "$value"; echo "__CPI_EOF__"; } >> "$GITHUB_ENV"
-    done
-- run: cpictl --profile prod credentials apply --file security/credentials.yml
-```
-
-With AWS Secrets Manager, the same loop reads
-`aws secretsmanager get-secret-value --secret-id "cpi/prod/$var" --query SecretString --output text`.
-
-**Check coverage before you need it:** `cpictl credentials apply --dry-run --file credentials.yml`
-resolves every secret and writes nothing; it fails, naming the variable, when one is missing. Run it
-nightly after `backup create`, with the vault loop and the new backup's `credentials.yml`, and a
-secret that lives only in SAP shows up before a disaster. On restore, the same loop runs before
-`backup restore`, which then restores the credentials too.
-
-What cpictl does with the values: never accepted as flag values (shell history, process lists),
-never logged (with `--debug` only the request size), never in results or the JSON output.
+The vault holds the secrets and keys; CPI keeps a copy. A pipeline reads the vault, puts each value into the
+variable `credentials.yml` names, and `cpictl credentials apply` (or `backup restore`) writes them to CPI.
+Everything for that is in **[vault.md](vault.md)**:
+- what can come from a vault (credentials, secure parameters, key pairs, SSH keys, PGP secret keys);
+- the rules that keep the values out of logs;
+- examples for Azure Key Vault (GitHub Actions, Azure DevOps), AWS Secrets Manager, HashiCorp Vault (GitLab)
+  and Google Secret Manager;
+- the nightly coverage check and rotation.
 
 ### Not backed up
 
