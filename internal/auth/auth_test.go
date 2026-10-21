@@ -20,6 +20,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
 
@@ -242,4 +243,90 @@ func TestWithClient(t *testing.T) {
 	mine := &http.Client{}
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, mine)
 	assert.Same(t, mine, withClient(ctx).Value(oauth2.HTTPClient))
+}
+
+// fakeKeyring stands in for the OS keychain; fail makes it refuse, like a
+// host without one.
+type fakeKeyring struct {
+	m    map[string]string
+	fail bool
+}
+
+func (f *fakeKeyring) Get(service, user string) (string, error) {
+	if f.fail {
+		return "", fmt.Errorf("no keychain")
+	}
+	v, ok := f.m[service+"/"+user]
+	if !ok {
+		return "", keyring.ErrNotFound
+	}
+	return v, nil
+}
+
+func (f *fakeKeyring) Set(service, user, secret string) error {
+	if f.fail {
+		return fmt.Errorf("no keychain")
+	}
+	f.m[service+"/"+user] = secret
+	return nil
+}
+
+func (f *fakeKeyring) Delete(service, user string) error {
+	if _, ok := f.m[service+"/"+user]; !ok {
+		return keyring.ErrNotFound
+	}
+	delete(f.m, service+"/"+user)
+	return nil
+}
+
+// The refresh token goes to the OS keychain and never into the file; an older
+// file token moves there; without a keychain the file keeps it all (#42).
+func TestStoreKeychain(t *testing.T) {
+	kr := &fakeKeyring{m: map[string]string{}}
+	s := &Store{Dir: t.TempDir(), Keyring: kr}
+	tok := &oauth2.Token{AccessToken: "acc", RefreshToken: "long-lived-refresh", Expiry: time.Now().Add(time.Hour)}
+	require.NoError(t, s.Save("dev", tok))
+	file, err := os.ReadFile(filepath.Join(s.Dir, "dev.json"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(file), "long-lived-refresh", "the refresh token is not in the file")
+	assert.Equal(t, "long-lived-refresh", kr.m[KeyringService+"/gateway-refresh-token:dev"])
+	got, err := s.Load("dev")
+	require.NoError(t, err)
+	assert.Equal(t, "acc", got.AccessToken)
+	assert.Equal(t, "long-lived-refresh", got.RefreshToken)
+
+	require.NoError(t, s.Delete("dev"))
+	assert.Empty(t, kr.m, "logout clears the keychain too")
+	_, err = s.Load("dev")
+	assert.ErrorIs(t, err, ErrNotLoggedIn)
+
+	// a token stored before: moved on first use
+	plain := &Store{Dir: s.Dir}
+	require.NoError(t, plain.Save("old", tok))
+	got, err = s.Load("old")
+	require.NoError(t, err)
+	assert.Equal(t, "long-lived-refresh", got.RefreshToken)
+	file, _ = os.ReadFile(filepath.Join(s.Dir, "old.json"))
+	assert.NotContains(t, string(file), "long-lived-refresh", "moved to the keychain")
+
+	// no keychain on this host: all in the file, still readable
+	none := &Store{Dir: t.TempDir(), Keyring: &fakeKeyring{m: map[string]string{}, fail: true}}
+	require.NoError(t, none.Save("ci", tok))
+	got, err = none.Load("ci")
+	require.NoError(t, err)
+	assert.Equal(t, "long-lived-refresh", got.RefreshToken)
+}
+
+// A refresh token the keychain no longer has: the access token works until
+// it expires, then the error says to sign in again.
+func TestStoreKeychainLost(t *testing.T) {
+	kr := &fakeKeyring{m: map[string]string{}}
+	s := &Store{Dir: t.TempDir(), Keyring: kr}
+	require.NoError(t, s.Save("dev", &oauth2.Token{AccessToken: "acc", RefreshToken: "r", Expiry: time.Now().Add(-time.Minute)}))
+	kr.m = map[string]string{}
+	src, err := s.TokenSource(context.Background(), Config{TenantID: "t", ClientID: "c", Authority: "http://127.0.0.1:1/"}, "dev")
+	require.NoError(t, err)
+	_, err = src.Token()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "run cpictl auth login")
 }

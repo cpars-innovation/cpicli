@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Gateway sign-in: the refresh token is in the OS keychain** (#42): macOS Keychain, Windows Credential Manager,
+  Linux Secret Service. The access token (about an hour) stays in the `0600` file. Without a keychain (CI,
+  headless Linux) the file holds it all, as before; `CPICTL_TOKEN_STORE=file` forces that. A token stored by
+  0.30 moves to the keychain on first use; `auth logout` clears both. New dependency: `github.com/zalando/go-keyring`.
 - **`cpictl changed-since`** / MCP `changed_since` / Go `ops.DesigntimeChangedSince` (#29): has designtime content
   changed since a time, and what (newest first, with who changed it)? SAP has no single call for it, so the
   artifacts of all packages are listed in parallel (3 s for a small real tenant). The result's `fingerprint`, passed

@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/rs/zerolog/log"
+	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
 
@@ -17,20 +19,59 @@ import (
 // has not run `cpictl auth login` for that profile.
 var ErrNotLoggedIn = errors.New("not logged in: run cpictl auth login")
 
-// Store keeps tokens on disk, one file per key (the profile name), readable
-// only by the user. It is the headless/CI fallback; an OS-keychain backend can
-// be added behind the same Load/Save/Delete/TokenSource shape.
+// Store keeps tokens per key (the profile name). The refresh token, the
+// long-lived credential, goes to the OS keychain (macOS Keychain, Windows
+// Credential Manager, Linux Secret Service) when there is one; the rest of
+// the token (the access token, valid for about an hour, and its expiry) goes
+// to a file readable only by the user. Without a keychain (CI, headless
+// Linux, SSH) the whole token is in the file.
+//
+// Only the refresh token goes to the keychain: Windows takes at most 2.5 KB
+// per entry, and an Entra access token with its refresh token can be larger.
 type Store struct {
 	Dir string
+	// Keyring is the OS keychain; nil keeps everything in the file.
+	Keyring Keyring
 }
 
-// DefaultStore keeps tokens under $HOME/.cpictl/tokens.
+// Keyring is an OS keychain (go-keyring's shape).
+type Keyring interface {
+	Get(service, user string) (string, error)
+	Set(service, user, secret string) error
+	Delete(service, user string) error
+}
+
+// KeyringService names cpictl's entries in the OS keychain.
+const KeyringService = "cpictl"
+
+func keyringUser(key string) string { return "gateway-refresh-token:" + key }
+
+// osKeyring is the OS keychain through go-keyring.
+type osKeyring struct{}
+
+func (osKeyring) Get(service, user string) (string, error) { return keyring.Get(service, user) }
+func (osKeyring) Set(service, user, secret string) error   { return keyring.Set(service, user, secret) }
+func (osKeyring) Delete(service, user string) error        { return keyring.Delete(service, user) }
+
+// DefaultStore keeps tokens in the OS keychain with the file under
+// $HOME/.cpictl/tokens. CPICTL_TOKEN_STORE=file keeps them in the file only.
 func DefaultStore() (*Store, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
-	return &Store{Dir: filepath.Join(home, ".cpictl", "tokens")}, nil
+	s := &Store{Dir: filepath.Join(home, ".cpictl", "tokens")}
+	if os.Getenv("CPICTL_TOKEN_STORE") != "file" {
+		s.Keyring = osKeyring{}
+	}
+	return s, nil
+}
+
+// fileToken is the file's content: the token, without the refresh token
+// when that is in the keychain.
+type fileToken struct {
+	oauth2.Token
+	RefreshInKeychain bool `json:"refresh_in_keychain,omitempty"`
 }
 
 var keyPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
@@ -55,9 +96,29 @@ func (s *Store) Load(key string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	var tok oauth2.Token
-	if err := json.Unmarshal(b, &tok); err != nil {
+	var ft fileToken
+	if err := json.Unmarshal(b, &ft); err != nil {
 		return nil, fmt.Errorf("reading stored token %s: %w", p, err)
+	}
+	tok := ft.Token
+	switch {
+	case ft.RefreshInKeychain:
+		if s.Keyring == nil {
+			return nil, fmt.Errorf("the refresh token for profile %s is in the OS keychain, which is switched off (CPICTL_TOKEN_STORE=file): run cpictl auth login", key)
+		}
+		rt, err := s.Keyring.Get(KeyringService, keyringUser(key))
+		if err != nil {
+			// gone from the keychain, or no keychain on this host: the
+			// access token still works until it expires
+			log.Debug().Err(err).Msgf("reading the refresh token of profile %s from the OS keychain", key)
+		}
+		tok.RefreshToken = rt
+	case tok.RefreshToken != "" && s.Keyring != nil:
+		// a token stored before the keychain was used: move its refresh
+		// token there (kept in the file when the keychain refuses)
+		if err := s.Save(key, &tok); err != nil {
+			log.Debug().Err(err).Msgf("moving the refresh token of profile %s to the OS keychain", key)
+		}
 	}
 	return &tok, nil
 }
@@ -72,7 +133,16 @@ func (s *Store) Save(key string, tok *oauth2.Token) error {
 	if err := os.MkdirAll(s.Dir, 0o700); err != nil {
 		return err
 	}
-	b, err := json.Marshal(tok)
+	ft := fileToken{Token: *tok}
+	if s.Keyring != nil && tok.RefreshToken != "" {
+		if err := s.Keyring.Set(KeyringService, keyringUser(key), tok.RefreshToken); err != nil {
+			// no keychain here (CI, headless Linux): the file holds it all
+			log.Debug().Err(err).Msg("OS keychain not available, the refresh token stays in the token file")
+		} else {
+			ft.RefreshToken, ft.RefreshInKeychain = "", true
+		}
+	}
+	b, err := json.Marshal(ft)
 	if err != nil {
 		return err
 	}
@@ -95,11 +165,17 @@ func (s *Store) Save(key string, tok *oauth2.Token) error {
 	return os.Rename(tmp.Name(), p)
 }
 
-// Delete removes the stored token for key; a missing one is not an error.
+// Delete removes the stored token for key, from the file and the keychain;
+// a missing one is not an error.
 func (s *Store) Delete(key string) error {
 	p, err := s.path(key)
 	if err != nil {
 		return err
+	}
+	if s.Keyring != nil {
+		if err := s.Keyring.Delete(KeyringService, keyringUser(key)); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			log.Debug().Err(err).Msgf("removing the refresh token of profile %s from the OS keychain", key)
+		}
 	}
 	if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -119,7 +195,7 @@ func (s *Store) TokenSource(ctx context.Context, c Config, key string) (oauth2.T
 		return nil, err
 	}
 	base := c.oauth2Config("").TokenSource(withClient(ctx), tok)
-	return &persistingSource{store: s, key: key, src: base, last: tok.AccessToken}, nil
+	return &persistingSource{store: s, key: key, src: base, last: tok.AccessToken, noRefresh: tok.RefreshToken == ""}, nil
 }
 
 // persistingSource writes a refreshed token back so the next process starts
@@ -131,6 +207,9 @@ type persistingSource struct {
 	key   string
 	src   oauth2.TokenSource
 	last  string
+	// noRefresh: the stored token has no refresh token (it was removed from
+	// the keychain, or the keychain is not reachable on this host)
+	noRefresh bool
 }
 
 func (p *persistingSource) Token() (*oauth2.Token, error) {
@@ -139,7 +218,7 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 	tok, err := p.src.Token()
 	if err != nil {
 		var re *oauth2.RetrieveError
-		if errors.As(err, &re) {
+		if errors.As(err, &re) || p.noRefresh {
 			// the refresh token expired or was revoked: say what to do, not
 			// Entra's invalid_grant (still an auth error, exit code 3)
 			return nil, fmt.Errorf("sign-in to the cpictl gateway expired for profile %s: run cpictl auth login (%w)", p.key, err)

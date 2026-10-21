@@ -52,6 +52,7 @@ func fakeGateway(t *testing.T, mock *cpitest.Tenant) (*httptest.Server, func() [
 }
 
 func TestGatewayMode(t *testing.T) {
+	t.Setenv("CPICTL_TOKEN_STORE", "file") // never the developer's real keychain
 	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{"A": {}})
 	gw, seen := fakeGateway(t, mock)
 	for _, k := range append(credentialConfigKeys, hostConfigKeys...) {

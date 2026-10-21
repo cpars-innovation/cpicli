@@ -197,10 +197,18 @@ it; cpictl listens on a free one). Give it the delegated permission on the gatew
 public client flows** off unless you need `--device-code` on headless hosts: device code sign-in is a common
 phishing path, and with it off only the browser sign-in works.
 
-The token is stored per profile under `$HOME/.cpictl/tokens/<profile>.json` (mode `0600`; on Windows the mode
-sets no ACL, so the file is protected by the user profile's permissions until an OS-keychain store follows) and refreshed with the refresh token, so a long-running `cpictl mcp` session does
-not stop working after an hour. The file holds the refresh token, the long-lived credential: treat it like a
-password, and run `cpictl auth logout` on shared machines. `login.authority` (default: Entra's public cloud) must use https. Without a `login` block,
+The token is kept per profile and refreshed with the refresh token, so a long-running `cpictl mcp` session does
+not stop working after an hour:
+
+- **The refresh token**, the long-lived credential, is in the OS keychain: macOS Keychain, Windows Credential
+  Manager, or the Secret Service on Linux (GNOME Keyring, KWallet), entry `cpictl` /
+  `gateway-refresh-token:<profile>`.
+- **The access token** (valid for about an hour) and its expiry are in `$HOME/.cpictl/tokens/<profile>.json`
+  (mode `0600`).
+- **Without a keychain** (CI, headless Linux, SSH sessions) the file holds the refresh token too; on Windows the
+  mode sets no ACL, so the user profile's permissions protect it. `CPICTL_TOKEN_STORE=file` always uses the file.
+- A token stored by an older cpictl moves into the keychain the first time it is used.
+- `cpictl auth logout` clears both; run it on shared machines. `login.authority` (default: Entra's public cloud) must use https. Without a `login` block,
 or before the first `cpictl auth login`, cpictl falls back to the `CPICTL_GATEWAY_TOKEN` environment variable:
 
 ```bash
@@ -220,8 +228,7 @@ cpictl --profile dev packages
   your token expires, and your scope per SAP tenant.
 - `cpictl auth` is only for gateway mode. Profiles that talk to SAP directly keep their service key in
   the profile and need no sign-in.
-- Not yet in gateway mode: an OS-keychain token store (the `0600` file is the fallback), and test
-  messages (`send`), which still use the runtime settings above.
+- Not yet in gateway mode: test messages (`send`), which still use the runtime settings above.
 
 ## Global flags
 
