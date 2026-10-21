@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.32.1
+
 - **Fixed (#50):** `auth logout` with `CPICTL_TOKEN_STORE=file` left the refresh token in the OS keychain, when an
   earlier login had put it there. The logout now removes it whatever the store setting.
 - **Access scope: test tooling lookups are bounded (#51).** A list of many other teams' test runs cost two
