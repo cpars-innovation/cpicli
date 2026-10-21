@@ -40,6 +40,10 @@ var (
 	rePrivateKey = regexp.MustCompile(`-----BEGIN ((RSA|EC|DSA|OPENSSH|ENCRYPTED|PGP) )?PRIVATE KEY( BLOCK)?-----`)
 	reJWT        = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`)
 	reAuthValue  = regexp.MustCompile(`(?i)^\s*(basic|bearer)\s+([A-Za-z0-9+/=._~-]{8,})\s*$`)
+	// the same after an Authorization key or header in text: a JSON key, a
+	// header line, key=value, an XML element. Only there: "basic" or
+	// "bearer" followed by a word is common prose.
+	reAuthInText = regexp.MustCompile(`(?i)\b(?:proxy-)?authorization\b["']?\s*(?:[=:]|>)\s*["']?(basic|bearer)\s+([A-Za-z0-9+/=._~-]{8,})`)
 	// token formats of common providers (prefixes they document)
 	reKnownToken = regexp.MustCompile(`\b(AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}|xox[abprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|sk_live_[0-9A-Za-z]{20,}|glpat-[0-9A-Za-z_-]{20})\b`)
 	// key = "value" pairs in text (properties, XML attributes, JSON)
@@ -133,6 +137,9 @@ func Text(text string) []Hit {
 	for _, m := range reKnownToken.FindAllString(text, -1) {
 		add(hit(KindToken, "an access key of a known provider", m))
 	}
+	for _, m := range reAuthInText.FindAllStringSubmatch(text, -1) {
+		add(authValue(m[1], m[2]))
+	}
 	for _, m := range append(reAssignment.FindAllStringSubmatch(text, -1), reXMLElement.FindAllStringSubmatch(text, -1)...) {
 		v := strings.TrimSpace(m[2])
 		if rePlaceholder.MatchString(strings.ToLower(v)) || strings.HasPrefix(v, "${") || strings.HasPrefix(v, "{{") {
@@ -155,15 +162,26 @@ func content(v string) *Hit {
 		return hit(KindToken, "an access key of a known provider", v)
 	}
 	if m := reAuthValue.FindStringSubmatch(v); m != nil {
-		if strings.EqualFold(m[1], "basic") {
-			if dec, err := base64.StdEncoding.DecodeString(m[2]); err != nil || !strings.Contains(string(dec), ":") {
-				return nil
-			}
-			return hit(KindCredentials, "an HTTP Basic authorization value (user and password)", v)
-		}
-		return hit(KindToken, "an HTTP Bearer authorization value", v)
+		return authValue(m[1], m[2])
 	}
 	return nil
+}
+
+// authValue checks an HTTP authorization value: Bearer is a token, Basic
+// only when it decodes to user:password. The fingerprint is that of
+// "<scheme> <credentials>", the same as for the whole value.
+func authValue(scheme, credentials string) *Hit {
+	if rePlaceholder.MatchString(strings.ToLower(credentials)) {
+		return nil
+	}
+	v := scheme + " " + credentials
+	if strings.EqualFold(scheme, "basic") {
+		if dec, err := base64.StdEncoding.DecodeString(credentials); err != nil || !strings.Contains(string(dec), ":") {
+			return nil
+		}
+		return hit(KindCredentials, "an HTTP Basic authorization value (user and password)", v)
+	}
+	return hit(KindToken, "an HTTP Bearer authorization value", v)
 }
 
 func hit(kind, reason, v string) *Hit {

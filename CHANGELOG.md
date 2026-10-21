@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Access scope: test tooling messages decided by the flow they tested** (#48). With `test` on any package, the
+  messages of the shared test harness and receiver stub (and their attachments and recordings) were readable, also
+  those of other teams' tests. Now a tooling message is readable only when the flow it tested is in the scope with
+  `test`, found through the correlation ID the harness, the flow and the stub share (verified on a tenant).
+  The messages of XSLT and script test runs, which test no flow, are refused under a scope (the runs themselves
+  work). **Who is affected:** only scopes with
+  `test` (also through a cpictl gateway); a test run sees its own messages as before.
+- **`secret-scan` / `secretscan.Text` finds HTTP authorization values in text** (#47): `Authorization: Bearer …`,
+  `"authorization": "Bearer …"`, `authorization=Basic …` and `<Authorization>…</Authorization>`, in binary Partner
+  Directory parameters and files. Basic only when it decodes to `user:password`; same fingerprint as
+  `secretscan.Value` for the same value.
+
 ## 0.30.1
 
 - **`cpictl auth status`** shows which SAP key the gateway uses for you per tenant (`credential`,

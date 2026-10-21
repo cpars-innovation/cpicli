@@ -471,3 +471,71 @@ func FuzzGuardContentNeedsDownload(f *testing.F) {
 		t.Fatalf("content allowed without download: %q (%+v)", p, c.Accesses)
 	})
 }
+
+// Messages of the shared test tooling are decided by the flow they tested,
+// found through the correlation ID they share with it (#48): with "test" on
+// SD, another team's harness runs, stub recordings and XSLT runs stay hidden.
+func TestGuardToolingMessagesByTargetFlow(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	base := g.Fetch
+	groups := map[string]string{
+		"C1": `[{"MessageGuid":"H1","IntegrationArtifact":{"Id":"CPICTL_Test_Harness"}},{"MessageGuid":"T1","IntegrationArtifact":{"Id":"SD_A"}},{"MessageGuid":"S1","IntegrationArtifact":{"Id":"CPICTL_Test_Stub"}}]`,
+		"C2": `[{"MessageGuid":"H2","IntegrationArtifact":{"Id":"CPICTL_Test_Harness"}},{"MessageGuid":"T2","IntegrationArtifact":{"Id":"FI_B"}},{"MessageGuid":"S2","IntegrationArtifact":{"Id":"CPICTL_Test_Stub"}}]`,
+		"C3": `[{"MessageGuid":"X1","IntegrationArtifact":{"Id":"CPICTL_Test_XSLT"}}]`,
+	}
+	correlationOf := map[string]string{"H1": "C1", "S1": "C1", "H2": "C2", "S2": "C2", "X1": "C3"}
+	var fetched []string
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		fetched = append(fetched, path)
+		for c, rows := range groups {
+			if strings.Contains(path, "%27"+c+"%27") {
+				return []byte(`{"d":{"results":` + rows + `}}`), nil
+			}
+		}
+		for guid, c := range correlationOf {
+			if strings.HasPrefix(path, "/api/v1/MessageProcessingLogs('"+guid+"')") {
+				flow := map[byte]string{'H': "CPICTL_Test_Harness", 'S': "CPICTL_Test_Stub", 'X': "CPICTL_Test_XSLT"}[guid[0]]
+				return []byte(`{"d":{"MessageGuid":"` + guid + `","CorrelationId":"` + c + `","IntegrationArtifact":{"Id":"` + flow + `"}}}`), nil
+			}
+		}
+		return base(ctx, path)
+	}
+
+	logs := `{"d":{"results":[
+		{"MessageGuid":"H1","CorrelationId":"C1","IntegrationArtifact":{"Id":"CPICTL_Test_Harness"}},
+		{"MessageGuid":"S1","IntegrationArtifact":{"Id":"CPICTL_Test_Stub"}},
+		{"MessageGuid":"H2","CorrelationId":"C2","IntegrationArtifact":{"Id":"CPICTL_Test_Harness"}},
+		{"MessageGuid":"X1","CorrelationId":"C3","IntegrationArtifact":{"Id":"CPICTL_Test_XSLT"}}]}}`
+	r := req("GET", "/api/v1/MessageProcessingLogs?$filter=IntegrationArtifact/Id%20eq%20'CPICTL_Test_Stub'", "")
+	require.NoError(t, g.Before(r))
+	out, err := g.After(r, 200, nil, []byte(logs))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `"H1"`, "a harness run of SD_A")
+	assert.Contains(t, string(out), `"S1"`, "the stub call of that run (correlation ID looked up: not in the list)")
+	assert.NotContains(t, string(out), `"H2"`, "another team's harness run")
+	assert.NotContains(t, string(out), `"X1"`, "a run that tested no flow: nothing says whose it was")
+
+	// the stub's recording of SD's run: with "test" on SD_A, no download needed
+	r = req("GET", "/api/v1/MessageProcessingLogs('S1')/Attachments", "")
+	require.NoError(t, g.Before(r))
+	_, err = g.After(r, 200, nil, []byte(`{"d":{"results":[{"Id":"ATT_S1"}]}}`))
+	require.NoError(t, err)
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_S1')/$value", "")))
+
+	// asked for directly, by GUID: decided the same way
+	for _, guid := range []string{"S2", "H2", "X1"} {
+		refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('"+guid+"')/Attachments", "")))
+	}
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('H1')/Attachments", "")))
+
+	// without "test", tooling messages are hidden even for the flow's package
+	ro := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read"]}`)
+	ro.Fetch = g.Fetch
+	out, err = ro.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), `"H1"`)
+
+	for _, p := range fetched {
+		assert.NotContains(t, p, "'C1' or", "the correlation ID is quoted, never spliced: %s", p)
+	}
+}

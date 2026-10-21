@@ -107,8 +107,12 @@ whichever command or MCP tool sends it, including tools added later:
   address that belongs to the sender of a flow in the scope; the guard reads those addresses from the allowed flows
   (externalised parameters resolved).
 - **The test tooling** is exempt only by exact name: flows starting with `CPICTL_Test_`, and the Partner Directory
-  partners `CPICTL_Test` and `CPICTL_Stub`, whose parameters `test` may change (stub responses). Messages of tooling
-  flows, and their children, are readable with `test`.
+  partners `CPICTL_Test` and `CPICTL_Stub`, whose parameters `test` may change (stub responses).
+- **Messages of the test tooling** are decided by the flow they tested. The harness, the flow under test and the
+  receiver stub share one correlation ID, so a harness or stub message (and its runs, attachments and recordings) is
+  readable when a flow in its correlation group, outside the tooling, is in the scope with `test`. Another team's
+  test runs stay hidden. A tooling message with no such flow (an XSLT or script test run) is refused: nothing says
+  whose it was.
 - **API Management**, tenant-wide artifact lists and any request the guard does not know are refused.
 - **Requests a server could read differently** are refused, also inside a `$batch`: dot segments (also encoded or as
   `..;`), encoded slashes, backslashes and `%`, `;` in API paths, repeated query parameters, method override headers,
@@ -132,6 +136,9 @@ Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`, `Guard.Check`) 
 - Below a message and a runtime artifact only the lists cpictl reads are allowed (`ErrorInformation`, `Attachments`,
   `MessageStoreEntries`, `Runs`, `CustomHeaderProperties`, `AdapterAttributes`): the tenant navigates from there into
   contents, which are only read through their own IDs and need `download`.
-- The test tooling flows (`CPICTL_Test_*`) and their partners are shared: with `test` on any package, their messages
-  and recordings are readable, also those of tests against other packages. For one person that is their own; for a
-  gateway serving several teams it is not yet decided per target flow.
+- The test tooling's Partner Directory partners are shared: with `test` on any package, the stub responses
+  (`CPICTL_Stub`) and the stylesheets under test (`CPICTL_Test`) of every team are readable and writable. Their
+  parameter IDs are chosen freely, so they cannot be tied to a flow. Messages of the tooling are decided per tested
+  flow (above).
+- The error text of a failed XSLT test run is read from its message, which a scope refuses (no tested flow): under
+  a scope, such a run reports the failure without the tenant's error text.

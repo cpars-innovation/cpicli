@@ -44,7 +44,8 @@ func (r *Refusal) ExitCode() int { return exitcode.Scope }
 
 // ToolingPrefix marks cpictl's own test tooling flows (harness, receiver
 // stub, XSLT test flow): a scope that grants "test" may read and call them
-// wherever they are installed, but never change them. Their Partner Directory
+// wherever they are installed, but never change them. Their messages are
+// decided by the flow they tested (toolingTarget). Their Partner Directory
 // partners (stub answers, stylesheets under test) may be written with "test".
 const ToolingPrefix = testtools.IDPrefix
 
@@ -74,8 +75,10 @@ type Guard struct {
 	mu        sync.Mutex
 	artifacts map[string]string // artifact ID -> package (allowed packages only)
 	builtAt   time.Time
-	messages  map[string]string // message GUID -> flow, for messages seen in allowed answers
+	messages  map[string]string // message GUID -> flow, for messages seen in allowed answers (a tooling message: the flow it tested)
 	children  map[string]string // IDs of runs, steps, traces, attachments, store entries -> flow of their message
+	tooling   map[string]bool   // message GUIDs and child IDs of tooling messages: decided with "test" on the flow tested
+	targets   map[string]string // correlation ID -> allowed flow outside the tooling that shares it
 	endpoints map[string]string // entry point URL -> flow, for allowed flows
 	pdFlows   map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
 	pdBuiltAt time.Time
@@ -645,7 +648,7 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 
 	case p == "MessageProcessingLogs":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
-			return filterResults(b, func(e map[string]any) bool { return g.allowsLog(e) })
+			return filterResults(b, func(e map[string]any) bool { return g.allowsLog(r.Ctx, e) })
 		}, record: (*Guard).recordMessages}, nil
 	case reMessage.MatchString(p):
 		mm := reMessage.FindStringSubmatch(p)
@@ -669,7 +672,7 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
 			return filterResults(b, func(e map[string]any) bool {
 				l, _ := e["Log"].(map[string]any)
-				return l != nil && g.allowsLog(l)
+				return l != nil && g.allowsLog(r.Ctx, l)
 			})
 		}}, nil
 
@@ -902,16 +905,100 @@ func (g *Guard) allowsPartner(pid, action string) bool {
 	return ValidID(pid) && g.Scope.Allows(Resource{Kind: KindPartner, ID: pid}, action)
 }
 
-// allowsLog decides a message processing log entry by its flow and package.
-func (g *Guard) allowsLog(e map[string]any) bool {
+// allowsLog decides a message processing log entry by its flow and package;
+// a message of the test tooling by the flow it tested.
+func (g *Guard) allowsLog(ctx context.Context, e map[string]any) bool {
 	id, pkg := str(e, "IntegrationArtifact", "Id"), str(e, "IntegrationArtifact", "PackageId")
 	if id == "" {
 		return false
 	}
-	if toolingFlow(id) && g.Scope.Grants(ActionTest) {
-		return true
+	if toolingFlow(id) {
+		return g.Scope.Grants(ActionTest) && g.toolingTarget(ctx, str(e, "MessageGuid"), str(e, "CorrelationId")) != ""
 	}
 	return g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: pkg}, ActionRead)
+}
+
+// reCorrelation is the form of a correlation ID (and a message GUID).
+var reCorrelation = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
+// toolingTarget returns the flow a message of the test tooling tested, if
+// the scope grants "test" on it, else "". The tooling's messages share
+// their correlation ID with the flow they reach: harness -> flow under test
+// -> receiver stub (verified on a tenant). Teams on one tenant share the
+// tooling; without this, "test" anywhere read every team's test payloads
+// (#48). A tooling message with no other flow in its group (an XSLT or
+// script test run) is refused: nothing says whose it was.
+func (g *Guard) toolingTarget(ctx context.Context, guid, correlation string) string {
+	if g.Fetch == nil {
+		return ""
+	}
+	ictx := internal(ctx)
+	if correlation == "" && reCorrelation.MatchString(guid) {
+		// the list may have left the field out ($select)
+		if b, err := g.Fetch(ictx, "/api/v1/MessageProcessingLogs("+httpKey(guid)+")?$select=CorrelationId"); err == nil {
+			var v struct {
+				D map[string]any `json:"d"`
+			}
+			if json.Unmarshal(b, &v) == nil {
+				correlation = str(v.D, "CorrelationId")
+			}
+		}
+	}
+	if !reCorrelation.MatchString(correlation) {
+		return ""
+	}
+	g.mu.Lock()
+	target := g.targets[correlation]
+	g.mu.Unlock()
+	if target != "" {
+		g.markTooling(guid, target)
+		return target
+	}
+	// not cached when none is found: the tested flow's log may come later
+	b, err := g.Fetch(ictx, "/api/v1/MessageProcessingLogs?$filter="+url.QueryEscape("CorrelationId eq '"+correlation+"'")+
+		"&$select=MessageGuid,IntegrationArtifact&$top=50")
+	if err != nil {
+		return ""
+	}
+	for _, e := range results(b) {
+		id := str(e, "IntegrationArtifact", "Id")
+		if id == "" || toolingFlow(id) {
+			continue
+		}
+		// decided without a refusal event: the other flows of the group
+		// are not what was asked for
+		pkg := str(e, "IntegrationArtifact", "PackageId")
+		if pkg == "" && ValidID(id) {
+			pkg = g.packageOf(ctx, id)
+		}
+		if ValidID(id) && g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: pkg}, ActionTest) {
+			g.mu.Lock()
+			if g.targets == nil {
+				g.targets = map[string]string{}
+			}
+			g.targets[correlation] = id
+			g.mu.Unlock()
+			g.markTooling(guid, id)
+			return id
+		}
+	}
+	return ""
+}
+
+// markTooling remembers a tooling message as belonging to the flow it tested.
+func (g *Guard) markTooling(guid, target string) {
+	if guid == "" {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.messages == nil {
+		g.messages = map[string]string{}
+	}
+	if g.tooling == nil {
+		g.tooling = map[string]bool{}
+	}
+	g.messages[guid], g.tooling[guid] = target, true
 }
 
 func (g *Guard) recordMessages(_ *httpclnt.GuardRequest, body []byte) {
@@ -921,7 +1008,9 @@ func (g *Guard) recordMessages(_ *httpclnt.GuardRequest, body []byte) {
 		g.messages = map[string]string{}
 	}
 	for _, e := range results(body) {
-		if guid := str(e, "MessageGuid"); guid != "" {
+		if guid := str(e, "MessageGuid"); guid != "" && !g.tooling[guid] {
+			// a tooling message passed the filter as the flow it tested
+			// (markTooling); keep that
 			g.messages[guid] = str(e, "IntegrationArtifact", "Id")
 		}
 	}
@@ -938,20 +1027,29 @@ func (g *Guard) recordChildren(r *httpclnt.GuardRequest, body []byte) {
 	p = strings.TrimPrefix(p, apiPrefix)
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	flow := ""
+	flow, of := "", ""
 	if mm := reMessage.FindStringSubmatch(p); mm != nil {
-		flow = g.messages[key(mm[1])]
+		of = key(mm[1])
+		flow = g.messages[of]
 	} else if mm := reChild.FindStringSubmatch(p); mm != nil {
-		flow = g.children[key(strings.Trim(mm[2], "'"))]
+		of = key(strings.Trim(mm[2], "'"))
+		flow = g.children[of]
 	}
+	tooling := g.tooling[of]
 	ids := map[string]bool{}
 	collectIDs(v, ids)
 	if g.children == nil {
 		g.children = map[string]string{}
 	}
+	if g.tooling == nil {
+		g.tooling = map[string]bool{}
+	}
 	for id := range ids {
 		if _, ok := g.children[id]; !ok {
 			g.children[id] = flow
+			if tooling {
+				g.tooling[id] = true
+			}
 		}
 	}
 }
@@ -1004,39 +1102,49 @@ func (g *Guard) checkMessage(ctx context.Context, guid string) bool {
 	if g.Fetch == nil {
 		return false
 	}
-	b, err := g.Fetch(internal(ctx), "/api/v1/MessageProcessingLogs("+httpKey(guid)+")?$select=MessageGuid,IntegrationArtifact")
+	b, err := g.Fetch(internal(ctx), "/api/v1/MessageProcessingLogs("+httpKey(guid)+")?$select=MessageGuid,CorrelationId,IntegrationArtifact")
 	if err != nil {
 		return false
 	}
 	var v struct {
 		D map[string]any `json:"d"`
 	}
-	if json.Unmarshal(b, &v) != nil || !g.allowsLog(v.D) {
+	if json.Unmarshal(b, &v) != nil || !g.allowsLog(ctx, v.D) {
 		return false
 	}
 	g.mu.Lock()
 	if g.messages == nil {
 		g.messages = map[string]string{}
 	}
-	g.messages[guid] = str(v.D, "IntegrationArtifact", "Id")
+	if !g.tooling[guid] { // a tooling message is kept as the flow it tested
+		g.messages[guid] = str(v.D, "IntegrationArtifact", "Id")
+	}
 	g.mu.Unlock()
 	return true
 }
 
 func init() {
 	checkKind["message"] = func(g *Guard, ctx context.Context, n need) bool {
-		return g.Scope.Grants(n.action) && g.checkMessage(ctx, n.res.ID)
+		if !g.checkMessage(ctx, n.res.ID) {
+			return false
+		}
+		g.mu.Lock()
+		tooling := g.tooling[n.res.ID]
+		g.mu.Unlock()
+		return tooling || g.Scope.Grants(n.action) // a tooling message was decided with "test"
 	}
 	checkKind["child"] = func(g *Guard, ctx context.Context, n need) bool {
 		g.mu.Lock()
 		flow, ok := g.children[n.res.ID]
+		tooling := g.tooling[n.res.ID]
 		g.mu.Unlock()
-		if !ok {
+		if !ok || flow == "" {
 			return false
 		}
-		// the test tooling's own recordings (stub requests) come with "test"
-		if toolingFlow(flow) && g.Scope.Grants(ActionTest) {
-			return true
+		// the test tooling's recordings (stub requests) come with "test" on
+		// the flow that was tested
+		if tooling {
+			return g.Scope.Grants(ActionTest) && g.allowsArtifact(ctx, flow, ActionTest)
 		}
 		// decided on the message's flow: with grants, reading a flow's
 		// messages does not mean downloading their payloads

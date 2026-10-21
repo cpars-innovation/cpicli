@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValue(t *testing.T) {
@@ -63,6 +64,33 @@ api_key = "abcd1234efgh5678"
 		"credentials: a value assigned to ns:accesstoken",
 	}, kinds)
 	assert.Empty(t, Text("<cfg><password>${property.pwd}</password></cfg>\nplain text"))
+}
+
+// HTTP authorization values inside text (#47): after an Authorization key
+// or header only, Basic only when it decodes to user:password.
+func TestTextAuthorization(t *testing.T) {
+	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("erp:Welcome1"))
+	for _, text := range []string{
+		`{"authorization": "Bearer abcdefgh12345678"}`,
+		"GET / HTTP/1.1\nAuthorization: Bearer abcdefgh12345678\n",
+		"authorization=Bearer abcdefgh12345678",
+		"Proxy-Authorization: " + basic,
+		"<Authorization>Bearer abcdefgh12345678</Authorization>",
+	} {
+		hits := Text(text)
+		require.Len(t, hits, 1, text)
+		assert.Contains(t, hits[0].Reason, "authorization value", text)
+	}
+	// the same fingerprint as the whole value through Value
+	assert.Equal(t, Value("h", "Bearer abcdefgh12345678").Fingerprint, Text("Authorization: Bearer abcdefgh12345678")[0].Fingerprint)
+	for _, text := range []string{
+		"Authorization: Basic bm90LWEtcGFpcg==", // decodes, but no user:password
+		"Authorization: Bearer ${property.token}",
+		"Authorization: Bearer xxxxxxxxxx",
+		"we use basic authentication; the bearer mechanism is described elsewhere",
+	} {
+		assert.Empty(t, Text(text), text)
+	}
 }
 
 func TestFingerprintStable(t *testing.T) {

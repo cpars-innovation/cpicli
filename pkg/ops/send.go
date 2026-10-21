@@ -533,6 +533,16 @@ func waitForMessage(ctx context.Context, exe *httpclnt.HTTPExecuter, s *SentMess
 	}
 }
 
+// notYetInScope reports a scope refusal (the local scope or a cpictl
+// gateway). Under a scope, a harness message is decided by the flow it
+// reached, through their shared correlation ID: until that flow's log is
+// written, the harness message is refused, so it is waited for like a
+// message not yet logged.
+func notYetInScope(err error) bool {
+	var coder interface{ ExitCode() int }
+	return httpclnt.IsGatewayRefusal(err) || (errors.As(err, &coder) && coder.ExitCode() == exitcode.Scope)
+}
+
 // waitForHarnessTarget waits for the message that the harness passed on: the
 // flow behind the ProcessDirect address shares the harness message's
 // correlation ID.
@@ -545,7 +555,7 @@ func waitForHarnessTarget(ctx context.Context, exe *httpclnt.HTTPExecuter, s *Se
 	mpl := cpi.NewMessageLogs(exe)
 	for correlation == "" && s.HarnessMessageGuid != "" {
 		l, err := mpl.Get(s.HarnessMessageGuid)
-		if err != nil && !isTransient(err) {
+		if err != nil && !isTransient(err) && !notYetInScope(err) {
 			return nil, err
 		}
 		if l != nil && l.CorrelationId != "" {
