@@ -299,6 +299,7 @@ change) in v0.25.0 and removed in v0.27.0. A call to an old name fails with `err
 | `list_packages` | | All integration packages (cached for `--cache-ttl`; `refresh: true` re-reads) |
 | `create_package` | designtime | Create a package if it does not exist (`CREATED` / `EXISTS`, never changes one) |
 | `list_artifacts` | | Designtime artifacts of a package (all four types; cached like `list_packages`) |
+| `changed_since` | `since`, `fingerprint`, `packages` | Whether designtime artifacts changed after a time, and which, newest first (all packages listed in parallel). The `fingerprint` of an earlier call also shows deletions |
 | `list_resources` | | Scripts, mappings, schemas, ... of an integration flow |
 | `get_resource` | | Content of one resource (text inline, binary base64) |
 | `download_artifact` | local files | Extract an artifact into a directory inside `--root` (empty unless `overwrite`) |

@@ -71,6 +71,11 @@
       "typed": true
     },
     {
+      "command": "changed-since",
+      "file": "changed-since.json",
+      "typed": true
+    },
+    {
       "command": "compare",
       "file": "compare.json",
       "typed": true

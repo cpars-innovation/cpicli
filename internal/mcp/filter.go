@@ -35,7 +35,7 @@ var toolEffects = map[string]Effect{
 	"get_pd_parameters": EffectRead, "pd_diff": EffectRead, "get_trace_tree": EffectRead,
 	"pd_dependencies": EffectRead, "config_diff": EffectRead,
 	"list_data_stores": EffectRead, "list_data_store_entries": EffectRead, "get_data_store_entry": EffectRead,
-	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "list_runtimes": EffectRead, "list_value_mappings": EffectRead, "get_value_mapping": EffectRead, "set_value_mapping": EffectTenant,
+	"delete_data_store_entry": EffectTenant, "list_locks": EffectRead, "list_runtimes": EffectRead, "changed_since": EffectRead, "list_value_mappings": EffectRead, "get_value_mapping": EffectRead, "set_value_mapping": EffectTenant,
 	"delete_artifact": EffectTenant, "delete_package": EffectTenant, "list_components": EffectRead, "list_integration_connections": EffectRead, "get_tenant_settings": EffectRead, "scan_secrets": EffectRead, "download_log_archive": EffectLocal, "unlock_artifact": EffectTenant, "list_variables": EffectRead,
 	"list_jms_queues": EffectRead, "get_jms_broker": EffectRead, "list_number_ranges": EffectRead,
 	"list_jms_messages": EffectRead, "find_messages_by_header": EffectRead,
@@ -348,7 +348,7 @@ var Toolsets = map[string][]string{
 	"build": {
 		"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "set_parameters", "download_artifact",
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifacts", "validate_artifact", "check_guidelines", "deploy",
-		"list_runtime_artifacts", "list_runtimes", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors",
+		"list_runtime_artifacts", "list_runtimes", "changed_since", "drift", "bump_versions", "lint", "graph_search", "graph_neighbors",
 		"list_credentials", "list_locks", "list_components", "list_value_mappings", "get_value_mapping", "set_value_mapping",
 		"loop_start", "loop_status", "loop_end"},
 	"test": {
@@ -365,7 +365,7 @@ var Toolsets = map[string][]string{
 		"list_integration_connections", "get_tenant_settings", "download_log_archive"},
 	"promote": {
 		"compare", "transport_check", "drift", "list_artifacts", "get_parameters", "config_diff", "list_credentials", "list_keystore",
-		"pd_dependencies", "pd_diff", "list_runtime_artifacts", "graph_neighbors"},
+		"pd_dependencies", "pd_diff", "list_runtime_artifacts", "graph_neighbors", "changed_since"},
 	"improve": {
 		"list_components", "lint", "lint_fix", "layout_iflow", "graph_search", "graph_neighbors", "graph_path", "drift", "compare",
 		"bump_versions", "list_artifacts", "get_resource"},

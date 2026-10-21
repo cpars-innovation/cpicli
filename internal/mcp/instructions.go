@@ -59,7 +59,8 @@ before anything is uploaded; compare shows the differences between tiers.`},
 collections), Partner Directory candidates (routing tables, lookup tables, deployment copies),
 dead weight, robustness and best practices; lint_fix moves scripts into collections and removes
 unused scripts and unconnected steps (local files; the cpi-improve skill plans and applies them).`},
-	{[]string{"inspect", "build"}, `Inspect: list_packages, list_artifacts (cached briefly; refresh=true re-reads), list_resources,
+	{[]string{"inspect", "build"}, `Inspect: list_packages, list_artifacts (cached briefly; refresh=true re-reads; changed_since says
+whether designtime content changed since a time, and what), list_resources,
 get_resource (read without download). get_parameters artifact_ids reads several flows at once.`},
 	{[]string{"monitor"}, `Operate: message_summary (volume and failures per flow, connection and error fingerprint over a
 window: start here for "what is failing"), list_runtime_artifacts statuses=["ERROR"] or artifact_ids (Cloud Integration only:

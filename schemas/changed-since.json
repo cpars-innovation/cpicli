@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "ops.ChangedArtifact": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "modifiedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "modifiedBy": {
+          "type": "string"
+        },
+        "package": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "modifiedAt",
+        "package",
+        "type",
+        "version"
+      ],
+      "type": "object"
+    },
+    "ops.DesigntimeChanges": {
+      "properties": {
+        "artifacts": {
+          "type": "integer"
+        },
+        "changed": {
+          "type": "boolean"
+        },
+        "changedArtifacts": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/ops.ChangedArtifact"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fingerprint": {
+          "type": "string"
+        },
+        "latest": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "packages": {
+          "type": "integer"
+        },
+        "since": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "artifacts",
+        "changed",
+        "changedArtifacts",
+        "fingerprint",
+        "packages",
+        "since"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/changed-since.json",
+  "$ref": "#/$defs/ops.DesigntimeChanges",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl changed-since.",
+  "title": "cpictl changed-since result",
+  "x-schemaVersion": 1
+}

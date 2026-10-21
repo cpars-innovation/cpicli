@@ -23,6 +23,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`backup diff`](#backup-diff) | Compare two backups, or a backup with the tenant |
 | [`backup restore`](#backup-restore) | Restore a backup into the tenant (--dry-run: write the plan only) |
 | [`backup verify`](#backup-verify) | Check a backup archive: checksums, artifact zips, completeness |
+| [`changed-since`](#changed-since) | Has designtime content changed since a time? Lists the artifacts changed after it |
 | [`compare`](#compare) | Compare two tiers, Git refs or content trees per artifact (content, version, parameters, files) |
 | [`components`](#components) | Component catalogue: the adapter and step versions the tenant offers |
 | [`components import`](#components-import) | Build the catalogue from the Web UI's editor metadata |
@@ -584,6 +585,40 @@ written. Offline. Exit code 5 when a problem is found.
 ```
 
 **Usage:** `cpictl backup verify <archive>`
+
+## changed-since
+
+Has designtime content changed since a time? Lists the artifacts changed after it
+
+```
+Tells whether designtime content (integration flows, mappings, script
+collections, value mappings) changed after --since, and lists what changed,
+newest first. SAP has no single call for this, so the artifacts of all packages
+are listed in parallel: a few small calls per package.
+
+A change time cannot show a deletion. Keep the result's fingerprint and pass it
+back with --fingerprint: a different one means something changed, also a
+deleted artifact or package.
+```
+
+**Usage:** `cpictl changed-since [flags]`
+
+**Flags:**
+
+```
+      --fingerprint string   Fingerprint of an earlier call: a different one means changed, also by a deletion
+      --packages strings     Only these packages (glob patterns)
+      --parallel int         Packages listed at a time (default 8)
+      --since string         A duration back from now (30m, 2h, 1d) or an RFC 3339 time (required)
+```
+
+**Examples:**
+
+```
+  cpictl changed-since --since 1h
+  cpictl changed-since --since 2026-10-21T08:00:00Z --packages 'SD_*' --output json
+  cpictl changed-since --since 10m --fingerprint 3f2a9c0d1b7e4f60
+```
 
 ## compare
 

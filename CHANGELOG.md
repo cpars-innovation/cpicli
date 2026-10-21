@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`cpictl changed-since`** / MCP `changed_since` / Go `ops.DesigntimeChangedSince` (#29): has designtime content
+  changed since a time, and what (newest first, with who changed it)? SAP has no single call for it, so the
+  artifacts of all packages are listed in parallel (3 s for a small real tenant). The result's `fingerprint`, passed
+  back with `--fingerprint`, also shows deletions, which no change time can.
 - **Access scope: test tooling messages decided by the flow they tested** (#48). With `test` on any package, the
   messages of the shared test harness and receiver stub (and their attachments and recordings) were readable, also
   those of other teams' tests. Now a tooling message is readable only when the flow it tested is in the scope with

@@ -196,6 +196,28 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 			},
 		},
 		{
+			Name: "changed_since", Title: "Has designtime content changed since a time?",
+			Description: "Whether designtime artifacts (flows, mappings, script collections, value mappings) changed after a time, and which, newest first, with who changed them. Lists all packages in parallel (no single SAP call exists). Pass the fingerprint of an earlier call: a different one means changed, also by a deletion. Use it to decide whether a cached package or artifact list is stale.",
+			InputSchema: object(props{"since": str("A duration back from now (30m, 2h, 1d) or an RFC 3339 time"),
+				"fingerprint": str("Fingerprint of an earlier call"), "packages": strArray("Only these packages (glob patterns)")}, "since"),
+			Annotations: readOnly,
+			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+				var a struct {
+					Since       string   `json:"since"`
+					Fingerprint string   `json:"fingerprint"`
+					Packages    []string `json:"packages"`
+				}
+				if err := decode(raw, &a); err != nil {
+					return nil, err
+				}
+				since, err := ops.ParseTimeArg(a.Since, time.Now())
+				if err != nil || a.Since == "" {
+					return nil, output.Usagef("since needs a duration back from now (30m, 2h, 1d) or an RFC 3339 time")
+				}
+				return ops.DesigntimeChangedSince(ctx, cfg.Exe, ops.ChangedSinceOptions{Since: since, Fingerprint: a.Fingerprint, Packages: a.Packages})
+			},
+		},
+		{
 			Name: "get_runtime_status", Title: "Get runtime status",
 			Description: "Runtime state of given artifacts: deployed or not, STARTED/STARTING/ERROR, version, deployment time and, for ERROR, the tenant's error message. Use it for known artifacts (e.g. after a deploy timeout); to find all broken deployments use list_runtime_artifacts with statuses [\"ERROR\"].",
 			InputSchema: object(props{"artifact_ids": strArray("Artifact IDs")}, "artifact_ids"),
