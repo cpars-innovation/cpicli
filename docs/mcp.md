@@ -11,7 +11,11 @@ deploy it, read the runtime error, fix, repeat.
   `cpictl.yaml`), see [configuration.md](configuration.md). One server = one tenant.
 
 Restrict a server to part of the tenant with an access scope: `cpictl mcp --scope-file scope.json`, see
-[access-scope.md](access-scope.md).
+[access-scope.md](access-scope.md). Tools the scope can never allow are not offered: a tool whose action the scope
+grants on no package (no `deploy` anywhere: no `deploy`, `undeploy`), or a tenant area it does not grant. Tools
+it allows on some packages stay, and each call is decided by the scope. In gateway mode the server reads your
+scope on the profile's SAP tenant from the gateway (`cpictl auth status`) once at start and filters the same way;
+restart the server after a policy change. `help` lists the removed tools with the reason.
 
 ## Setup
 

@@ -57,31 +57,11 @@ user (cpictl auth login) and what an agent working for you can do.`,
 			if gw == "" {
 				return output.Usagef("auth status needs gateway mode: set gateway in the profile (docs/configuration.md#gateway-mode)")
 			}
-			// /whoami is at the gateway's root, not below /t/<tenant>
-			scheme, host, port, _ := cpi.ParseGateway(gw)
-			sd := serviceDetails(cmd)
-			if sd.GatewayToken == "" && sd.GatewayTokenSource == nil {
-				return output.Usagef("not signed in to the gateway: run cpictl auth login (or set %s)", gatewayTokenEnv)
-			}
-			sd.Gateway = fmt.Sprintf("%s://%s:%d", scheme, host, port)
-			exe := cpi.InitHTTPExecuter(sd).WithContext(cmd.Context())
-			resp, err := exe.Exec("GET", "/whoami", nil, map[string]string{"Accept": "application/json"})
+			who, err := fetchWhoAmI(cmd, gw)
 			if err != nil {
 				return err
 			}
-			if resp.StatusCode != 200 {
-				_, err := exe.LogError(resp, "Who am I")
-				return err
-			}
-			body, err := exe.ReadRespBody(resp)
-			if err != nil {
-				return err
-			}
-			var who WhoAmI
-			if err := json.Unmarshal(body, &who); err != nil {
-				return fmt.Errorf("the gateway's /whoami answer is not readable: %w", err)
-			}
-			output.SetResult(cmd.Context(), &who)
+			output.SetResult(cmd.Context(), who)
 			log.Info().Msgf("%s (%s) in %s, roles %s; token valid until %s", who.Name, who.User, who.Org,
 				strings.Join(who.Roles, ", "), who.Expires.Local().Format(time.RFC3339))
 			names := make([]string, 0, len(who.Tenants))
@@ -103,6 +83,45 @@ user (cpictl auth login) and what an agent working for you can do.`,
 			return nil
 		},
 	}
+}
+
+// fetchWhoAmI asks the gateway who it takes the caller for. /whoami is at
+// the gateway's root, not below /t/<tenant>.
+func fetchWhoAmI(cmd *cobra.Command, gw string) (*WhoAmI, error) {
+	scheme, host, port, _ := cpi.ParseGateway(gw)
+	sd := serviceDetails(cmd)
+	if sd.GatewayToken == "" && sd.GatewayTokenSource == nil {
+		return nil, output.Usagef("not signed in to the gateway: run cpictl auth login (or set %s)", gatewayTokenEnv)
+	}
+	sd.Gateway = fmt.Sprintf("%s://%s:%d", scheme, host, port)
+	exe := cpi.InitHTTPExecuter(sd).WithContext(cmd.Context())
+	resp, err := exe.Exec("GET", "/whoami", nil, map[string]string{"Accept": "application/json"})
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		_, err := exe.LogError(resp, "Who am I")
+		return nil, err
+	}
+	body, err := exe.ReadRespBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	var who WhoAmI
+	if err := json.Unmarshal(body, &who); err != nil {
+		return nil, fmt.Errorf("the gateway's /whoami answer is not readable: %w", err)
+	}
+	return &who, nil
+}
+
+// gatewayTenant is the SAP tenant name of a gateway URL (.../t/<tenant>).
+func gatewayTenant(gw string) string {
+	_, _, _, path := cpi.ParseGateway(gw)
+	name, ok := strings.CutPrefix(path, "/t/")
+	if !ok || strings.Contains(name, "/") {
+		return ""
+	}
+	return name
 }
 
 // describeScope summarises a scope in one line: grants and denies.

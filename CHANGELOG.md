@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **MCP offers only the tools an access scope can allow** (#40): with `--scope-file` or in gateway mode (your scope
+  from the gateway's `/whoami`, read at start), a tool whose action the scope grants on no package (no `deploy`
+  anywhere: no `deploy`) or a tenant area it does not grant is not offered; `help` names the reason. Tools the
+  scope allows on some packages stay, and each call is still decided per package.
 - **Gateway sign-in: the refresh token is in the OS keychain** (#42): macOS Keychain, Windows Credential Manager,
   Linux Secret Service. The access token (about an hour) stays in the `0600` file. Without a keychain (CI,
   headless Linux) the file holds it all, as before; `CPICTL_TOKEN_STORE=file` forces that. A token stored by

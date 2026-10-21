@@ -9,6 +9,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/logger"
 	"github.com/cpars-innovation/cpicli/internal/mcp"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/scope"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -143,6 +144,18 @@ CPICTL_* environment variables.`,
 			if err != nil {
 				return err
 			}
+			// tools the access scope can never allow (the local one, and in
+			// gateway mode the user's scope from the gateway) are not offered
+			scopes := []*scope.Scope{activeScope}
+			if gw := config.GetString(cmd, "gateway"); gw != "" {
+				scopes = append(scopes, gatewayScopeForMCP(cmd, gw))
+			}
+			var byScope []mcp.RemovedTool
+			tools, byScope = mcp.ScopeFilter(tools, scopes...)
+			removedTools = append(removedTools, byScope...)
+			if len(tools) == 0 {
+				return output.Usagef("the access scope leaves no tools")
+			}
 			var removed []string
 			reasons := map[string]string{}
 			for _, r := range removedTools {
@@ -229,4 +242,21 @@ func stringListSetting(cmd *cobra.Command, name string) []string {
 		}
 	}
 	return vals
+}
+
+// gatewayScopeForMCP is the user's scope on the profile's SAP tenant, from
+// the gateway's /whoami, read once at start (a policy change shows after a
+// restart). nil when it cannot be read: the gateway still decides each call.
+func gatewayScopeForMCP(cmd *cobra.Command, gw string) *scope.Scope {
+	who, err := fetchWhoAmI(cmd, gw)
+	if err != nil {
+		log.Warn().Err(err).Msg("the gateway's /whoami could not be read: all tools are offered, the gateway decides each call")
+		return nil
+	}
+	t, ok := who.Tenants[gatewayTenant(gw)]
+	if !ok || t.Scope == nil {
+		// nothing granted on this SAP tenant
+		return &scope.Scope{Version: 1}
+	}
+	return t.Scope
 }

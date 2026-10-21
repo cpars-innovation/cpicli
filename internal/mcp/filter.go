@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/scope"
 )
 
 // Effect is what a tool can change.
@@ -415,4 +416,57 @@ func ToolsetTools(names []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// scopeNeeds says what a tool needs from an access scope: a package action
+// granted somewhere (scope.Grants), or "<area>:write" for a tenant area.
+// Tools not listed need only what every scope has (read), or are decided
+// per call by the guard.
+var scopeNeeds = map[string]string{
+	"deploy": scope.ActionDeploy, "undeploy": scope.ActionDeploy,
+	"upload_artifacts": scope.ActionUpload, "create_package": scope.ActionUpload, "set_value_mapping": scope.ActionUpload,
+	"install_test_tools": scope.ActionUpload, "run_script_cases_online": scope.ActionUpload,
+	"set_parameters":    scope.ActionConfigure,
+	"send_test_message": scope.ActionTest, "run_tests": scope.ActionTest, "set_stub_response": scope.ActionTest,
+	"set_log_level": scope.ActionLogLevel,
+	"pd_deploy":     scope.ActionPDWrite, "create_alternative_partner": scope.ActionPDWrite, "delete_alternative_partner": scope.ActionPDWrite,
+	"create_authorized_user": scope.ActionPDWrite, "delete_authorized_user": scope.ActionPDWrite,
+	"delete_artifact": scope.ActionDelete, "delete_package": scope.ActionDelete,
+	"download_artifact": scope.ActionDownload, "get_message_content": scope.ActionDownload, "get_message_trace": scope.ActionDownload,
+	"retry_jms_messages": "jms:write", "move_jms_messages": "jms:write", "delete_jms_messages": "jms:write", "set_jms_queue_state": "jms:write",
+	"delete_data_store_entry": "datastores:write",
+	"generate_key_pair":       "keystore:write", "upload_certificate_chain": "keystore:write", "delete_keystore_entry": "keystore:write",
+	"create_access_policy": "accesspolicies:write", "add_artifact_reference": "accesspolicies:write",
+	"delete_access_policy": "accesspolicies:write", "delete_artifact_reference": "accesspolicies:write",
+	"unlock_artifact": "locks:write",
+}
+
+// ScopeFilter removes the tools an access scope can never allow: a tool
+// whose action the scope grants on no package (no deploy anywhere: no
+// deploy), or a tenant area it does not grant. Tools the scope allows on
+// some packages stay; the guard (or the gateway) decides each call. Each
+// scope given must allow the tool (a local scope and the gateway's).
+func ScopeFilter(tools []Tool, scopes ...*scope.Scope) (kept []Tool, removed []RemovedTool) {
+	for _, t := range tools {
+		need, ok := scopeNeeds[t.Name]
+		reason := ""
+		for _, sc := range scopes {
+			if sc == nil || !ok || reason != "" {
+				continue
+			}
+			if area, mode, isArea := strings.Cut(need, ":"); isArea {
+				if !sc.Allows(scope.Resource{Kind: scope.KindTenant, ID: area}, mode) {
+					reason = "access scope: tenant-wide " + area + " is not writable"
+				}
+			} else if !sc.Grants(need) {
+				reason = "access scope: " + need + " is granted on no package"
+			}
+		}
+		if reason != "" {
+			removed = append(removed, RemovedTool{Name: t.Name, Reason: reason})
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return kept, removed
 }

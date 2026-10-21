@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -15,6 +17,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -171,4 +174,48 @@ func TestGatewayRefusalExitCode(t *testing.T) {
 	assert.Equal(t, "Deploy integration flow refused by the cpictl gateway: scope: deploy of artifact FI_B is not granted", refused.Error())
 	tenant := &httpclnt.HTTPError{CallType: "Deploy integration flow", StatusCode: 403, Body: []byte(`{"error":{"code":"Forbidden"}}`)}
 	assert.Equal(t, exitcode.Auth, output.ExitCode(tenant))
+}
+
+// In gateway mode the MCP server offers only the tools the user's scope from
+// /whoami can allow (#40): read and deploy on SD_* keeps deploy, drops upload
+// and configure; a local scope narrows further.
+func TestGatewayMCPToolsByScope(t *testing.T) {
+	t.Setenv("CPICTL_TOKEN_STORE", "file")
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{"A": {}})
+	gw, _ := fakeGateway(t, mock)
+	for _, k := range append(credentialConfigKeys, hostConfigKeys...) {
+		t.Setenv("CPICTL_"+strings.ToUpper(strings.ReplaceAll(k, "-", "_")), "")
+	}
+	listTools := func(extra ...string) (string, string) {
+		home := t.TempDir()
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n", 0o600)
+		t.Setenv(gatewayTokenEnv, "user-token")
+		in, err := os.CreateTemp(t.TempDir(), "stdin")
+		require.NoError(t, err)
+		_, _ = in.WriteString(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n")
+		_, _ = in.Seek(0, 0)
+		old := os.Stdin
+		os.Stdin = in
+		defer func() { os.Stdin = old }()
+		cpitest.SetHome(t, home)
+		t.Chdir(t.TempDir())
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		var stdout, stderr bytes.Buffer
+		code := Run(context.Background(), append([]string{"--profile", "gw", "mcp", "--mode", "full"}, extra...), &stdout, &stderr, "test", "test")
+		require.Equal(t, 0, code, stderr.String())
+		return stdout.String(), stderr.String()
+	}
+	tools, _ := listTools()
+	for _, kept := range []string{`"deploy"`, `"undeploy"`, `"list_packages"`, `"changed_since"`} {
+		assert.Contains(t, tools, `"name":`+kept)
+	}
+	for _, gone := range []string{"upload_artifacts", "set_parameters", "send_test_message", "download_artifact", "pd_deploy"} {
+		assert.NotContains(t, tools, `"name":"`+gone+`"`, "no "+gone+" anywhere in the user's scope")
+	}
+
+	tools, _ = listTools("--scope-actions", "read", "--scope-packages", "SD_*")
+	assert.NotContains(t, tools, `"name":"deploy"`, "the local scope narrows the gateway's")
+	assert.Contains(t, tools, `"name":"list_packages"`)
 }

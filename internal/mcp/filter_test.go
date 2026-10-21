@@ -8,6 +8,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/scope"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -155,4 +156,33 @@ func TestOptIn(t *testing.T) {
 
 	_, _, err = ApplyFiltersWithReasons(all, "", ToolFilter{OptIn: []string{"deploy"}})
 	assert.ErrorContains(t, err, `"deploy" is not an opt-in tool`)
+}
+
+// Every tool the scope filter knows exists, and a scope without an action
+// removes exactly the tools that need it (#40).
+func TestScopeFilter(t *testing.T) {
+	all := Tools(Config{})
+	names := map[string]bool{}
+	for _, tl := range all {
+		names[tl.Name] = true
+	}
+	for n := range scopeNeeds {
+		assert.True(t, names[n], "scopeNeeds names an unknown tool %s", n)
+	}
+	sc, err := scope.Parse([]byte(`{"version":1,"packages":["SD_*"],"tenant":["jms:write"],"actions":["read","test"]}`))
+	require.NoError(t, err)
+	kept, removed := ScopeFilter(all, sc, nil)
+	gone := map[string]string{}
+	for _, r := range removed {
+		gone[r.Name] = r.Reason
+	}
+	assert.Contains(t, gone["deploy"], "deploy is granted on no package")
+	assert.Contains(t, gone["unlock_artifact"], "tenant-wide locks")
+	for _, n := range []string{"send_test_message", "run_tests", "retry_jms_messages", "list_packages", "get_parameters"} {
+		assert.NotContains(t, gone, n)
+	}
+	assert.Len(t, kept, len(all)-len(removed))
+	kept, removed = ScopeFilter(all, nil)
+	assert.Empty(t, removed, "no scope: nothing removed")
+	assert.Len(t, kept, len(all))
 }
