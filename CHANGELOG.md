@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.31.0
+
 - **MCP offers only the tools an access scope can allow** (#40): with `--scope-file` or in gateway mode (your scope
   from the gateway's `/whoami`, read at start), a tool whose action the scope grants on no package (no `deploy`
   anywhere: no `deploy`) or a tenant area it does not grant is not offered; `help` names the reason. Tools the
