@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.30.1
+
 - **`cpictl auth status`** shows which SAP key the gateway uses for you per tenant (`credential`,
   when the gateway sends it): SAP's own audit names that key, not you.
 
