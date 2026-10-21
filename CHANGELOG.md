@@ -12,6 +12,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
   The messages of XSLT and script test runs, which test no flow, are refused under a scope (the runs themselves
   work). **Who is affected:** only scopes with
   `test` (also through a cpictl gateway); a test run sees its own messages as before.
+- **Access scope: stub rules and stylesheets under test belong to their owner** (#48). The test tooling's
+  Partner Directory partners (`CPICTL_Stub`, `CPICTL_Test`) are shared by teams. Under a scope, a parameter there
+  is readable and writable only when its ID starts with a flow the scope grants `test` on, or a partner it may
+  read, and a dot: name stub rules `<flowId>.<name>` (`Orders_Route.erp`). Stylesheets under test are already
+  named `<partner>.<parameter>`. Others are hidden and refused, with a message that says how to name them.
+  **Who is affected:** scopes with `test` whose stub rules are not named that way. Without a scope nothing
+  changes; the docs and the cpi-test skill now use the naming everywhere.
 - **`secret-scan` / `secretscan.Text` finds HTTP authorization values in text** (#47): `Authorization: Bearer …`,
   `"authorization": "Bearer …"`, `authorization=Basic …` and `<Authorization>…</Authorization>`, in binary Partner
   Directory parameters and files. Basic only when it decodes to `user:password`; same fingerprint as

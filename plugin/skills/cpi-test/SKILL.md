@@ -59,6 +59,8 @@ calling the real system: install the tooling (above), point the receiver's addre
 externalised parameter: `set_parameters`, then `deploy`) at the stub URL from `cpictl test tools
 status`, `<runtime>/http/cpictl/stub/<rule>/...`, and set the answer per rule with
 `set_stub_response` (status, content_type, body, headers; `clear` for the default 200 `{}`).
+Name a rule `<flowId>.<name>` after the flow whose receiver calls it (`Orders_Route.erp`): rules
+are shared on the tenant, and under an access scope only rules of flows in the scope are usable.
 Each request is recorded in the stub's message log (`CPICTL_Test_Stub`): attachment
 `cpictl-stub-request` (method, path, query, headers without sensitive ones, body) and custom
 headers `CpictlStubRule` / `CpictlStubPath`; read it with `list_message_logs` (artifact
@@ -142,7 +144,7 @@ restores the previous values (also when a case fails). Assert what the flow sent
 ```yaml
 expect:
   stub_calls:
-    - { rule: erp, method: POST, body_contains: ["<OrderNo>4711</OrderNo>"], count: 1 }
+    - { rule: Orders_Route.erp, method: POST, body_contains: ["<OrderNo>4711</OrderNo>"], count: 1 }
 ```
 
 Cases with `stub_calls` run alone. Ask before `apply_config` on a shared tenant: the flow is

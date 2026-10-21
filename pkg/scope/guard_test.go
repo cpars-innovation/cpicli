@@ -141,9 +141,10 @@ func TestGuardListsAreReadOnly(t *testing.T) {
 // Tooling partners: readable and their parameters writable with "test",
 // never deleted, and only the real tooling IDs (#5).
 func TestGuardToolingPartners(t *testing.T) {
-	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
-	assert.NoError(t, g.Before(req("PUT", "/api/v1/BinaryParameters(Pid='CPICTL_Test',Id='SD.Map')", "")), "stylesheet under test")
-	assert.NoError(t, g.Before(req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_Stub","Id":"rule"}`)), "stub answer")
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"partners":["SD_*"],"actions":["read","test"]}`)
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/BinaryParameters(Pid='CPICTL_Test',Id='SD_Cust.Map')", "")), "stylesheet under test of an SD partner")
+	assert.NoError(t, g.Before(req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_Stub","Id":"SD_A.billing"}`)), "stub answer of SD_A")
+	assert.NoError(t, g.Before(req("GET", "/api/v1/Partners('CPICTL_Stub')", "")), "the partner itself")
 	refused(t, g.Before(req("DELETE", "/api/v1/Partners('CPICTL_Test')", "")))
 	refused(t, g.Before(req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_TestX","Id":"x"}`)))
 	refused(t, g.Before(req("PUT", "/api/v1/StringParameters(Pid='CPICTL_Testing_Prod',Id='x')", "")))
@@ -537,5 +538,40 @@ func TestGuardToolingMessagesByTargetFlow(t *testing.T) {
 
 	for _, p := range fetched {
 		assert.NotContains(t, p, "'C1' or", "the correlation ID is quoted, never spliced: %s", p)
+	}
+}
+
+// The tooling's partners are shared by teams: under a scope, a stub rule or a
+// stylesheet under test belongs to the flow or partner its ID starts with
+// (#48 follow-up).
+func TestGuardToolingParametersByOwner(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"partners":["SD_*"],"actions":["read","test"]}`)
+	for _, r := range []*httpclnt.GuardRequest{
+		req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_Stub","Id":"FI_B.billing"}`), // another team's flow
+		req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_Stub","Id":"billing"}`),      // no owner
+		req("PUT", "/api/v1/StringParameters(Pid='CPICTL_Stub',Id='FI_B.billing')", ""),
+		req("GET", "/api/v1/StringParameters(Pid='CPICTL_Stub',Id='FI_B.billing')", ""),
+		req("DELETE", "/api/v1/StringParameters(Pid='CPICTL_Stub',Id='FI_B.billing')", ""),
+		req("GET", "/api/v1/BinaryParameters(Pid='CPICTL_Test',Id='FI_Bank.Map')", ""),
+		req("GET", "/api/v1/Partners('CPICTL_Stub')/StringParameters", ""),                            // all rules at once
+		req("POST", "/api/v1/StringParameters", `{"Pid":"CPICTL_Stub","Id":"CPICTL_Test_Harness.x"}`), // the tooling owns nothing
+	} {
+		refused(t, g.Before(r))
+	}
+	assert.Contains(t, refused(t, g.Before(req("PUT", "/api/v1/StringParameters(Pid='CPICTL_Stub',Id='billing')", ""))).Error(),
+		"<flowId>.billing", "says how to name it")
+	assert.NoError(t, g.Before(req("GET", "/api/v1/StringParameters(Pid='CPICTL_Stub',Id='SD_A.billing')", "")))
+	assert.NoError(t, g.Before(req("DELETE", "/api/v1/StringParameters(Pid='CPICTL_Stub',Id='SD_A.billing')", "")))
+
+	pd := `{"d":{"results":[{"Pid":"CPICTL_Stub","Id":"SD_A.billing"},{"Pid":"CPICTL_Stub","Id":"FI_B.billing"},
+		{"Pid":"CPICTL_Stub","Id":"billing"},{"Pid":"CPICTL_Test","Id":"SD_Cust.Map"},{"Pid":"CPICTL_Test","Id":"FI_Bank.Map"}]}}`
+	for _, list := range []string{"StringParameters", "BinaryParameters"} {
+		out, err := g.After(req("GET", "/api/v1/"+list, ""), 200, nil, []byte(pd))
+		require.NoError(t, err)
+		assert.Contains(t, string(out), "SD_A.billing")
+		assert.Contains(t, string(out), "SD_Cust.Map")
+		assert.NotContains(t, string(out), "FI_B.billing")
+		assert.NotContains(t, string(out), "FI_Bank.Map")
+		assert.NotContains(t, string(out), `"billing"`)
 	}
 }

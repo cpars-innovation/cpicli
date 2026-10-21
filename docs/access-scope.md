@@ -107,7 +107,11 @@ whichever command or MCP tool sends it, including tools added later:
   address that belongs to the sender of a flow in the scope; the guard reads those addresses from the allowed flows
   (externalised parameters resolved).
 - **The test tooling** is exempt only by exact name: flows starting with `CPICTL_Test_`, and the Partner Directory
-  partners `CPICTL_Test` and `CPICTL_Stub`, whose parameters `test` may change (stub responses).
+  partners `CPICTL_Test` and `CPICTL_Stub`. Teams share these partners, so their parameters (stub rules,
+  stylesheets under test) are decided by their ID: it must start with an owner and a dot, where the owner is a flow
+  the scope grants `test` on (stub rules, e.g. `Orders_Route.erp`) or a partner it may read (stylesheets: cpictl
+  names them `<partner>.<parameter>`). With `test`, those may be read and written; others are hidden and refused,
+  also the list of a tooling partner's parameters through `Partners('…')/…`.
 - **Messages of the test tooling** are decided by the flow they tested. The harness, the flow under test and the
   receiver stub share one correlation ID, so a harness or stub message (and its runs, attachments and recordings) is
   readable when a flow in its correlation group, outside the tooling, is in the scope with `test`. Another team's
@@ -136,9 +140,5 @@ Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`, `Guard.Check`) 
 - Below a message and a runtime artifact only the lists cpictl reads are allowed (`ErrorInformation`, `Attachments`,
   `MessageStoreEntries`, `Runs`, `CustomHeaderProperties`, `AdapterAttributes`): the tenant navigates from there into
   contents, which are only read through their own IDs and need `download`.
-- The test tooling's Partner Directory partners are shared: with `test` on any package, the stub responses
-  (`CPICTL_Stub`) and the stylesheets under test (`CPICTL_Test`) of every team are readable and writable. Their
-  parameter IDs are chosen freely, so they cannot be tied to a flow. Messages of the tooling are decided per tested
-  flow (above).
 - The error text of a failed XSLT test run is read from its message, which a scope refuses (no tested flow): under
   a scope, such a run reports the failure without the tenant's error text.

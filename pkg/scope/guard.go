@@ -112,6 +112,11 @@ type need struct {
 	// "test" (stub answers, stylesheets under test); not set for deletes of
 	// whole partners
 	toolingWrite bool
+	// param is the Partner Directory parameter ID a request names; for the
+	// tooling's partners it decides whose the parameter is (toolingParamOwned)
+	param string
+	// entity: the partner itself, without its parameters
+	entity bool
 }
 
 func (g *Guard) refuse(r *Refusal) error {
@@ -205,7 +210,13 @@ func (g *Guard) check(ctx context.Context, n need) error {
 	case KindPackage, KindPartner:
 		if !ValidID(res.ID) || !g.Scope.Allows(res, n.action) {
 			if res.Kind == KindPartner && toolingPartner(res.ID) && g.Scope.Grants(ActionTest) && (n.action == ActionRead || n.toolingWrite) {
-				return nil
+				if n.entity && n.action == ActionRead || g.toolingParamOwned(ctx, n.param) {
+					return nil
+				}
+				if n.param != "" {
+					return g.refuse(&Refusal{Resource: res, Action: n.action, Reason: fmt.Sprintf(
+						"under a scope, a stub rule or stylesheet under test needs an ID that starts with a flow or partner of the scope and a dot, e.g. <flowId>.%s (not %q)", n.param, n.param)})
+				}
 			}
 			return g.refuse(&Refusal{Resource: res, Action: n.action})
 		}
@@ -679,10 +690,16 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 	case p == "StringParameters" || p == "BinaryParameters" || p == "Partners" || p == "AlternativePartners" || p == "AuthorizedUsers":
 		if write(m) {
 			param := p == "StringParameters" || p == "BinaryParameters"
-			return decision{need: []need{{res: Resource{Kind: KindPartner, ID: bodyField(r.Body, "Pid")}, action: ActionPDWrite, toolingWrite: param && m == http.MethodPost}}}, nil
+			return decision{need: []need{{res: Resource{Kind: KindPartner, ID: bodyField(r.Body, "Pid")}, action: ActionPDWrite, toolingWrite: param && m == http.MethodPost,
+				param: bodyField(r.Body, "Id")}}}, nil
 		}
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
-			return filterResults(b, func(e map[string]any) bool { return g.allowsPartner(str(e, "Pid"), ActionRead) })
+			return filterResults(b, func(e map[string]any) bool {
+				if pid := str(e, "Pid"); toolingPartner(pid) && p != "Partners" {
+					return g.Scope.Grants(ActionTest) && g.toolingParamOwned(r.Ctx, str(e, "Id"))
+				}
+				return g.allowsPartner(str(e, "Pid"), ActionRead)
+			})
 		}}, nil
 	case rePDParam.MatchString(p):
 		mm := rePDParam.FindStringSubmatch(p)
@@ -690,14 +707,16 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		if write(m) {
 			action = ActionPDWrite
 		}
-		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: key(mm[2])}, action: action, toolingWrite: true}}}, nil
+		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: key(mm[2])}, action: action, toolingWrite: true, param: key(mm[3])}}}, nil
 	case rePartner.MatchString(p):
 		mm := rePartner.FindStringSubmatch(p)
 		action := ActionRead
 		if write(m) {
 			action = ActionPDWrite
 		}
-		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: key(mm[1])}, action: action}}}, nil
+		// the partner itself; below it (its parameters) only for partners
+		// in the scope: the tooling's are read one parameter at a time
+		return decision{need: []need{{res: Resource{Kind: KindPartner, ID: key(mm[1])}, action: action, entity: mm[2] == ""}}}, nil
 	case strings.HasPrefix(p, "AlternativePartners(") || strings.HasPrefix(p, "AuthorizedUsers("):
 		// keys without the partner ID: changes need the entry's partner
 		if !write(m) {
@@ -983,6 +1002,37 @@ func (g *Guard) toolingTarget(ctx context.Context, guid, correlation string) str
 		}
 	}
 	return ""
+}
+
+// toolingParamOwned reports whether a parameter of the tooling's partners
+// (a stub rule, a stylesheet under test) belongs to the scope: under a
+// scope its ID starts with "<owner>." where the owner is a flow the scope
+// grants "test" on (stub rules) or a partner it may read (stylesheets,
+// testrun.OnlineXSLTID). Teams share the tooling's partners; without this
+// one team read and overwrote another's stub answers (#48).
+func (g *Guard) toolingParamOwned(ctx context.Context, id string) bool {
+	for i := 1; i < len(id); i++ {
+		if id[i] != '.' {
+			continue
+		}
+		owner := id[:i]
+		if !ValidID(owner) {
+			continue
+		}
+		if g.Scope.Allows(Resource{Kind: KindPartner, ID: owner}, ActionRead) || g.allowsFlowQuietly(ctx, owner, ActionTest) {
+			return true
+		}
+	}
+	return false
+}
+
+// allowsFlowQuietly decides a flow without a refusal event: for lookups
+// that are not what the caller asked for.
+func (g *Guard) allowsFlowQuietly(ctx context.Context, id, action string) bool {
+	if !ValidID(id) || toolingFlow(id) {
+		return false
+	}
+	return g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: g.packageOf(ctx, id)}, action)
 }
 
 // markTooling remembers a tooling message as belonging to the flow it tested.

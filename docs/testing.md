@@ -131,7 +131,7 @@ externalised parameter values for the test, for example a receiver pointing at t
 
 ```yaml
 # .cpi/tests/Orders_Route/config.yaml
-ERP_URL: https://<runtime host>/http/cpictl/stub/erp
+ERP_URL: https://<runtime host>/http/cpictl/stub/Orders_Route.erp
 ```
 
 The receiver is often in another flow than the one the case sends to (an inbound flow calls a
@@ -143,7 +143,7 @@ reverse order:
 # .cpi/tests/Orders_In/config.yaml
 flows:
   Orders_Route:
-    ERP_URL: https://<runtime host>/http/cpictl/stub/erp
+    ERP_URL: https://<runtime host>/http/cpictl/stub/Orders_Route.erp
 ```
 
 With `--apply-config` (MCP `apply_config: true`) the run, per flow with a `config.yaml`: reads the
@@ -160,12 +160,16 @@ applied and restored and the redeployments; values are never reported. Without `
 
 The receiver stub flow `CPICTL_Test_Stub` (HTTPS sender `/cpictl/stub/*`) records every request
 it receives and answers by rule (the path segment after `/cpictl/stub/`). Point receivers at it
-with `config.yaml`, then assert the calls the flow made:
+with `config.yaml`, then assert the calls the flow made.
+
+**Name a rule `<flowId>.<name>`**, after the flow whose receiver calls it (`Orders_Route.erp`). The
+stub's rules are shared by everyone on the tenant; under an access scope only rules that start with
+a flow the scope may test are readable and writable ([access-scope.md](access-scope.md)).
 
 ```yaml
 expect:
   stub_calls:
-    - rule: erp                    # the segment after /cpictl/stub/
+    - rule: Orders_Route.erp       # the segment after /cpictl/stub/
       method: POST
       path_contains: orders
       body_contains: ["<OrderNo>4711</OrderNo>"]
