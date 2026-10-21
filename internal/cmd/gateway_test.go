@@ -192,6 +192,7 @@ func TestGatewayMCPToolsByScope(t *testing.T) {
 		t.Setenv(gatewayTokenEnv, "user-token")
 		in, err := os.CreateTemp(t.TempDir(), "stdin")
 		require.NoError(t, err)
+		defer in.Close() // Windows cannot remove an open file
 		_, _ = in.WriteString(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}` + "\n" +
 			`{"jsonrpc":"2.0","id":2,"method":"tools/list"}` + "\n")
 		_, _ = in.Seek(0, 0)
