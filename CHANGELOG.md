@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.33.0
+
 - **`cpictl profile add`**: creates a profile from the BTP service keys (`--service-key`, plan `api`;
   `--runtime-key`, plan `integration-flow`), or asks for the values (secret without echo), or for a cpictl gateway
   (`--gateway`, `--login-*`).
