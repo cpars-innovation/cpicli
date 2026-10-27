@@ -3,6 +3,9 @@
 **Build, deploy and operate SAP Cloud Integration (CPI) content from the command line,
 CI/CD pipelines and AI agents.**
 
+*cpicli* is the project, the repository and the Go module (`github.com/cpars-innovation/cpicli`);
+the command it builds is `cpictl`.
+
 ```bash
 cpictl update artifact --artifact-id OrderIntake --package-id Orders --dir-artifact ./OrderIntake
 cpictl deploy --artifact-ids OrderIntake

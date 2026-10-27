@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Names:** *cpicli* is the project, the repository and the Go module (`github.com/cpars-innovation/cpicli`);
+  the command is `cpictl`. Both stay as they are; renaming the module would break every Go importer (cpictl
+  gateway, CPI Studio). The README now says so in its first lines.
+
 ## 0.33.0
 
 - **`cpictl profile add`**: creates a profile from the BTP service keys (`--service-key`, plan `api`;
