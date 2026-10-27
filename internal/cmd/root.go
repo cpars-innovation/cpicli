@@ -465,7 +465,7 @@ var hostConfigKeys = []string{"tmn-host", "oauth-host", "runtime-oauth-host"}
 // parent up to the repository root). Default files are opened by their full
 // name: a search by base name would also pick up an extension-less
 // $HOME/cpictl (for example the binary itself).
-func loadConfigFiles(explicit, profile string) ([]configFile, error) {
+func loadConfigFiles(explicit, profile string, offline bool) ([]configFile, error) {
 	var paths []configFile
 	if explicit != "" {
 		paths = append(paths, configFile{path: explicit})
@@ -495,6 +495,11 @@ func loadConfigFiles(explicit, profile string) ([]configFile, error) {
 		f.v.SetConfigFile(f.path)
 		if err := f.v.ReadInConfig(); err != nil {
 			return nil, err
+		}
+		if profile != "" && !f.project {
+			if err := profileSecretsFromKeychain(f.v, profile, offline); err != nil {
+				return nil, err
+			}
 		}
 		files = append(files, f)
 	}
@@ -642,7 +647,7 @@ func initializeConfig(cmd *cobra.Command) error {
 	if err != nil {
 		return output.Usage(err)
 	}
-	files, err := loadConfigFiles(cfgFile, profile)
+	files, err := loadConfigFiles(cfgFile, profile, isOffline(cmd))
 	if err != nil {
 		return output.Usage(err)
 	}

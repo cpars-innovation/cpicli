@@ -7,17 +7,18 @@ Pick one of these, depending on how many tenants you work with:
 | Situation | Setup | Example |
 |-----------|-------|---------|
 | One tenant | `$HOME/cpictl.yaml` with the connection (chmod 600) | [examples/cpictl.yaml](examples/cpictl.yaml) |
-| Several tenants, switching often | one profile per tenant in `~/.cpictl/`, `cpictl profile use <name>` | [examples/profiles/](examples/profiles) |
+| Several tenants, switching often | `cpictl profile add <name> --service-key <key.json>` per tenant, `cpictl profile use <name>` | [Profiles](#profiles-switching-tenants) |
 | CI pipelines | `CPICTL_*` environment variables from the CI secret store | [ci.md](ci.md) |
 | Defaults for one repository | `cpictl.yaml` in the repository root, committed, no secrets | [examples/project-cpictl.yaml](examples/project-cpictl.yaml) |
 
-Profiles step by step:
+Profiles step by step: download the service keys in the BTP cockpit (Instances and Subscriptions > the
+Process Integration Runtime instance > Service Keys; plan `api`, and plan `integration-flow` for test
+messages), then:
 
 ```bash
-mkdir -p ~/.cpictl && chmod 700 ~/.cpictl
-cp docs/examples/profiles/dev.yaml ~/.cpictl/dev.yaml     # fill in host, client ID and secret
-cp docs/examples/profiles/qa.yaml  ~/.cpictl/qa.yaml
-chmod 600 ~/.cpictl/*.yaml
+cpictl profile add dev --service-key ~/Downloads/dev-api.json --runtime-key ~/Downloads/dev-runtime.json --use
+cpictl profile add qa  --service-key ~/Downloads/qa-api.json
+rm ~/Downloads/*-api.json ~/Downloads/*-runtime.json   # the profiles have what they need
 
 cpictl profile list            # * marks the active profile
 cpictl profile use dev         # default from now on
@@ -25,9 +26,9 @@ cpictl packages                # logs "Profile dev (<host>)" first
 cpictl --profile qa status --runtime-status ERROR   # one command against QA
 ```
 
-The values come from the service keys in SAP BTP: `url` → `tmn-host`, `tokenurl` → `oauth-host`
-(host only), `clientid` / `clientsecret`. See
-[Creating an OAuth client](#creating-an-oauth-client-in-sap-btp).
+`profile add` checks each key before it stores anything (a token, and the package list), and puts the client
+secrets into the OS keychain. Without the files it asks for the values (the secret without echo). See
+[Profiles](#profiles-switching-tenants) and [Creating an OAuth client](#creating-an-oauth-client-in-sap-btp).
 
 ## Where settings come from
 
@@ -91,7 +92,30 @@ Rules, because the file comes with the repository:
 
 ### Profiles (switching tenants)
 
-One file per tenant in `~/.cpictl/`, with the connection and credentials:
+One file per tenant in `~/.cpictl/`. **Create it with `cpictl profile add`:**
+
+```bash
+cpictl profile add dev --service-key dev-api.json [--runtime-key dev-runtime.json] [--use] [--force]
+cpictl profile add dev                                  # asks for URL, token URL, client ID, secret
+cpictl profile add dev --gateway https://gw.example.com/t/dev \
+  --login-tenant-id <tid> --login-client-id <id> --login-scope api://<gateway>/access   # gateway mode
+cpictl profile show dev                                 # settings; secrets only as where they are kept
+cpictl profile remove dev --confirm                     # file, keychain secrets, gateway sign-in
+```
+
+**What `profile add` does:**
+- **Reads the service key** as the BTP cockpit downloads it (also `cf service-key` output). It refuses a runtime
+  key given as the API key, and a certificate-based key.
+- **Checks before it stores:** the API key must get a token and read the package list; the runtime key must get a
+  token. Nothing is written otherwise (`--no-check` stores anyway).
+- **Keeps the client secrets in the OS keychain** (macOS Keychain, Windows Credential Manager, Linux Secret
+  Service; service `cpictl`, account `profile:<name>:<setting>`). The file lists them under `keychain-secrets`
+  and holds no secret. Commands read them when they talk to the tenant, not for offline commands.
+- **Falls back to the file:** without a keychain (CI, headless Linux) or with `CPICTL_TOKEN_STORE=file`, the
+  secrets go into the file, which is written with mode 0600 either way.
+- **Replaces only with `--force`;** the secrets of the replaced profile are removed from the keychain.
+
+By hand, the same file:
 
 ```bash
 mkdir -p ~/.cpictl && chmod 700 ~/.cpictl

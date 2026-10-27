@@ -139,8 +139,11 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`pgp import-public`](#pgp-import-public) | Replace the public keyring with a file of OpenPGP public keys (requires --confirm) |
 | [`pgp list`](#pgp-list) | List PGP public and secret keys (metadata, never key material) |
 | [`profile`](#profile) | Switch between tenants (profiles in $HOME/.cpictl) |
+| [`profile add`](#profile-add) | Create a profile from a BTP service key, or interactively; secrets go to the OS keychain |
 | [`profile current`](#profile-current) | Show the profile that commands use now |
 | [`profile list`](#profile-list) | List profiles and mark the active one |
+| [`profile remove`](#profile-remove) | Delete a profile with its keychain secrets and its gateway sign-in (requires --confirm) |
+| [`profile show`](#profile-show) | Show a profile's settings (secrets only as where they are kept) |
 | [`profile use`](#profile-use) | Make a profile the default (stored in $HOME/.cpictl/current); 'use -' clears it |
 | [`resources`](#resources) | List the resources (scripts, mappings, schemas, ...) of an integration flow |
 | [`resources get`](#resources-get) | Download one resource of an integration flow |
@@ -3320,6 +3323,55 @@ $HOME/cpictl.yaml. A repository's cpictl.yaml is still overlaid; its hosts must
 match the profile's.
 ```
 
+## profile add
+
+Create a profile from a BTP service key, or interactively; secrets go to the OS keychain
+
+```
+Creates $HOME/.cpictl/<name>.yaml for one tenant.
+
+From service keys, as the BTP cockpit downloads them (Instances and
+Subscriptions > the Process Integration Runtime instance > Service Keys):
+--service-key is the key of plan "api", --runtime-key (optional) the key of
+plan "integration-flow" for sending test messages. Without them cpictl asks
+for the settings (a secret without echo on a terminal).
+
+Before anything is stored, the profile is checked: a token from each key and
+the package list. The client secrets go to the OS keychain (macOS Keychain,
+Windows Credential Manager, Linux Secret Service); the profile file names
+them under keychain-secrets. Without a keychain, or with
+CPICTL_TOKEN_STORE=file, they go into the file (mode 0600). Delete the
+downloaded service key files afterwards.
+
+--gateway creates a profile for a cpictl gateway instead (no SAP key); sign
+in with cpictl auth login.
+```
+
+**Usage:** `cpictl profile add <name> [flags]`
+
+**Flags:**
+
+```
+      --force                    Replace an existing profile
+      --gateway string           A cpictl gateway URL (…/t/<SAP tenant>) instead of a SAP key
+      --login-client-id string   Gateway sign-in: client ID of cpictl's app registration
+      --login-scope string       Gateway sign-in: the gateway's API scope
+      --login-tenant-id string   Gateway sign-in: Entra tenant ID
+      --no-check                 Store the profile without checking the keys
+      --runtime-key string       Service key file (JSON) of plan "integration-flow", for test messages
+      --service-key string       Service key file (JSON) of plan "api"
+      --use                      Make it the active profile
+```
+
+**Examples:**
+
+```
+  cpictl profile add dev --service-key ~/Downloads/dev-api.json --use
+  cpictl profile add dev --service-key dev-api.json --runtime-key dev-runtime.json --force
+  cpictl profile add qa                       # asks for the settings
+  cpictl profile add dev --gateway https://gw.example.com/t/dev --login-tenant-id <tid> --login-client-id <id> --login-scope api://<gateway>/access
+```
+
 ## profile current
 
 Show the profile that commands use now
@@ -3331,6 +3383,24 @@ Show the profile that commands use now
 List profiles and mark the active one
 
 **Usage:** `cpictl profile list`
+
+## profile remove
+
+Delete a profile with its keychain secrets and its gateway sign-in (requires --confirm)
+
+**Usage:** `cpictl profile remove <name> [flags]`
+
+**Flags:**
+
+```
+      --confirm   Confirm deleting the profile
+```
+
+## profile show
+
+Show a profile's settings (secrets only as where they are kept)
+
+**Usage:** `cpictl profile show [name]`
 
 ## profile use
 

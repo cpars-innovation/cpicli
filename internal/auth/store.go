@@ -50,6 +50,10 @@ func keyringUser(key string) string { return "gateway-refresh-token:" + key }
 // refresh token from (a test replaces it).
 var cleanupKeyring Keyring = osKeyring{}
 
+// OSKeyring returns the OS keychain (macOS Keychain, Windows Credential
+// Manager, Linux Secret Service).
+func OSKeyring() Keyring { return osKeyring{} }
+
 // osKeyring is the OS keychain through go-keyring.
 type osKeyring struct{}
 

@@ -591,6 +591,11 @@
       "typed": true
     },
     {
+      "command": "profile add",
+      "file": "profile_add.json",
+      "typed": true
+    },
+    {
       "command": "profile current",
       "file": "profile_current.json",
       "typed": true
@@ -598,6 +603,16 @@
     {
       "command": "profile list",
       "file": "profile_list.json",
+      "typed": true
+    },
+    {
+      "command": "profile remove",
+      "file": "profile_remove.json",
+      "typed": true
+    },
+    {
+      "command": "profile show",
+      "file": "profile_show.json",
       "typed": true
     },
     {

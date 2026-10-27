@@ -132,7 +132,7 @@ match the profile's.`,
 			output.SetResult(cmd.Context(), map[string]any{"active": active, "profiles": profiles})
 			if len(profiles) == 0 {
 				dir, _ := profilesDir()
-				log.Info().Msgf("No profiles yet: create %s/<name>.yaml (chmod 600)", dir)
+				log.Info().Msgf("No profiles yet: cpictl profile add <name> --service-key <key.json> (or create %s/<name>.yaml, chmod 600)", dir)
 			}
 			for _, p := range profiles {
 				mark := " "
@@ -208,6 +208,6 @@ match the profile's.`,
 			return nil
 		},
 	}
-	c.AddCommand(list, use, current)
+	c.AddCommand(list, use, current, newProfileAddCommand(), newProfileShowCommand(), newProfileRemoveCommand())
 	return c
 }

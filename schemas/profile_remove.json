@@ -1,0 +1,24 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/profile_remove.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl profile remove.",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "removed": {
+      "type": "string"
+    },
+    "wasActive": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "removed",
+    "wasActive"
+  ],
+  "title": "cpictl profile remove result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

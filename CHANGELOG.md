@@ -5,6 +5,26 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`cpictl profile add`**: creates a profile from the BTP service keys (`--service-key`, plan `api`;
+  `--runtime-key`, plan `integration-flow`), or asks for the values (secret without echo), or for a cpictl gateway
+  (`--gateway`, `--login-*`).
+  - **Checked before anything is stored:** a token from each key and the package list.
+  - **Client secrets in the OS keychain:** macOS Keychain, Windows Credential Manager or Linux Secret Service.
+    The profile file lists them under `keychain-secrets` and holds none.
+  - **File fallback:** without a keychain, or with `CPICTL_TOKEN_STORE=file`, the secrets go into the 0600 file
+    as before.
+  - **Tested on a real tenant:** created from service keys, with the API and the runtime key, then a test message
+    sent through it.
+- **`cpictl profile show`** (secrets only as where they are kept) and **`cpictl profile remove --confirm`** (file,
+  keychain secrets, gateway sign-in).
+- **Existing profiles keep working unchanged.** To move a profile's secrets into the keychain:
+  `cpictl profile add <name> --service-key … --force`.
+- **Dependency:** `golang.org/x/term` (hidden input) is now a direct dependency; it was already in the build
+  through `golang.org/x/crypto`.
+
+**What to do with this release:** nothing is required. To set up a new tenant, use `cpictl profile add`.
+**CPI Studio and the gateway** are not affected.
+
 ## 0.32.1
 
 - **Fixed (#50):** `auth logout` with `CPICTL_TOKEN_STORE=file` left the refresh token in the OS keychain, when an

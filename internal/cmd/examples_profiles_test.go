@@ -73,7 +73,7 @@ func TestProfileAndProjectExamples(t *testing.T) {
 	t.Chdir(repo)
 	viper.Reset()
 	t.Cleanup(viper.Reset)
-	files, err := loadConfigFiles("", "dev")
+	files, err := loadConfigFiles("", "dev", false)
 	require.NoError(t, err)
 	assert.Len(t, files, 2)
 	assert.Equal(t, "./packages", viper.GetString("orchestrator.packagesDir"))
