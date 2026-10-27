@@ -81,3 +81,22 @@ content_differs   Orders/Orders_Route (test: 1.0.6, prod: 1.0.5)
 sets the downloads at the same time per tenant (default 8). `--output json` returns `a`, `b`,
 `items` and `summary`. The MCP tool `compare` does the same (`model: true` for the model diff) with `tenant`, a directory inside the
 server root or `git:<ref>[:<path>]`.
+
+## Has the tenant changed? (`changed-since`)
+
+A cheap check before a full compare or snapshot: did designtime content change since a time, and what?
+
+```bash
+cpictl changed-since --since 1h                        # changed artifacts, newest first, with who changed them
+cpictl changed-since --since 2026-10-21T08:00:00Z --packages 'SD_*' --output json
+cpictl changed-since --since 10m --fingerprint 3f2a9c0d1b7e4f60   # changed: also by a deletion
+```
+
+- **How:** SAP has no single call for this, so cpictl lists the artifacts of all packages in parallel (a few
+  small calls per package; 3 s for a small real tenant).
+- **Deletions:** a change time cannot show a deletion. Keep the result's `fingerprint` and pass it back with
+  `--fingerprint`: a different one means something changed, a deleted artifact or package included.
+- **Exit code:** 0 either way; read `changed` in the JSON result.
+- **Also available as:** MCP `changed_since`, and Go `ops.DesigntimeChangedSince` (see
+  [go-api.md](go-api.md#designtime-changes-pkgops)).
+

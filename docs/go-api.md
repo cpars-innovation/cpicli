@@ -332,3 +332,35 @@ return res.Err()              // nil, output.Failed (5), output.Partial (7) or t
   `response_xpath` and `response_json`.
 - `ops.StubCalls(ctx, exe, since)` reads the receiver stub's calls (`[]ops.StubCall`); pass
   another function as `Options.StubCalls` to test without the stub.
+
+## Designtime changes (`pkg/ops`)
+
+```go
+res, err := ops.DesigntimeChangedSince(ctx, exe, ops.ChangedSinceOptions{
+    Since:       lastCheck,
+    Fingerprint: lastFingerprint, // "" on the first call
+})
+// res.Changed, res.ChangedArtifacts (newest first, with ModifiedBy), res.Fingerprint, res.Latest
+```
+
+Keep `res.Fingerprint` for the next call: it also changes when an artifact or package is deleted. It is
+empty when a package could not be listed (`res.Warnings`).
+
+## Security material (`pkg/ops`)
+
+```go
+f, err := ops.LoadCredentialsFile("credentials.yml")    // or build an ops.CredentialsFile
+res, err := ops.ApplyCredentials(exe, f, dryRun)          // kind, name, action per entry; never a secret
+```
+
+`ops.CredentialsFile` holds user credentials, OAuth2 client credentials, secure parameters, key pairs
+(`ops.KeyPairSpec`, PKCS#12), SSH keys (`ops.SSHKeySpec`) and PGP secret keys (`ops.PGPSecretKeySpec`). A service
+that holds the values itself gives each one as `ops.SecretSource{Stdin: strings.NewReader(value)}`. See
+[vault.md](vault.md).
+
+## Backup and restore (`pkg/ops`)
+
+`ops.CreateBackup`, `ops.VerifyBackup`, `ops.DiffBackupIndexes`, and `ops.RestoreBackup(ctx, exe, archive,
+ops.RestoreOptions{DryRun: true})` with `ops.WriteRestorePlan` / `ops.RestorePlanMarkdown`. See
+[backup.md](backup.md#restore).
+

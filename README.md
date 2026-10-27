@@ -82,15 +82,26 @@ role `ESBMessaging.send`.
 
 ### 2. Put each tenant into a profile
 
-A profile is one YAML file per tenant in `~/.cpictl/`, named after the tenant. It holds the
-connection and the credentials, so it is personal: readable only by you, never committed.
+A profile is one YAML file per tenant in `~/.cpictl/`, named after the tenant. Create it from
+the downloaded service keys:
 
 ```bash
-mkdir -p ~/.cpictl && chmod 700 ~/.cpictl
-cp docs/examples/profiles/dev.yaml ~/.cpictl/dev.yaml     # then fill in the values
-cp docs/examples/profiles/qa.yaml  ~/.cpictl/qa.yaml
-chmod 600 ~/.cpictl/*.yaml
+cpictl profile add dev --service-key ~/Downloads/dev-api.json --runtime-key ~/Downloads/dev-runtime.json --use
+cpictl profile add qa  --service-key ~/Downloads/qa-api.json
+cpictl profile add prod                       # without a key file: asks for the values (secret hidden)
 ```
+
+`profile add` checks each key against the tenant before it stores anything, and puts the client
+secrets into the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service); the
+profile file holds no secret. Without a keychain they go into the file, readable only by you.
+Delete the downloaded key files afterwards. `cpictl profile show dev` shows the settings,
+`cpictl profile remove dev --confirm` deletes a profile with its secrets.
+
+For a [cpictl gateway](docs/configuration.md#gateway-mode) (enterprise setups without a SAP key on
+the laptop): `cpictl profile add dev --gateway https://gw.example.com/t/dev --login-…`, then
+`cpictl auth login`, `cpictl auth status` (also `whoami`), `cpictl auth logout`.
+
+A profile written by hand looks like this (keep it `chmod 600`, never commit it):
 
 ```yaml
 # ~/.cpictl/dev.yaml
@@ -235,13 +246,13 @@ are not written, and reads, uploads and parameter reads run 8 at a time. Details
 
 | Area | Commands |
 |------|----------|
-| Inspect | `packages`, `artifacts`, `status`, `endpoints`, `resources`, `discover`, `graph`, `drift`, `compare` (tiers, Git refs, trees) |
+| Inspect | `packages`, `artifacts`, `status`, `endpoints`, `resources`, `discover`, `graph`, `drift`, `compare` (tiers, Git refs, trees), `changed-since` (has designtime content changed since a time, and what) |
 | Runtime data | `datastore`, `variables`, `jms`, `number-ranges`, `logs files`, `idempotent`, `id-mappings` |
 | Testing and monitoring | `send`, `logs level`, `logs`, `logs get`, `logs steps`, `logs trace`, `logs trace-message`, `logs attachment`, `logs payload` |
 | Quality | `validate`, `guidelines`, `lint` (reuse, Partner Directory candidates, dead weight, best practices, security material; `--fix`) |
 | Security audit | `secret-scan` (passwords, tokens and keys in the Partner Directory and in flow configuration parameters; values are never shown) |
 | Designtime | `download`, `iflow copy`, `iflow layout` (tidy the diagram), `packages create`, `update artifact`, `update package`, `version bump` |
-| Runtime | `deploy`, `undeploy` |
+| Runtime | `deploy`, `undeploy`, `runtimes` (Cloud Integration and integration cells, `runtimes watch`) |
 | Parameters | `params get`, `params set`, `configure`, `configure pull` |
 | Many packages | `orchestrator`, `config-generate` |
 | Tiers | `matrix` (versions per tier), `compare`, `transport` (deps, check, copy) |
@@ -249,9 +260,10 @@ are not written, and reads, uploads and parameter reads run 8 at a time. Details
 | Git | `sync`, `snapshot`, `snapshot restore` |
 | API Management | `sync apiproxy`, `sync apiproduct` |
 | Partner Directory | `pd snapshot`, `pd deploy` |
-| Security | `credentials` (list, set-user, set-oauth2, set-secure-param, apply, delete), `keystore` (list, export-cert, import-cert) |
+| Security | `credentials` (list, set-user, set-oauth2, set-secure-param, delete; `apply` syncs credentials, secure parameters, key pairs, SSH and PGP secret keys [from a vault](docs/vault.md)), `keystore` (list, import/export certificates, key pairs, CSR, chains, SSH keys, history), `pgp`, `access-policies`, `audit-log` |
+| Backup | `backup create`, `verify`, `diff`, `restore` (with `--dry-run` and a plan file) |
 | AI agents | `mcp`, `skills` (list, show, install) |
-| Setup and local | `doctor` (connection and roles), `profile`, `stats` (usage statistics, kept on this machine only) |
+| Setup and local | `doctor` (connection and roles), `profile` (add, show, remove, list, use, current), `auth` (login, logout, status / `whoami`; gateway mode), `stats` (usage statistics, kept on this machine only) |
 
 All commands and flags: [docs/commands.md](docs/commands.md) (generated from the CLI).
 
@@ -476,7 +488,7 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 
 | | |
 |---|---|
-| [Configuration](docs/configuration.md) | Connection, config file, environment variables, OAuth client, [all defaults](docs/configuration.md#defaults) |
+| [Configuration](docs/configuration.md) | Connection, `profile add` (service keys, OS keychain), config file, environment variables, OAuth client, [gateway mode](docs/configuration.md#gateway-mode) (`auth login`), [all defaults](docs/configuration.md#defaults) |
 | [Command reference](docs/commands.md) | All commands and flags |
 | [MCP server](docs/mcp.md) | Agent setup, tools, result format, safety |
 | [Claude Code plugin](docs/plugin.md) | Skills, reviewer agent, tenant conventions |
@@ -486,13 +498,13 @@ Claude Code plugin: [docs/agents.md](docs/agents.md).
 | [Versioning](docs/versioning.md) | Versions in the repository (`Bundle-Version`), `--versioning manifest\|keep\|tenant-bump`, `version bump --changed` |
 | [New flows from templates](docs/new-flows.md) | Templates, briefs, `iflow copy` (what it renames, sender addresses), upload and deploy |
 | [Transports](docs/transport.md) | Moving artifacts between tiers: dependencies, pre-checks against the target, copy between trees |
-| [Compare](docs/compare.md) | Two tiers, Git refs or content trees per artifact: content, version, parameters, file diffs |
+| [Compare](docs/compare.md) | Two tiers, Git refs or content trees per artifact: content, version, parameters, file diffs; [`changed-since`](docs/compare.md#has-the-tenant-changed-changed-since) |
 | [Mock tenant](docs/mock-tenant.md) | An in-memory CPI tenant with a demo landscape per tier, for local development, demos and tests |
 | [Content graph](docs/graph.md) | `.cpi/graph.json`: which flows call which, shared credentials, scripts, PD parameters |
 | [Testing](docs/testing.md) | Test messages by trigger type, test harness, test entries, tracing |
 | [Lint and improvements](docs/lint.md) | `lint` rules, `.cpi/lint.yaml`, [security material](docs/lint.md#security-material) (`secret-*` rules, `secret-scan`), baseline and CI gate, `--fix` (script collections), [diagram layout](docs/lint.md#diagram-layout) (`iflow layout`), the `cpi-improve` skill |
 | [Script comments](docs/script-docs.md) | Comment template for Groovy scripts, how discover, the graph and lint use it, `script-doc` and the agent hook |
-| [Backup and disaster recovery](docs/backup.md) | `backup create`, `verify`, `diff`: what is in a backup, secrets and keys, pipelines to S3 and Azure, rotation |
+| [Backup and disaster recovery](docs/backup.md) | `backup create`, `verify`, `diff`, `restore` (dry run, plan file): what is in a backup, secrets and keys, pipelines to S3 and Azure, rotation |
 | [Deployments](docs/deployments.md) | How deploy, configure and orchestrator wait (one runtime list, one timeout), migrating pipeline settings, `runtimes watch` events and webhooks |
 | [Monitoring and checks](docs/monitoring.md) | Message logs, steps, attachments, payloads, validation, guidelines |
 | [Configure](docs/configure.md) | Parameters from YAML (`configure`, `configure pull`) |

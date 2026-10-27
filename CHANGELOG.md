@@ -8,6 +8,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 - **Names:** *cpicli* is the project, the repository and the Go module (`github.com/cpars-innovation/cpicli`);
   the command is `cpictl`. Both stay as they are; renaming the module would break every Go importer (cpictl
   gateway, CPI Studio). The README now says so in its first lines.
+- **Docs:** the README shows the commands added since 0.29:
+  - `profile add` / `show` / `remove` and the OS keychain;
+  - `auth login` / `logout` / `status` for gateway mode;
+  - `backup restore`, `changed-since` and `runtimes`;
+  - the vault sync with `credentials apply`, and the `pgp`, `access-policies` and `audit-log` commands.
+
+  `docs/compare.md` has a `changed-since` section. `docs/go-api.md` covers designtime changes, security material
+  and backup/restore.
 
 ## 0.33.0
 
