@@ -111,6 +111,7 @@ server: [plugin.md](plugin.md).
 | `--poll-interval` | `10` | Default seconds between deploy/undeploy status checks |
 | `--max-checks` | `30` | Default maximum number of status checks per artifact |
 | `--cache-ttl` | `60` | Seconds `list_packages` / `list_artifacts` results are reused (`0`: no cache). Every tool that changes the tenant clears the cache; results from the cache have `cached: true` |
+| `--all-tools` | `false` | List every tool from the start instead of the core tools plus the rest on demand, see [Tools on demand](#tools-on-demand) |
 | `--read-only` | `false` | Offer only tools that do not change the tenant or trigger processing |
 | `--tools` | all | Offer only these tools: names or patterns, e.g. `list_*,get_*,validate_artifact` |
 | `--disable-tools` | none | Do not offer these tools (names or patterns); wins over `--tools` |
@@ -182,6 +183,26 @@ above) are in no toolset: offer them explicitly with `--tools`. `list_locks` is 
 "cpi-dev":  { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "develop", "--toolset", "build,test"] },
 "cpi-prod": { "command": "cpictl", "args": ["mcp", "--root", ".", "--mode", "discover", "--toolset", "monitor,promote"] }
 ```
+
+### Tools on demand
+
+By default the server lists only the **core tools**: `help`, `doctor`, `list_toolsets`,
+`enable_toolset`, `list_packages`, `list_artifacts`, `list_runtime_artifacts`, `message_summary`,
+`list_message_logs`, `get_message_log` and `get_trace_tree`. That is about 3,400 tokens per turn
+instead of about 26,000 for all 98 tools. Every other tool, including those that change the tenant or
+send messages, comes with its toolset: the agent calls `enable_toolset {"toolsets": ["build"]}`, the
+server lists the tools and sends `notifications/tools/list_changed`, and the result carries the
+toolset's instructions (for `build`: drift before upload, loops, versioning). The mode, filters and
+access scope apply as always, and each tool keeps its own approval in the client.
+
+- **Claude Code** (`clientInfo.name` `claude-code`) gets every tool and the full instructions: it
+  loads tool schemas only when the model needs one, so a short list would only add a round trip.
+  Measured on the mock tenant, sending a test message took 5 turns on demand and 3 with every tool.
+- **Clients that do not reload the tool list** on `tools/list_changed`: start the server with
+  `--all-tools` (or `CPICTL_ALL_TOOLS=true`, `all-tools: true` in `cpictl.yaml`). The symptom is
+  that `enable_toolset` reports `addedTools` but the agent cannot call them.
+- `--toolset`, `--tools` and `--dynamic-toolsets` choose the tools instead: with one of them the
+  server lists what it names.
 
 ### Dynamic toolsets
 

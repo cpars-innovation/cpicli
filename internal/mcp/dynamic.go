@@ -20,12 +20,31 @@ const OtherToolset = "other"
 // dynamicCore are listed from the start in dynamic mode.
 var dynamicCore = []string{"help", "doctor", "list_toolsets", "enable_toolset"}
 
+// CoreTools are listed from the start when the server loads tools on demand
+// (the default): finding your way, and reading the tenant and its messages.
+// Tools that change the tenant come with their toolset (enable_toolset), and
+// with it its instructions.
+var CoreTools = append(slices.Clone(dynamicCore), "list_packages", "list_artifacts", "list_runtime_artifacts",
+	"message_summary", "list_message_logs", "get_message_log", "get_trace_tree")
+
 // dynamicState is the toolset state of a server in dynamic mode.
 type dynamicState struct {
 	mu      sync.Mutex
 	sets    map[string][]string // toolset → available tools, in server order
 	enabled map[string]bool     // enabled toolsets
+	core    []string            // listed from the start
+	// all: every tool is listed, for a client that loads tool schemas on
+	// demand itself (see deferringClients)
+	all bool
+	// allInstructions are the instructions when all tools are listed
+	allInstructions string
 }
+
+// deferringClients load the schemas of MCP tools only when the model needs
+// one (Claude Code's tool search). Listing a few tools and enabling the rest
+// would only add a round trip for them, so in on-demand mode they get every
+// tool. Matched against clientInfo.name of initialize.
+var deferringClients = map[string]bool{"claude-code": true}
 
 // UseDynamicToolsets switches the server to dynamic toolsets: tools/list
 // starts with help, doctor, list_toolsets and enable_toolset (plus the
@@ -34,11 +53,40 @@ type dynamicState struct {
 // the tools the server already has (after mode and filters) can be
 // enabled. Call before Serve.
 func (s *Server) UseDynamicToolsets(initial []string) error {
+	return s.useDynamic(initial, dynamicCore)
+}
+
+// UseOnDemandTools is UseDynamicToolsets with CoreTools listed from the
+// start. A client that loads tool schemas on demand itself gets every tool
+// and allInstructions instead.
+func (s *Server) UseOnDemandTools(initial []string, allInstructions string) error {
+	if err := s.useDynamic(initial, CoreTools); err != nil {
+		return err
+	}
+	s.dynamic.allInstructions = allInstructions
+	return nil
+}
+
+// clientInitialized switches an on-demand server to every tool for a
+// client that defers tool schemas itself; it returns the instructions for
+// the client.
+func (s *Server) clientInitialized(client string) string {
+	d := s.dynamic
+	if d == nil || d.allInstructions == "" || !deferringClients[client] {
+		return s.Instructions
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.all = true
+	return d.allInstructions
+}
+
+func (s *Server) useDynamic(initial, core []string) error {
 	available := map[string]bool{}
 	for _, t := range s.tools {
 		available[t.Name] = true
 	}
-	d := &dynamicState{sets: map[string][]string{}, enabled: map[string]bool{}}
+	d := &dynamicState{sets: map[string][]string{}, enabled: map[string]bool{}, core: core}
 	inSome := map[string]bool{}
 	for name, tools := range Toolsets {
 		for _, t := range s.tools {
@@ -67,8 +115,18 @@ func (s *Server) UseDynamicToolsets(initial []string) error {
 
 // DynamicInstructions explains dynamic toolsets to the agent.
 func DynamicInstructions() string {
+	return toolsetInstructions("at the start only help, doctor, list_toolsets and enable_toolset are listed.")
+}
+
+// OnDemandInstructions explains the on-demand tool list to the agent.
+func OnDemandInstructions() string {
+	return toolsetInstructions("at the start only the core tools are listed (" + strings.Join(CoreTools, ", ") +
+		"); every other tool, including those that change the tenant or send messages, comes with its toolset.")
+}
+
+func toolsetInstructions(start string) string {
 	var b strings.Builder
-	b.WriteString("\n\nDynamic toolsets: at the start only help, doctor, list_toolsets and enable_toolset are listed. " +
+	b.WriteString("\n\nTools on demand: " + start + " " +
 		"Before working on a task, call enable_toolset with the toolset(s) it needs; their tools are then listed " +
 		"(the client is notified) and the result carries the instructions for them. Enable only what the task needs. Toolsets:")
 	for _, n := range ToolsetNames() {
@@ -96,8 +154,17 @@ func (s *Server) offeredTools() []Tool {
 	}
 	s.dynamic.mu.Lock()
 	defer s.dynamic.mu.Unlock()
+	if s.dynamic.all {
+		out := []Tool{}
+		for _, t := range s.tools {
+			if t.Name != "list_toolsets" && t.Name != "enable_toolset" && !s.hidden(t) {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
 	listed := map[string]bool{}
-	for _, n := range dynamicCore {
+	for _, n := range s.dynamic.core {
 		listed[n] = true
 	}
 	for set := range s.dynamic.enabled {
@@ -123,7 +190,14 @@ func (s *Server) EnabledToolsets() []string {
 	s.dynamic.mu.Lock()
 	defer s.dynamic.mu.Unlock()
 	names := []string{}
-	for n, on := range s.dynamic.enabled {
+	sets := s.dynamic.enabled
+	if s.dynamic.all {
+		sets = map[string]bool{}
+		for n := range s.dynamic.sets {
+			sets[n] = true
+		}
+	}
+	for n, on := range sets {
 		if on {
 			names = append(names, n)
 		}

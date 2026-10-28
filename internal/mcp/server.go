@@ -243,8 +243,12 @@ func (s *Server) dispatch(ctx context.Context, line []byte, wg *sync.WaitGroup) 
 func (s *Server) initialize(params json.RawMessage) any {
 	var p struct {
 		ProtocolVersion string `json:"protocolVersion"`
+		ClientInfo      struct {
+			Name string `json:"name"`
+		} `json:"clientInfo"`
 	}
 	_ = json.Unmarshal(params, &p)
+	instructions := s.clientInitialized(p.ClientInfo.Name)
 	version := SupportedProtocolVersions[0]
 	if slices.Contains(SupportedProtocolVersions, p.ProtocolVersion) {
 		version = p.ProtocolVersion
@@ -254,7 +258,7 @@ func (s *Server) initialize(params json.RawMessage) any {
 		"capabilities": map[string]any{"tools": map[string]any{"listChanged": s.dynamic != nil},
 			"resources": map[string]any{"subscribe": false, "listChanged": false}},
 		"serverInfo":   map[string]any{"name": s.Name, "version": s.Version},
-		"instructions": s.Instructions,
+		"instructions": instructions,
 	}
 }
 

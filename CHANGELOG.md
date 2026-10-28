@@ -11,7 +11,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 |---|---|---|
 | `help` without topic | ≈17,000 tok | ≈2,300 tok |
 | `list_message_logs`, 50 rows | ≈5,200 tok | ≈2,600 tok |
-| Tool list + instructions per turn (98 tools) | ≈28,400 tok | ≈26,000 tok |
+| Tool list + instructions per turn, default (clients other than Claude Code) | ≈28,400 tok | ≈3,400 tok |
+| Tool list + instructions per turn, every tool (`--all-tools`, Claude Code) | ≈28,400 tok | ≈26,000 tok |
 | Start with `--dynamic-toolsets` | ≈3,700 tok | ≈1,200 tok |
 | A 40 KB payload | ≈11,000 tok | ≈4,500 tok inline, or ≈60 tok with `save_to` |
 
@@ -30,14 +31,26 @@ All notable changes to cpictl. Coming from FlashPipe? See
     refused with `--redact-payloads`.
 - **Dynamic toolsets:** the instructions start with the general part and the toolsets enabled at the start.
   `enable_toolset` returns the instructions of the toolsets it enables.
+- **Tools on demand by default:** `cpictl mcp` lists 11 core tools (help, doctor, the toolset tools, packages,
+  artifacts, runtime status, message summary and logs, one log, trace tree): ≈3,400 tokens per turn instead of
+  ≈26,000. The agent enables the other toolsets with `enable_toolset`, which lists their tools
+  (`tools/list_changed`) and returns their instructions. Tools that change the tenant come only that way, together
+  with the build and test instructions.
+  - **Claude Code** gets every tool, as before: it loads tool schemas on demand itself, and a short list only added
+    a round trip (5 turns instead of 3 to send a test message on the mock tenant).
+  - **`--all-tools`** (`CPICTL_ALL_TOOLS`) lists every tool from the start, for clients that do not reload the tool
+    list. `--toolset`, `--tools` and `--dynamic-toolsets` keep working as before.
 
 **What to do:**
 - **Agents and skills:** call `help` for the index and `help {"topic": "<tool>"}` before the first use of an
   unfamiliar tool. Use `save_to` for payloads you only search or compare. Use `detail: "full"` only when you need
   a field the lean rows leave out.
-- **Clients that put every tool into every request** (most IDE agents): start the server with `--toolset` for
-  the task, or with `--dynamic-toolsets`. The full tool list costs ≈26,000 tokens per turn; `--toolset monitor`
-  costs ≈8,000, and `--dynamic-toolsets` ≈1,200 at the start.
+- **MCP client configurations:** nothing to change for Claude Code. For other clients the default is now core
+  tools plus `enable_toolset`. If an agent reports that `enable_toolset` added tools it cannot call, add
+  `--all-tools` to the server arguments.
+- **Studio and the gateway:** if you start `cpictl mcp` for your own agent loop and read `tools/list` once, pass
+  `--all-tools` (or `--toolset` for the task), or handle `notifications/tools/list_changed`. With the Anthropic API,
+  `--all-tools` plus deferred tool loading on your side is the cheapest.
 - **Code that reads `help` without topic** (Studio, gateway): read the topics (`server`, `tools`, `toolsets`,
   `workflows`, `skills`, `cli`). The index has a different shape.
 - **Code that reads `list_message_logs` rows from MCP:** pass `detail: "full"` for the former rows. The Go API

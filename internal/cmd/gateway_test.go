@@ -204,7 +204,7 @@ func TestGatewayMCPToolsByScope(t *testing.T) {
 		viper.Reset()
 		t.Cleanup(viper.Reset)
 		var stdout, stderr bytes.Buffer
-		code := Run(context.Background(), append([]string{"--profile", "gw", "mcp", "--mode", "full"}, extra...), &stdout, &stderr, "test", "test")
+		code := Run(context.Background(), append([]string{"--profile", "gw", "mcp", "--mode", "full", "--all-tools"}, extra...), &stdout, &stderr, "test", "test")
 		require.Equal(t, 0, code, stderr.String())
 		return stdout.String(), stderr.String()
 	}

@@ -2638,10 +2638,17 @@ Limit the tools per server, e.g. for a QA or production tenant:
   --disable-tools undeploy,pd_*   everything except these
   --opt-in delete_artifact        also offer an opt-in tool (unlock_artifact, delete_*), keeping the rest
   --toolset build,test            only the tools of these tasks
-  --dynamic-toolsets              start with a few tools; the agent enables toolsets as needed
+  --dynamic-toolsets              start with only help, doctor and the toolset tools
+  --all-tools                     list every tool from the start (clients without tools/list_changed)
+
+By default the server lists the core tools (help, doctor, toolsets, packages,
+artifacts, runtime status, message logs, trace tree) and the agent enables the
+other toolsets as it needs them (enable_toolset; the client must support
+tools/list_changed). --toolset, --tools, --dynamic-toolsets and --all-tools
+choose the tools instead.
   --mode discover|operate|develop|full presets (combined with the above, the most
                                   restrictive wins)
-Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS, CPICTL_OPT_IN. Disabled tools are not
+Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_ALL_TOOLS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS, CPICTL_OPT_IN. Disabled tools are not
 listed; a call to one is an error result (errorCategory usage) that says why; a
 pattern that matches no tool is an error.
 
@@ -2670,6 +2677,7 @@ CPICTL_* environment variables.
 **Flags:**
 
 ```
+      --all-tools                           List every tool from the start (about 26,000 tokens per turn), for clients that do not reload the tool list on tools/list_changed. Default: the core tools, the rest on demand (enable_toolset)
       --branch-policy string                Policy file (YAML or JSON): tools that change the tenant are refused while a repository under --root is on a read-only branch (off without it)
       --cache-ttl int                       Seconds list_packages and list_artifacts results are reused (0: no cache); any tool that changes the tenant clears them (default 60)
       --disable-tools strings               Do not offer these tools (names or patterns); wins over --tools

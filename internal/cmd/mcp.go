@@ -45,10 +45,17 @@ Limit the tools per server, e.g. for a QA or production tenant:
   --disable-tools undeploy,pd_*   everything except these
   --opt-in delete_artifact        also offer an opt-in tool (unlock_artifact, delete_*), keeping the rest
   --toolset build,test            only the tools of these tasks
-  --dynamic-toolsets              start with a few tools; the agent enables toolsets as needed
+  --dynamic-toolsets              start with only help, doctor and the toolset tools
+  --all-tools                     list every tool from the start (clients without tools/list_changed)
+
+By default the server lists the core tools (help, doctor, toolsets, packages,
+artifacts, runtime status, message logs, trace tree) and the agent enables the
+other toolsets as it needs them (enable_toolset; the client must support
+tools/list_changed). --toolset, --tools, --dynamic-toolsets and --all-tools
+choose the tools instead.
   --mode discover|operate|develop|full presets (combined with the above, the most
                                   restrictive wins)
-Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS, CPICTL_OPT_IN. Disabled tools are not
+Also as CPICTL_MODE, CPICTL_TOOLSET, CPICTL_DYNAMIC_TOOLSETS, CPICTL_ALL_TOOLS, CPICTL_READ_ONLY, CPICTL_TOOLS, CPICTL_DISABLE_TOOLS, CPICTL_OPT_IN. Disabled tools are not
 listed; a call to one is an error result (errorCategory usage) that says why; a
 pattern that matches no tool is an error.
 
@@ -133,6 +140,14 @@ CPICTL_* environment variables.`,
 				OptIn: config.GetStringSlice(cmd, "opt-in")}
 			toolsets := config.GetStringSlice(cmd, "toolset")
 			dynamic := config.GetBool(cmd, "dynamic-toolsets")
+			allTools := config.GetBool(cmd, "all-tools")
+			if allTools && dynamic {
+				return output.Usagef("--all-tools and --dynamic-toolsets exclude each other")
+			}
+			// by default the core tools are listed and the rest on demand;
+			// a tool selection of the user's lists exactly that
+			onDemand := !allTools && !dynamic && len(toolsets) == 0 && len(filter.Allow) == 0
+			dynamic = dynamic || onDemand
 			if len(toolsets) > 0 && !dynamic {
 				names, err := mcp.ToolsetTools(toolsets)
 				if err != nil {
@@ -193,12 +208,22 @@ CPICTL_* environment variables.`,
 			} else {
 				instructions = mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
 			}
-			if dynamic {
+			switch {
+			case onDemand:
+				instructions += mcp.OnDemandInstructions()
+			case dynamic:
 				instructions += mcp.DynamicInstructions()
 			}
 			server = mcp.NewServer("cpicli", version, instructions, tools)
 			server.Removed, server.Redactor, server.Root = reasons, redactor, root
-			if dynamic {
+			if onDemand {
+				// a client that loads tool schemas on demand itself gets
+				// every tool, with the instructions for all of them
+				all := mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
+				if err := server.UseOnDemandTools(nil, all); err != nil {
+					return err
+				}
+			} else if dynamic {
 				if err := server.UseDynamicToolsets(toolsets); err != nil {
 					return err
 				}
@@ -219,6 +244,7 @@ CPICTL_* environment variables.`,
 	c.Flags().Bool("read-only", false, "Offer only tools that do not change the tenant or trigger processing")
 	c.Flags().StringSlice("tools", nil, "Offer only these tools (names or patterns such as list_*)")
 	c.Flags().StringSlice("toolset", nil, "Offer only the tools of these tasks: "+strings.Join(mcp.ToolsetNames(), ", ")+" (combined with --tools; the mode still applies)")
+	c.Flags().Bool("all-tools", false, "List every tool from the start (about 26,000 tokens per turn), for clients that do not reload the tool list on tools/list_changed. Default: the core tools, the rest on demand (enable_toolset)")
 	c.Flags().Bool("dynamic-toolsets", false, "List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start")
 	c.Flags().StringSlice("opt-in", nil, "Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does")
 	c.Flags().StringSlice("disable-tools", nil, "Do not offer these tools (names or patterns); wins over --tools")
