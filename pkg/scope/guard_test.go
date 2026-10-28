@@ -640,3 +640,37 @@ func TestGuardRefusesChosenCorrelation(t *testing.T) {
 		assert.Contains(t, r.Error(), "correlation group")
 	}
 }
+
+// IDs in a payload are not recorded (#52): a team that shapes its own
+// payload as {"Id":"<foreign ID>"} must not be able to download that ID,
+// and payloads are streamed (no answer check).
+func TestGuardPayloadIDsAreNotRecorded(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	logs := `{"d":{"results":[{"MessageGuid":"G1","IntegrationArtifact":{"Id":"SD_A","PackageId":"SD_Orders"}}]}}`
+	_, err := g.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
+	require.NoError(t, err)
+	list := req("GET", "/api/v1/MessageProcessingLogs('G1')/Attachments", "")
+	require.NoError(t, g.Before(list))
+	_, err = g.After(list, 200, nil, []byte(`{"d":{"results":[{"Id":"ATT_G1"}]}}`))
+	require.NoError(t, err)
+
+	victim := req("GET", "/api/v1/MessageProcessingLogAttachments('ATT_FI_SECRET')/$value", "")
+	refused(t, g.Before(victim))
+	for _, own := range []string{
+		"/api/v1/MessageProcessingLogAttachments('ATT_G1')/$value",
+	} {
+		r := req("GET", own, "")
+		require.NoError(t, g.Before(r))
+		c, err := g.Check(r)
+		require.NoError(t, err)
+		assert.False(t, c.ReadsAnswer, "a payload is streamed, not checked")
+		_, err = g.After(r, 200, nil, []byte(`{"Id":"ATT_FI_SECRET","MessageGuid":"G_FI","RunId":"R_FI"}`))
+		require.NoError(t, err)
+	}
+	refused(t, g.Before(victim))
+	refused(t, g.Before(req("GET", "/api/v1/MessageStoreEntries('ATT_FI_SECRET')/$value", "")))
+
+	c, err := g.Check(list)
+	require.NoError(t, err)
+	assert.True(t, c.ReadsAnswer, "SAP's lists are still recorded")
+}

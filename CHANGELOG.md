@@ -5,6 +5,21 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.1
+
+- **Security (access scope, #52):** reading a payload (`MessageProcessingLogAttachments(…)/$value`,
+  `MessageStoreEntries(…)/$value`, `TraceMessages(…)/$value`) registered the IDs found in the payload as children of
+  the reading team's flow. A team that shapes its own payload as `{"Id":"<foreign attachment ID>"}` could then
+  download another team's attachment, persisted message or trace payload by that ID. IDs are now recorded only from
+  SAP's lists (attachments, message store entries, runs, steps), never from a payload. Found by the cpictl gateway
+  team.
+- **Payloads are streamed under a scope:** the guard no longer reads a payload's answer (`Checked.ReadsAnswer` is
+  false for `$value`), so the gateway streams it instead of buffering it (it refused answers over 64 MiB that it
+  had to check).
+
+**What to do:** update to 0.35.1 wherever an access scope is used: the cpictl gateway, `cpictl mcp --scope-file`, and
+Studio's backend if it uses `pkg/scope`.
+
 ## 0.35.0
 
 From two agent-test handoffs ("next token reductions" and "how results get to the agent"). MCP only: the CLI's

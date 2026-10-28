@@ -681,7 +681,14 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		if strings.Contains(mm[3], "$value") || strings.Contains(mm[3], "TraceMessages") || mm[1] == "TraceMessages" {
 			action = ActionDownload
 		}
-		return decision{need: []need{{res: Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action: action}}, record: (*Guard).recordChildren}, nil
+		d := decision{need: []need{{res: Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action: action}}}
+		// IDs are recorded from SAP's lists only: a $value answer is the
+		// payload the flow wrote, and IDs in it must not become children of
+		// the flow (#52); the payload is then streamed, not buffered
+		if !strings.Contains(mm[3], "$value") {
+			d.record = (*Guard).recordChildren
+		}
+		return d, nil
 	case p == "MessageProcessingLogCustomHeaderProperties":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
 			var logs []map[string]any
