@@ -828,3 +828,19 @@ func TestGuardEndpointOfAnotherTeamBelowAnAllowedOne(t *testing.T) {
 		assert.Contains(t, r.Error(), "could not be read")
 	}
 }
+
+// A guard without Fetch cannot read every flow's entry points or a flow's
+// runtime state: test messages are refused, not decided on partial data.
+func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd/orders"}]}}]}}`
+	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
+	require.NoError(t, err)
+	g.Fetch = nil
+	g.mu.Lock()
+	g.epBuiltAt = time.Time{}
+	g.mu.Unlock()
+	r := refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd/orders"}))
+	assert.Contains(t, r.Error(), "no Fetch")
+	assert.Contains(t, g.runsAsRead(context.Background(), "SD_A"), "no Fetch")
+}

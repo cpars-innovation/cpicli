@@ -908,8 +908,11 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 	g.mu.Lock()
 	fresh := !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
 	g.mu.Unlock()
-	if fresh || g.Fetch == nil {
+	switch {
+	case fresh:
 		return nil
+	case g.Fetch == nil:
+		return errors.New("the guard has no Fetch")
 	}
 	body, err := g.Fetch(internal(ctx), "/api/v1/ServiceEndpoints?$expand=EntryPoints")
 	if err != nil {
@@ -1000,6 +1003,9 @@ func (g *Guard) processDirectFlow(ctx context.Context, addr string) string {
 // version, may not listen on the address at all, and another team's flow
 // might.
 func (g *Guard) runsAsRead(ctx context.Context, flow string) string {
+	if g.Fetch == nil {
+		return "the guard has no Fetch to read it"
+	}
 	ictx := internal(ctx)
 	entity := func(path string) map[string]any {
 		b, err := g.Fetch(ictx, path)

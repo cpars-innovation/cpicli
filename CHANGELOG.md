@@ -18,7 +18,8 @@ only). All six findings were reproduced, fixed, and covered by tests that fail o
 - **An entry point no longer opens another team's endpoint below it (high).** A flow's entry point `/http/api/*`
   (or `/http/api`) covered `/http/api/hr` of another team's flow. A URL now goes to the flow with the most specific
   entry point that covers it, among every flow of the tenant: the guard reads `ServiceEndpoints` itself (cached for
-  30 seconds). Equally specific entry points of two flows, or a list it cannot read: refused.
+  30 seconds). Equally specific entry points of two flows, or a list it cannot read: refused. A `scope.Guard`
+  without `Fetch` now refuses test messages (it cannot read the list).
 - **A runtime secret no longer follows `CPICTL_RUNTIME_OAUTH_HOST` (medium).** The 0.34.1 check compared only the
   hosts a profile sets. A profile without `runtime-oauth-host` sends its runtime secret to `oauth-host`; setting
   `CPICTL_RUNTIME_OAUTH_HOST` alone sent it to that host. Each secret is now checked against the host it would
