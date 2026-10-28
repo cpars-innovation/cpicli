@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.0
+
 From two agent-test handoffs ("next token reductions" and "how results get to the agent"). MCP only: the CLI's
 `--json` output and the Go API are unchanged.
 
