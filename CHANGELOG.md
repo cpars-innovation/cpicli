@@ -5,6 +5,22 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.6
+
+From the cpictl gateway's verification of 0.35.5 (cpicli#54):
+
+- **A refused test message no longer tells whose endpoint it hit.** Since 0.35.3, a URL below another team's entry
+  point was refused with "test of artifact <their flow> is not granted", while an unknown URL said "not an entry
+  point". A caller could probe URLs and learn which addresses exist and the flow IDs behind them. Now an endpoint
+  of a flow the scope may not read is refused with the same text as an unknown one, as is a URL that two flows
+  cover equally. A flow the scope may read but not test is still named.
+- **`pkg/scope` no longer links the API client.** It imported `pkg/cpi` for the OData time parser alone, which
+  brought `github.com/go-errors/errors` and more into programs that embed the guard. The parser is in the new leaf
+  package `pkg/odatatime`; `cpi.ParseODataTime` stays and calls it. A test keeps `pkg/cpi` out of `pkg/scope`'s
+  dependencies.
+
+**What to do:** update to 0.35.6 where an access scope is used (the cpictl gateway, Studio's backend).
+
 ## 0.35.5
 
 - **Test messages in gateway mode reach the gateway's runtime proxy.** cpictl sent them to

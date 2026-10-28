@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os/exec"
 	"path"
 	"regexp"
 	"strings"
@@ -849,8 +850,23 @@ func TestGuardEndpointMostSpecificWins(t *testing.T) {
 	assert.NoError(t, send("/http/sd/orders"))
 	assert.NoError(t, send("/http/sd/orders/x"))
 	assert.NoError(t, send("/http/shared"))
-	refused(t, send("/http/shared/billing"))
-	refused(t, send("/http/sd/other")) // FI_B's wildcard
+	// another team's endpoint is refused like one that does not exist: the
+	// same text, without the flow (cpicli#54)
+	other := refused(t, send("/http/shared/billing")).Error()
+	none := refused(t, send("/nowhere")).Error()
+	assert.Equal(t, strings.Replace(none, "/nowhere", "/http/shared/billing", 1), other)
+	assert.NotContains(t, other, "FI_B")
+	assert.NotContains(t, refused(t, send("/http/sd/other")).Error(), "FI_B") // FI_B's wildcard
+}
+
+// pkg/scope runs in the gateway: it must not link the API client
+// (cpicli#54).
+func TestScopeDoesNotImportTheClient(t *testing.T) {
+	out, err := exec.Command("go", "list", "-deps", ".").Output()
+	require.NoError(t, err)
+	for _, dep := range []string{"github.com/cpars-innovation/cpicli/pkg/cpi", "github.com/go-errors/errors"} {
+		assert.NotContains(t, strings.Fields(string(out)), dep)
+	}
 }
 
 // A guard without Fetch cannot read every flow's entry points or a flow's

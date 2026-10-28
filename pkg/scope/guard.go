@@ -20,8 +20,8 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
-	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/odatatime"
 	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
 
@@ -914,9 +914,31 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 		}
 		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: to}, action: ActionTest}}}, nil
 	}
-	// the entry point was seen in a list of flows the scope may read; with
-	// grants, read on a package does not mean test on it
+	// another team's endpoint is refused like one that does not exist: the
+	// refusal must not tell which addresses exist and whose flows they reach
+	// (cpicli#54). With grants, read on a package does not mean test on it.
+	// A flow the scope may read is named (the caller sees it anyway).
+	if !g.mayTest(r.Ctx, flow) && !g.mayRead(r.Ctx, flow) {
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " " + notAnEntryPoint})
+	}
 	return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: flow}, action: ActionTest}}}, nil
+}
+
+const notAnEntryPoint = "is not an entry point of a flow in the scope"
+
+// mayTest and mayRead report whether the scope grants test or read on a
+// flow, as check decides it, without a refusal.
+func (g *Guard) mayTest(ctx context.Context, id string) bool { return g.mayOnFlow(ctx, id, ActionTest) }
+func (g *Guard) mayRead(ctx context.Context, id string) bool { return g.mayOnFlow(ctx, id, ActionRead) }
+
+func (g *Guard) mayOnFlow(ctx context.Context, id, action string) bool {
+	switch {
+	case !ValidID(id):
+		return false
+	case toolingFlow(id):
+		return g.Scope.Grants(ActionTest)
+	}
+	return g.Scope.Allows(Resource{Kind: KindArtifact, ID: id, Package: g.packageOf(ctx, id)}, action)
 }
 
 // endpointOwner returns the flow a runtime URL reaches: the flow of the most
@@ -948,11 +970,10 @@ func (g *Guard) endpointOwner(ctx context.Context, target string) (string, strin
 	}
 	consider(g.allEndpoints)
 	consider(g.endpoints)
-	switch {
-	case best < 0:
-		return "", "is not an entry point of a flow in the scope"
-	case len(owners) > 1:
-		return "", "is covered equally by entry points of several flows"
+	// two flows equally specific: refused, with the text of an unknown
+	// endpoint (the caller learns nothing about the other flow)
+	if best < 0 || len(owners) > 1 {
+		return "", notAnEntryPoint
 	}
 	for f := range owners {
 		return f, ""
@@ -1107,8 +1128,8 @@ func (g *Guard) runsAsRead(ctx context.Context, flow string) string {
 	if rv, dv := str(rt, "Version"), str(dt, "Version"); rv == "" || rv != dv {
 		return fmt.Sprintf("it runs version %q, the designtime artifact is version %q; deploy it first", rv, dv)
 	}
-	deployed, err1 := cpi.ParseODataTime(str(rt, "DeployedOn"))
-	modified, err2 := cpi.ParseODataTime(str(dt, "ModifiedAt"))
+	deployed, err1 := odatatime.Parse(str(rt, "DeployedOn"))
+	modified, err2 := odatatime.Parse(str(dt, "ModifiedAt"))
 	switch {
 	case err1 != nil || err2 != nil || deployed.IsZero() || modified.IsZero():
 		return "the tenant does not report when it was deployed and last changed"
