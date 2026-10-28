@@ -61,6 +61,22 @@ func TestProjectConfig(t *testing.T) {
 		t.Setenv("CPICTL_TMN_PASSWORD", "")
 	})
 
+	// the home file has no runtime-oauth-host: its runtime secret goes to
+	// oauth-host, and a project file must not name another one (asked by the
+	// gateway team after the second security review of 0.35.1)
+	t.Run("runtime token host the home file leaves unset", func(t *testing.T) {
+		home, repo := t.TempDir(), t.TempDir()
+		writeModeFile(t, filepath.Join(home, "cpictl.yaml"), "tmn-host: "+tenant+"\ntmn-userid: user\ntmn-password: secret\n"+
+			"runtime-oauth-clientid: rt-client\nruntime-oauth-clientsecret: made-up-runtime-secret\n", 0o600)
+		writeModeFile(t, filepath.Join(repo, "cpictl.yaml"), "runtime-oauth-host: tokens.attacker.example\n", 0o644)
+		before := len(mock.Requests())
+		code, stderr := projectRun(t, home, repo, "send", "--artifact-id", "A")
+		assert.Equal(t, 2, code)
+		assert.Contains(t, stderr, "sets runtime-oauth-host")
+		assert.NotContains(t, stderr, "made-up-runtime-secret")
+		assert.Len(t, mock.Requests(), before)
+	})
+
 	t.Run("secrets are refused", func(t *testing.T) {
 		home, repo := t.TempDir(), t.TempDir()
 		writeModeFile(t, filepath.Join(repo, "cpictl.yaml"), "tmn-host: "+tenant+"\ntmn-userid: user\ntmn-password: secret\n", 0o600)

@@ -5,6 +5,25 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.4
+
+Availability of the access scope's artifact map (cpicli#53, found by the cpictl gateway's verification). The
+security issue in #53 (an entry point covering another team's endpoint below it) was fixed in 0.35.3.
+
+- **A failed or cancelled rebuild no longer locks users out.** A failed call stored an empty or partial map for 30
+  seconds, and a rebuild ran on the request's context, so one cancelled request failed it for everyone. Now:
+  - the rebuild runs detached, with its own 2-minute limit;
+  - a failed rebuild keeps the last good map, for at most 5 minutes after it was built, and is retried after
+    5 seconds; after that, artifacts are refused until a rebuild succeeds;
+  - any failed call fails the whole rebuild (a partial map would drop artifacts).
+- **One rebuild at a time.** Concurrent requests wait for the running rebuild instead of each starting their own.
+- **Faster rebuilds.** The artifacts of the allowed packages are listed 8 packages at a time instead of one call
+  after the other.
+- A project `cpictl.yaml` that sets `runtime-oauth-host` while the runtime secret comes from `$HOME/cpictl.yaml`
+  or a profile was already refused; a test now covers it.
+
+**What to do:** update to 0.35.4 where an access scope is used (the cpictl gateway, Studio's backend).
+
 ## 0.35.3
 
 Fixes from the second independent security review of 0.35.1 (run alongside the first, again on the mock tenant

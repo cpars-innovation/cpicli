@@ -75,8 +75,10 @@ type Guard struct {
 	ProcessDirectAddresses func(ctx context.Context, artifactID string) ([]string, error)
 
 	mu           sync.Mutex
-	artifacts    map[string]string // artifact ID -> package (allowed packages only)
-	builtAt      time.Time
+	artifacts    map[string]string    // artifact ID -> package (allowed packages only)
+	builtAt      time.Time            // last successful build of artifacts
+	failedAt     time.Time            // last failed build (zero after a success)
+	building     chan struct{}        // closed when the running build ends
 	messages     map[string]string    // message GUID -> flow, for messages seen in allowed answers (a tooling message: the flow it tested)
 	children     map[string]string    // IDs of runs, steps, traces, attachments, store entries -> flow of their message
 	tooling      map[string]bool      // message GUIDs and child IDs of tooling messages: decided with "test" on the flow tested
@@ -248,25 +250,73 @@ var designtimeTypes = []string{"Integration", "ValueMapping", "MessageMapping", 
 
 // packageOf returns the package of an artifact in an allowed package, or "".
 // It lists the artifacts of the allowed packages (a few calls) instead of
-// every package; an unknown ID rebuilds the map at most every Refresh.
+// every package; the map is rebuilt when it is older than Refresh.
+//
+// One rebuild runs at a time; other callers wait for it. A rebuild runs
+// detached from the caller's context, so a cancelled request does not fail
+// it for everyone. A failed rebuild keeps the last good map, retried after
+// mapRetry; that map is trusted at most mapMaxStale after it was built,
+// then lookups are refused until a rebuild succeeds.
 func (g *Guard) packageOf(ctx context.Context, id string) string {
-	g.mu.Lock()
-	pkg := g.artifacts[id]
-	stale := g.artifacts == nil || time.Since(g.builtAt) > cmpDuration(g.Refresh, 30*time.Second)
-	g.mu.Unlock()
-	// a known artifact is trusted only while the map is fresh: an artifact
-	// that moved to another package (or was deleted and created again
-	// elsewhere) must not keep the access its old package gave
-	if !stale || g.Fetch == nil {
-		return pkg
+	for {
+		g.mu.Lock()
+		pkg := g.artifacts[id]
+		age := time.Since(g.builtAt)
+		fresh := g.artifacts != nil && age <= cmpDuration(g.Refresh, 30*time.Second)
+		// a known artifact is trusted only while the map is fresh: an
+		// artifact that moved to another package (or was deleted and
+		// created again elsewhere) must not keep the access its old
+		// package gave
+		if fresh || g.Fetch == nil {
+			g.mu.Unlock()
+			return pkg
+		}
+		if !g.failedAt.IsZero() && time.Since(g.failedAt) < mapRetry {
+			g.mu.Unlock()
+			if g.artifacts != nil && age <= max(mapMaxStale, g.Refresh) {
+				return pkg
+			}
+			return ""
+		}
+		if ch := g.building; ch != nil {
+			g.mu.Unlock()
+			select {
+			case <-ch:
+				continue
+			case <-ctx.Done():
+				return ""
+			}
+		}
+		ch := make(chan struct{})
+		g.building = ch
+		g.mu.Unlock()
+
+		bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mapBuildTimeout)
+		m, err := g.buildArtifactMap(bctx)
+		cancel()
+		g.mu.Lock()
+		if err == nil {
+			g.artifacts, g.builtAt, g.failedAt = m, time.Now(), time.Time{}
+		} else {
+			g.failedAt = time.Now()
+		}
+		g.building = nil
+		g.mu.Unlock()
+		close(ch)
 	}
-	m := g.buildArtifactMap(ctx)
-	g.mu.Lock()
-	g.artifacts, g.builtAt = m, time.Now()
-	pkg = m[id]
-	g.mu.Unlock()
-	return pkg
 }
+
+const (
+	// mapRetry is the pause after a failed rebuild of the artifact map.
+	mapRetry = 5 * time.Second
+	// mapMaxStale is how long the last good artifact map is used while
+	// rebuilds fail.
+	mapMaxStale = 5 * time.Minute
+	// mapBuildTimeout limits one rebuild.
+	mapBuildTimeout = 2 * time.Minute
+	// mapParallel is how many packages a rebuild lists at once.
+	mapParallel = 8
+)
 
 // pdMaxAge is how long a known ProcessDirect address is trusted without a
 // rebuild of the address map.
@@ -279,32 +329,55 @@ func cmpDuration(d, def time.Duration) time.Duration {
 	return def
 }
 
-func (g *Guard) buildArtifactMap(ctx context.Context) map[string]string {
-	m := map[string]string{}
+// buildArtifactMap lists the artifacts of every allowed package. Any failed
+// call fails the whole map: a partial map would drop artifacts.
+func (g *Guard) buildArtifactMap(ctx context.Context) (map[string]string, error) {
 	ctx = internal(ctx)
 	// the package list takes no $select on a tenant ("$select is not supported")
 	body, err := g.Fetch(ctx, "/api/v1/IntegrationPackages")
 	if err != nil {
-		return m
+		return nil, err
 	}
+	var pkgs []string
 	for _, p := range results(body) {
-		pkg, _ := p["Id"].(string)
-		if !g.Scope.SeesPackage(pkg) {
-			continue
-		}
-		for _, t := range designtimeTypes {
-			b, err := g.Fetch(ctx, "/api/v1/IntegrationPackages("+httpKey(pkg)+")/"+t+"DesigntimeArtifacts?$select=Id")
-			if err != nil {
-				continue
-			}
-			for _, a := range results(b) {
-				if id, _ := a["Id"].(string); id != "" {
-					m[id] = pkg
-				}
-			}
+		if pkg, _ := p["Id"].(string); g.Scope.SeesPackage(pkg) {
+			pkgs = append(pkgs, pkg)
 		}
 	}
-	return m
+	var (
+		mu    sync.Mutex
+		m     = map[string]string{}
+		first error
+		wg    sync.WaitGroup
+		slots = make(chan struct{}, mapParallel)
+	)
+	for _, pkg := range pkgs {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func() {
+			defer func() { <-slots; wg.Done() }()
+			for _, t := range designtimeTypes {
+				b, err := g.Fetch(ctx, "/api/v1/IntegrationPackages("+httpKey(pkg)+")/"+t+"DesigntimeArtifacts?$select=Id")
+				mu.Lock()
+				if err != nil {
+					first = cmp.Or(first, err)
+					mu.Unlock()
+					return
+				}
+				for _, a := range results(b) {
+					if id, _ := a["Id"].(string); id != "" {
+						m[id] = pkg
+					}
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if first != nil {
+		return nil, first
+	}
+	return m, nil
 }
 
 func httpKey(s string) string { return "'" + url.PathEscape(strings.ReplaceAll(s, "'", "''")) + "'" }

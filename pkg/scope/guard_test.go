@@ -844,3 +844,61 @@ func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
 	assert.Contains(t, r.Error(), "no Fetch")
 	assert.Contains(t, g.runsAsRead(context.Background(), "SD_A"), "no Fetch")
 }
+
+// The artifact map stays available when a rebuild fails or its request is
+// cancelled, rebuilds once for many callers, and is not trusted for ever
+// (cpicli#53, availability points from the gateway's verification).
+func TestGuardArtifactMapRebuilds(t *testing.T) {
+	g := testGuard(t, sdRW)
+	deploy := req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'", "")
+	require.NoError(t, g.Before(deploy))
+	expire := func(by time.Duration) {
+		g.mu.Lock()
+		g.builtAt = g.builtAt.Add(-by)
+		g.failedAt = time.Time{}
+		g.mu.Unlock()
+	}
+
+	// a failed rebuild keeps the last good map, and pauses before the next try
+	inner := g.Fetch
+	var lists atomic.Int32
+	failing := atomic.Bool{}
+	failing.Store(true)
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if path == "/api/v1/IntegrationPackages" {
+			lists.Add(1)
+		}
+		if failing.Load() && strings.Contains(path, "IntegrationPackages('SD_Orders')/ValueMapping") {
+			return nil, fmt.Errorf("HTTP 503")
+		}
+		return inner(ctx, path)
+	}
+	expire(time.Minute)
+	assert.NoError(t, g.Before(deploy), "the last good map stands")
+	assert.NoError(t, g.Before(deploy))
+	assert.EqualValues(t, 1, lists.Load(), "no new try within mapRetry")
+
+	// beyond mapMaxStale the old map is not trusted
+	expire(mapMaxStale)
+	refused(t, g.Before(deploy))
+
+	// a cancelled request does not fail the rebuild
+	failing.Store(false)
+	expire(time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cancelled := *deploy
+	cancelled.Ctx = ctx
+	assert.NoError(t, g.Before(&cancelled))
+
+	// many callers, one rebuild
+	expire(time.Hour)
+	lists.Store(0)
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() { defer wg.Done(); assert.NoError(t, g.Before(deploy)) }()
+	}
+	wg.Wait()
+	assert.EqualValues(t, 1, lists.Load())
+}

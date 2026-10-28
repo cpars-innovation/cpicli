@@ -96,9 +96,11 @@ whichever command or MCP tool sends it, including tools added later:
   reveal hidden entries. A list URL can only be read: a write to it (also with a `$filter`) is refused.
 - **`$expand`** is limited to the expansions cpictl uses (entry points, custom header log, run step properties,
   design guidelines), so an expansion cannot carry entities the filter does not see.
-- **An artifact's package** is found by listing the artifacts of the allowed packages (a few calls, cached for
-  30 seconds, also for known IDs; refreshed at once on an unknown ID). An artifact that moves to another package
-  loses the access of its old one within that time. A ProcessDirect address's flow is cached for 5 minutes (the
+- **An artifact's package** is found by listing the artifacts of the allowed packages (a few calls per package,
+  8 packages at a time, cached for 30 seconds, also for known IDs). An artifact that moves to another package
+  loses the access of its old one within that time. One rebuild runs at a time, and a cancelled request does not
+  cancel it. If a rebuild fails, the last good list is used, for at most 5 minutes after it was built, and the
+  rebuild is retried after 5 seconds. After that, artifacts are refused until a rebuild succeeds. A ProcessDirect address's flow is cached for 5 minutes (the
   rebuild reads every allowed flow). An artifact outside them is refused like one that does not exist, and the
   refusal does not name its package.
 - **Redirects are not followed.** A 3xx answer comes back as it is; following it would send a request the guard
