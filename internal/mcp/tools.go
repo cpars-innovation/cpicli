@@ -1922,12 +1922,20 @@ func resolvePath(root, p string) (string, error) {
 // error: writing through it would create its target, wherever that is.
 func evalExisting(p string) (string, error) {
 	rest := ""
+	retries := 0
 	for dir := p; ; {
 		resolved, err := filepath.EvalSymlinks(dir)
 		if err == nil {
 			return filepath.Join(resolved, rest), nil
 		}
-		if _, lerr := os.Lstat(dir); lerr == nil {
+		if fi, lerr := os.Lstat(dir); lerr == nil {
+			// created between the two calls (another tool call making the
+			// same parent directory): resolve it again; a dangling link
+			// stays an error
+			if fi.Mode()&os.ModeSymlink == 0 && retries < 3 {
+				retries++
+				continue
+			}
 			return "", err
 		}
 		parent := filepath.Dir(dir)

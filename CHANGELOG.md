@@ -43,6 +43,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
   - **`--all-tools`** (`CPICTL_ALL_TOOLS`) lists every tool from the start, for clients that do not reload the tool
     list. `--toolset`, `--tools` and `--dynamic-toolsets` keep working as before.
 
+- **Fix:** two tool calls at the same time that create the same parent folder (e.g. two `copy_iflow` into
+  `content/Sales/...`) could fail with "cannot be resolved: no such file or directory".
+
 **What to do:**
 - **Agents and skills:** call `help` for the index and `help {"topic": "<tool>"}` before the first use of an
   unfamiliar tool. Use `save_to` for payloads you only search or compare. Use `detail: "full"` only when you need
