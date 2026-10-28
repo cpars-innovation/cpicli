@@ -260,8 +260,9 @@ cpictl --profile dev packages
   your token expires, and your scope per SAP tenant.
 - `cpictl auth` is only for gateway mode. Profiles that talk to SAP directly keep their service key in
   the profile and need no sign-in.
-- Test messages (`send`, `send_test_message`, `run_tests`) also go through the gateway: to
-  `<gateway>/t/<SAP tenant>/http/...` with your token. The gateway decides them by your scope.
+- Test messages (`send`, `send_test_message`, `run_tests`) also go through the gateway: to its runtime proxy
+  `<gateway>/t/<SAP tenant>/rt/<endpoint path>` with your token. The gateway decides them by your scope and
+  sends them with its runtime key.
 
 ## Global flags
 

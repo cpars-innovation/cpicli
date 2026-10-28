@@ -3,6 +3,7 @@ package cpi
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 )
@@ -18,6 +19,11 @@ func NewEndpointExecuter(auth *ServiceDetails, endpointURL string) (*httpclnt.HT
 	}
 	details := *auth
 	details.Host = u.Scheme + "://" + u.Host
+	if details.Gateway != "" {
+		// the gateway serves the tenant's runtime endpoints below
+		// <gateway>/t/<tenant>/rt, with its runtime key
+		details.Gateway = strings.TrimSuffix(details.Gateway, "/") + "/rt"
+	}
 	scheme, _, _ := ParseHost(details.Host)
 	if scheme != u.Scheme {
 		return nil, "", fmt.Errorf("endpoint URL %q must use https", endpointURL)

@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.5
+
+- **Test messages in gateway mode reach the gateway's runtime proxy.** cpictl sent them to
+  `<gateway>/t/<tenant>/http/...`, the gateway's API path. The cpictl gateway serves runtime endpoints at
+  `<gateway>/t/<tenant>/rt/<endpoint path>`. With 0.35.3 refusing runtime credentials in gateway mode, test messages
+  through a gateway did not work at all; now they go to `/rt/`.
+
+**What to do:** update to 0.35.5 if you send test messages through a gateway (`send`, `send_test_message`,
+`run_tests`). The gateway needs its runtime key configured (`sapTenants.<name>.runtime*`).
+
 ## 0.35.4
 
 Availability of the access scope's artifact map (cpicli#53, found by the cpictl gateway's verification). The
