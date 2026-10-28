@@ -5,6 +5,8 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.34.0
+
 **Fewer tokens for agents (MCP).** Measured against the mock tenant (`--mode full`, ≈3.6 bytes per token):
 
 | What | Before | After |
