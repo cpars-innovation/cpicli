@@ -568,13 +568,49 @@ func checkCredentialMix(cmd *cobra.Command, files []configFile) error {
 				continue
 			}
 			if given := flagOrEnv(cmd, k); given != f.v.GetString(k) {
-				return fmt.Errorf("%s is %s from a flag or the environment, but %s holds the credentials for %s (%s): "+
-					"give the credentials too, or use another profile, so they are not sent to another host",
-					k, given, f.path, f.v.GetString(k), strings.Join(secrets, ", "))
+				return mixError(k, given, f.path, f.v.GetString(k), secrets)
+			}
+		}
+		// the host each secret is sent to, with its fallback: a profile
+		// usually has no runtime-oauth-host (the runtime key's token server is
+		// oauth-host), so CPICTL_RUNTIME_OAUTH_HOST alone must not redirect
+		// its runtime secret
+		for _, s := range secrets {
+			chain := secretHosts[s]
+			fileHost, effective, from := "", "", ""
+			for _, k := range chain {
+				if fileHost == "" {
+					fileHost = f.v.GetString(k)
+				}
+				v := f.v.GetString(k)
+				if fromFlagOrEnv(cmd, k) {
+					v = flagOrEnv(cmd, k)
+				}
+				if effective == "" && v != "" {
+					effective, from = v, k
+				}
+			}
+			if effective != fileHost {
+				return mixError(from, effective, f.path, fileHost, []string{s})
 			}
 		}
 	}
 	return nil
+}
+
+// secretHosts are the settings, in order of precedence, that name the host
+// a secret is sent to.
+var secretHosts = map[string][]string{
+	"tmn-password":               {"tmn-host"},
+	"oauth-clientsecret":         {"oauth-host"},
+	"runtime-oauth-clientsecret": {"runtime-oauth-host", "oauth-host"},
+	"runtime-password":           {"tmn-host"},
+}
+
+func mixError(key, given, file, fileHost string, secrets []string) error {
+	return fmt.Errorf("%s is %s from a flag or the environment, but %s holds the credentials for %s (%s): "+
+		"give the credentials too, or use another profile, so they are not sent to another host",
+		key, given, file, cmp.Or(fileHost, "its own host"), strings.Join(secrets, ", "))
 }
 
 // findProjectConfig looks for cpictl.yaml from the working directory up to
@@ -776,9 +812,14 @@ func initializeConfig(cmd *cobra.Command) error {
 		// gateway mode: the gateway holds the SAP key; a key here would
 		// be a way around it
 		hasAuth := config.GetString(cmd, "oauth-host") != "" || config.GetString(cmd, "tmn-userid") != ""
+		// runtime credentials would send test messages straight to the
+		// runtime, past the gateway and the user's scope there
+		hasRuntimeAuth := config.GetString(cmd, "runtime-oauth-clientid") != "" || config.GetString(cmd, "runtime-userid") != ""
 		switch {
 		case hasAuth:
 			return output.Usagef("--gateway and SAP credentials (--oauth-host, --tmn-userid) exclude each other: in gateway mode the gateway holds the key")
+		case hasRuntimeAuth:
+			return output.Usagef("--gateway and runtime credentials (--runtime-oauth-clientid, --runtime-userid) exclude each other: in gateway mode test messages go through the gateway")
 		case os.Getenv(gatewayTokenEnv) == "" && gatewayTokenSource(cmd) == nil:
 			if _, ok := loginConfig(); ok {
 				return output.Usagef("gateway mode: not signed in, run cpictl auth login (or set %s)", gatewayTokenEnv)

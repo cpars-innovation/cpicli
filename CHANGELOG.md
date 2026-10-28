@@ -5,6 +5,41 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.3
+
+Fixes from the second independent security review of 0.35.1 (run alongside the first, again on the mock tenant
+only). All six findings were reproduced, fixed, and covered by tests that fail on 0.35.2.
+
+- **ProcessDirect tests reach only a running flow (high).** The guard reads a flow's ProcessDirect address from its
+  designtime content. A flow that was not deployed, or ran an older version, does not listen on that address, and
+  another team's running flow could. The test harness now forwards only while the allowed flow is started, runs
+  the active designtime version, and was not changed after its deployment. Anything the tenant leaves open
+  (also a missing change time) is refused, with "deploy it first".
+- **An entry point no longer opens another team's endpoint below it (high).** A flow's entry point `/http/api/*`
+  (or `/http/api`) covered `/http/api/hr` of another team's flow. A URL now goes to the flow with the most specific
+  entry point that covers it, among every flow of the tenant: the guard reads `ServiceEndpoints` itself (cached for
+  30 seconds). Equally specific entry points of two flows, or a list it cannot read: refused.
+- **A runtime secret no longer follows `CPICTL_RUNTIME_OAUTH_HOST` (medium).** The 0.34.1 check compared only the
+  hosts a profile sets. A profile without `runtime-oauth-host` sends its runtime secret to `oauth-host`; setting
+  `CPICTL_RUNTIME_OAUTH_HOST` alone sent it to that host. Each secret is now checked against the host it would
+  really go to, with its fallbacks.
+- **Gateway mode refuses runtime credentials (medium).** With `--gateway`, `--runtime-oauth-clientid` or
+  `--runtime-userid` (also from a profile or the environment) sent test messages straight to the runtime, past the
+  gateway and the user's scope there. Now a usage error; test messages go through the gateway.
+- **Private keys are redacted in logs (low).** The `--debug` redaction now removes PEM private key blocks
+  (`-----BEGIN … PRIVATE KEY-----` … `-----END …-----`) from logged bodies.
+- **Trace messages of a run step are found under a scope (low).** The guard did not accept the compound keys
+  (`MessageProcessingLogRunSteps(RunId='…',ChildCount=…)`) of a run step's trace messages, so `get_message_trace`
+  failed under a scope although the message was allowed.
+
+**What to do:**
+
+- Update to 0.35.3 wherever an access scope, `--gateway` or `cpictl mcp` is used.
+- Deploy a flow before testing it through ProcessDirect under a scope. A tenant that does not report `ModifiedAt`
+  for designtime artifacts cannot test through ProcessDirect under a scope.
+- Remove runtime credentials from gateway profiles and environments (`CPICTL_RUNTIME_*`).
+- Set `CPICTL_RUNTIME_OAUTH_HOST` only together with the runtime credentials, or put it in the profile.
+
 ## 0.35.2
 
 Fixes from an independent security review of 0.35.1 (an agent that had not seen the code, working on the mock

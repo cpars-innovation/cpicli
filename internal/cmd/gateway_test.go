@@ -220,3 +220,23 @@ func TestGatewayMCPToolsByScope(t *testing.T) {
 	assert.NotContains(t, tools, `"name":"deploy"`, "the local scope narrows the gateway's")
 	assert.Contains(t, tools, `"name":"list_packages"`)
 }
+
+// Gateway mode refuses runtime credentials: test messages would go straight
+// to the runtime, past the gateway and the user's scope there (security
+// review of 0.35.1, second report, finding 4).
+func TestGatewayRefusesRuntimeCredentials(t *testing.T) {
+	for _, k := range append(append(credentialConfigKeys, hostConfigKeys...), "profile", "config", "gateway") {
+		t.Setenv(envKey(k), "")
+	}
+	t.Setenv(gatewayTokenEnv, "made-up-token")
+	for _, creds := range [][]string{
+		{"--runtime-userid", "made-up-user", "--runtime-password", "made-up-password"},
+		{"--runtime-oauth-clientid", "made-up-client", "--runtime-oauth-clientsecret", "made-up-secret"},
+	} {
+		args := append([]string{"--gateway", "https://gw.example.com/t/dev", "send", "--artifact-id", "A"}, creds...)
+		code, stderr := projectRun(t, t.TempDir(), t.TempDir(), args...)
+		assert.Equal(t, 2, code, stderr)
+		assert.Contains(t, stderr, "--gateway and runtime credentials")
+		assert.NotContains(t, stderr, "made-up-")
+	}
+}

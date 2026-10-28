@@ -56,3 +56,29 @@ func TestEnvironmentTenantDoesNotMixWithProfile(t *testing.T) {
 	assert.NotEqual(t, 2, code, stderr)
 	assert.NotContains(t, stderr, "holds the credentials for")
 }
+
+// A secret is checked against the host it is really sent to, also through
+// a fallback: the runtime secret goes to runtime-oauth-host, else
+// oauth-host (security review of 0.35.1, second report, finding 3).
+func TestRuntimeSecretHostFallback(t *testing.T) {
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{"A": {}})
+	for _, k := range append(append(credentialConfigKeys, hostConfigKeys...), "profile", "config", "gateway") {
+		t.Setenv(envKey(k), "")
+	}
+	h, p := mock.HostPort()
+	home := t.TempDir()
+	writeModeFile(t, filepath.Join(home, ".cpictl", "dev.yaml"), fmt.Sprintf("tmn-host: http://%s:%d\noauth-host: %s:%d\n", h, p, h, p)+
+		"oauth-clientid: made-up-client\noauth-clientsecret: made-up-secret\n"+
+		"runtime-oauth-clientid: made-up-rt-client\nruntime-oauth-clientsecret: made-up-rt-secret\n", 0o600)
+
+	t.Setenv("CPICTL_RUNTIME_OAUTH_HOST", "attacker.example.com")
+	code, stderr := projectRun(t, home, t.TempDir(), "--profile", "dev", "send", "--artifact-id", "A")
+	assert.Equal(t, 2, code, stderr)
+	assert.Contains(t, stderr, "runtime-oauth-host is attacker.example.com")
+	assert.NotContains(t, stderr, "made-up-rt-secret")
+	assert.Empty(t, mock.Requests(), "refused before any request")
+
+	t.Setenv("CPICTL_RUNTIME_OAUTH_HOST", fmt.Sprintf("%s:%d", h, p))
+	_, stderr = projectRun(t, home, t.TempDir(), "--profile", "dev", "send", "--artifact-id", "A")
+	assert.NotContains(t, stderr, "holds the credentials for", "the same host as the profile's fallback")
+}

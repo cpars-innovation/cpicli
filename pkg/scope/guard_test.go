@@ -222,6 +222,7 @@ func TestGuardHarnessTargets(t *testing.T) {
 	g.ProcessDirectAddresses = func(_ context.Context, id string) ([]string, error) {
 		return map[string][]string{"SD_A": {"/sd/in"}}[id], nil
 	}
+	runs(g, map[string]string{"SD_A": `{"d":{"Id":"SD_A","Status":"STARTED","Version":"1.0.1","DeployedOn":"/Date(1700000100000)/"}}`}, nil)
 	eps := `{"d":{"results":[{"Name":"CPICTL_Test_Harness","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test"}]}}]}}`
 	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
@@ -236,6 +237,74 @@ func TestGuardHarnessTargets(t *testing.T) {
 	g.ProcessDirectAddresses = nil
 	g.pdFlows = nil
 	refused(t, g.Before(call("/sd/in")))
+}
+
+// runs makes g's Fetch answer the runtime artifacts in rt (Id -> entity) and
+// the designtime artifacts in dt; a flow missing from dt is SD_A's
+// designtime version 1.0.1, last changed before the deployment of rt.
+func runs(g *Guard, rt, dt map[string]string) {
+	fetch := g.Fetch
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		for id, e := range rt {
+			if path == "/api/v1/IntegrationRuntimeArtifacts('"+id+"')" {
+				return []byte(e), nil
+			}
+		}
+		for id := range rt {
+			if path == "/api/v1/IntegrationDesigntimeArtifacts(Id='"+id+"',Version='active')" {
+				if e, ok := dt[id]; ok {
+					return []byte(e), nil
+				}
+				return []byte(`{"d":{"Id":"` + id + `","Version":"1.0.1","ModifiedAt":"1700000000000"}}`), nil
+			}
+		}
+		if strings.HasPrefix(path, "/api/v1/IntegrationRuntimeArtifacts(") {
+			return nil, fmt.Errorf("404 not found")
+		}
+		return fetch(ctx, path)
+	}
+}
+
+// The harness reaches a ProcessDirect address only while the allowed flow
+// runs the content the address was read from (security review of 0.35.1,
+// second report, finding 1): otherwise the address may be another team's
+// running flow.
+func TestGuardHarnessNeedsTheRunningFlow(t *testing.T) {
+	eps := `{"d":{"results":[{"Name":"CPICTL_Test_Harness","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test"}]}}]}}`
+	call := &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/cpictl/test",
+		Header: map[string]string{"CpictlTargetAddress": "/sd/in"}}
+	started := `{"d":{"Id":"SD_A","Status":"STARTED","Version":"1.0.1","DeployedOn":"/Date(1700000100000)/"}}`
+	for _, c := range []struct {
+		name   string
+		rt, dt map[string]string
+		why    string
+	}{
+		{"not deployed", nil, nil, "not deployed"},
+		{"stopped", map[string]string{"SD_A": strings.Replace(started, "STARTED", "ERROR", 1)}, nil, "not running (status ERROR)"},
+		{"older version runs", map[string]string{"SD_A": started},
+			map[string]string{"SD_A": `{"d":{"Version":"1.0.2","ModifiedAt":"1700000000000"}}`}, "deploy it first"},
+		{"changed after deployment", map[string]string{"SD_A": started},
+			map[string]string{"SD_A": `{"d":{"Version":"1.0.1","ModifiedAt":"1700000200000"}}`}, "changed after its deployment"},
+		{"no change time", map[string]string{"SD_A": started},
+			map[string]string{"SD_A": `{"d":{"Version":"1.0.1"}}`}, "does not report"},
+		{"another flow's answer", map[string]string{"SD_A": strings.Replace(started, `"Id":"SD_A"`, `"Id":"FI_B"`, 1)}, nil, "not deployed"},
+		{"running as read", map[string]string{"SD_A": started}, nil, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+			g.ProcessDirectAddresses = func(_ context.Context, id string) ([]string, error) {
+				return map[string][]string{"SD_A": {"/sd/in"}}[id], nil
+			}
+			runs(g, c.rt, c.dt)
+			_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
+			require.NoError(t, err)
+			if c.why == "" {
+				assert.NoError(t, g.Before(call))
+				return
+			}
+			assert.Contains(t, refused(t, g.Before(call)).Error(), c.why)
+		})
+	}
 }
 
 // With grants, actions differ per package: reading FI's messages and seeing
@@ -699,4 +768,63 @@ func TestGuardKnownArtifactExpires(t *testing.T) {
 	g.builtAt = g.builtAt.Add(-time.Hour)
 	g.mu.Unlock()
 	refused(t, g.Before(deploy))
+}
+
+// A run step's trace messages (compound key RunId='…',ChildCount=n) belong
+// to the run's message; another message's run stays refused (security
+// review of 0.35.1, second report, finding 6).
+func TestGuardRunStepTraceMessages(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","download"]}`)
+	logs := `{"d":{"results":[{"MessageGuid":"G1","IntegrationArtifact":{"Id":"SD_A","PackageId":"SD_Orders"}}]}}`
+	_, err := g.After(req("GET", "/api/v1/MessageProcessingLogs", ""), 200, nil, []byte(logs))
+	require.NoError(t, err)
+	runs := req("GET", "/api/v1/MessageProcessingLogs('G1')/Runs", "")
+	require.NoError(t, g.Before(runs))
+	_, err = g.After(runs, 200, nil, []byte(`{"d":{"results":[{"Id":"R1"}]}}`))
+	require.NoError(t, err)
+
+	assert.NoError(t, g.Before(req("GET", "/api/v1/MessageProcessingLogRunSteps(RunId='R1',ChildCount=1)/TraceMessages", "")))
+	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogRunSteps(RunId='R_FI',ChildCount=1)/TraceMessages", "")))
+	refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogRunSteps(ChildCount=1)/TraceMessages", "")))
+}
+
+// An allowed flow's entry point does not cover another team's entry point
+// below it (wildcard or plain prefix): the most specific entry point of
+// the whole tenant decides, also when the caller listed only its own flow;
+// without the tenant's entry points nothing is sent (security review of
+// 0.35.1, second report, finding 2).
+func TestGuardEndpointOfAnotherTeamBelowAnAllowedOne(t *testing.T) {
+	for _, own := range []string{"https://rt/http/api/*", "https://rt/http/api"} {
+		g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+		all := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"` + own + `"}]}},
+			{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/api/fi_secret"}]}}]}}`
+		inner := g.Fetch
+		failing := false
+		g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+			if strings.HasPrefix(path, "/api/v1/ServiceEndpoints") {
+				if failing {
+					return nil, fmt.Errorf("made-up outage")
+				}
+				return []byte(all), nil
+			}
+			return inner(ctx, path)
+		}
+		// the caller lists only its own flow
+		mine := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"` + own + `"}]}}]}}`
+		_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints&$filter=Name%20eq%20'SD_A'", ""), 200, nil, []byte(mine))
+		require.NoError(t, err)
+		send := func(path string) error {
+			return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path})
+		}
+		refused(t, send("/http/api/fi_secret"))
+		refused(t, send("/http/api/fi_secret/deeper"))
+		assert.NoError(t, send("/http/api/orders"), own)
+
+		failing = true
+		g.mu.Lock()
+		g.epBuiltAt = time.Time{}
+		g.mu.Unlock()
+		r := refused(t, send("/http/api/orders"))
+		assert.Contains(t, r.Error(), "could not be read")
+	}
 }

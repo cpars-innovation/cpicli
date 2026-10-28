@@ -3,6 +3,7 @@ package scope
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
+	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/testtools"
 )
@@ -82,7 +84,13 @@ type Guard struct {
 	noTarget     map[string]time.Time // correlation ID -> until when "no allowed flow" holds
 	correlations map[string]string    // tooling message GUID -> correlation ID ("": not looked up)
 	endpoints    map[string]string    // entry point URL -> flow, for allowed flows
-	pdFlows      map[string]string    // ProcessDirect address -> flow, for allowed flows (built on first harness call)
+	// allEndpoints are the entry points of every flow of the tenant (the
+	// guard's own lookup, and every endpoint list seen before filtering), so
+	// that an allowed flow's entry point does not cover another team's below
+	// it
+	allEndpoints map[string]string
+	epBuiltAt    time.Time
+	pdFlows      map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
 	pdBuiltAt    time.Time
 	tenant       string // scheme://host:port of the tenant API
 }
@@ -392,6 +400,22 @@ var (
 )
 
 // key decodes an OData key literal taken from an escaped path.
+// childKey is the ID a child entity is recorded under: its key, or for the
+// compound key of a run step (RunId='…',ChildCount=n) its run, which the
+// run list recorded as a child of the message's flow.
+func childKey(raw string) string {
+	k := key(raw)
+	if !strings.Contains(k, "=") {
+		return strings.Trim(k, "'")
+	}
+	for _, part := range strings.Split(k, ",") {
+		if name, v, ok := strings.Cut(part, "="); ok && strings.TrimSpace(name) == "RunId" {
+			return strings.Trim(strings.TrimSpace(v), "'")
+		}
+	}
+	return k // an unknown compound key: matches nothing recorded
+}
+
 func key(s string) string {
 	if u, err := url.PathUnescape(s); err == nil {
 		s = u
@@ -663,6 +687,9 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 
 	case p == "ServiceEndpoints":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
+			g.mu.Lock()
+			g.allEndpoints = mergeEndpoints(g.allEndpoints, b)
+			g.mu.Unlock()
 			return filterResults(b, func(e map[string]any) bool { return g.allowsArtifact(r.Ctx, str(e, "Name"), ActionRead) })
 		}, record: (*Guard).recordEndpoints}, nil
 
@@ -688,7 +715,7 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		if strings.Contains(mm[3], "$value") || strings.Contains(mm[3], "TraceMessages") || mm[1] == "TraceMessages" {
 			action = ActionDownload
 		}
-		d := decision{need: []need{{res: Resource{Kind: "child", ID: key(strings.Trim(mm[2], "'"))}, action: action}}}
+		d := decision{need: []need{{res: Resource{Kind: "child", ID: childKey(mm[2])}, action: action}}}
 		// IDs are recorded from SAP's lists only: a $value answer is the
 		// payload the flow wrote, and IDs in it must not become children of
 		// the flow (#52); the payload is then streamed, not buffered
@@ -794,17 +821,9 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 		}
 	}
 	target, _, _ := strings.Cut(withoutDefaultPort(r.Base)+r.Path, "?")
-	g.mu.Lock()
-	flow, found := "", false
-	for ep, f := range g.endpoints {
-		if endpointCovers(withoutDefaultPort(ep), target) {
-			flow, found = f, true
-			break
-		}
-	}
-	g.mu.Unlock()
-	if !found {
-		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " is not an entry point of a flow in the scope"})
+	flow, why := g.endpointOwner(r.Ctx, target)
+	if flow == "" {
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " " + why})
 	}
 	if flow == testtools.HarnessID {
 		addr := ""
@@ -817,11 +836,108 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 		if to == "" {
 			return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call ProcessDirect addresses of flows in the scope (%q is not one)", addr)})
 		}
+		if why := g.runsAsRead(r.Ctx, to); why != "" {
+			return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call %q while flow %s runs the content the address was read from: %s", addr, to, why)})
+		}
 		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: to}, action: ActionTest}}}, nil
 	}
 	// the entry point was seen in a list of flows the scope may read; with
 	// grants, read on a package does not mean test on it
 	return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: flow}, action: ActionTest}}}, nil
+}
+
+// endpointOwner returns the flow a runtime URL reaches: the flow of the most
+// specific entry point that covers it, among the entry points of every flow
+// of the tenant (an exact entry point before a longer prefix before a
+// shorter one). The caller's need on that flow decides. Two flows equally
+// specific, or none: "" with the reason.
+func (g *Guard) endpointOwner(ctx context.Context, target string) (string, string) {
+	if err := g.refreshEndpoints(ctx); err != nil {
+		return "", "cannot be checked: the tenant's entry points could not be read (" + err.Error() + ")"
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	best, owners := -1, map[string]bool{}
+	consider := func(eps map[string]string) {
+		for ep, f := range eps {
+			ep = withoutDefaultPort(ep)
+			if !endpointCovers(ep, target) {
+				continue
+			}
+			n := endpointSpecificity(ep, target)
+			switch {
+			case n > best:
+				best, owners = n, map[string]bool{f: true}
+			case n == best:
+				owners[f] = true
+			}
+		}
+	}
+	consider(g.allEndpoints)
+	consider(g.endpoints)
+	switch {
+	case best < 0:
+		return "", "is not an entry point of a flow in the scope"
+	case len(owners) > 1:
+		return "", "is covered equally by entry points of several flows"
+	}
+	for f := range owners {
+		return f, ""
+	}
+	return "", ""
+}
+
+// endpointSpecificity ranks an entry point that covers target: the exact
+// one highest, then by the length of the prefix it fixes.
+func endpointSpecificity(ep, target string) int {
+	if prefix, ok := strings.CutSuffix(ep, "*"); ok {
+		return len(prefix)
+	}
+	ep = strings.TrimSuffix(ep, "/")
+	if ep == target {
+		return 1 << 20
+	}
+	return len(ep) + 1
+}
+
+// refreshEndpoints reads the entry points of every flow of the tenant (the
+// guard's own call, cached like the artifact map).
+// An error leaves no decision: without every flow's entry points, an
+// allowed one could cover another team's.
+func (g *Guard) refreshEndpoints(ctx context.Context) error {
+	g.mu.Lock()
+	fresh := !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
+	g.mu.Unlock()
+	if fresh || g.Fetch == nil {
+		return nil
+	}
+	body, err := g.Fetch(internal(ctx), "/api/v1/ServiceEndpoints?$expand=EntryPoints")
+	if err != nil {
+		return err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.allEndpoints, g.epBuiltAt = mergeEndpoints(nil, body), time.Now()
+	return nil
+}
+
+// mergeEndpoints adds the entry points of an endpoint list to m.
+func mergeEndpoints(m map[string]string, body []byte) map[string]string {
+	if m == nil {
+		m = map[string]string{}
+	}
+	for _, e := range results(body) {
+		eps, _ := e["EntryPoints"].(map[string]any)
+		list, _ := eps["results"].([]any)
+		for _, x := range list {
+			if ep, ok := x.(map[string]any); ok {
+				if u := str(ep, "Url"); u != "" {
+					m[u] = str(e, "Name")
+				}
+			}
+		}
+	}
+	return m
 }
 
 // endpointCovers reports whether target is the entry point ep or below it
@@ -874,6 +990,53 @@ func (g *Guard) processDirectFlow(ctx context.Context, addr string) string {
 	g.pdFlows, g.pdBuiltAt = m, time.Now()
 	g.mu.Unlock()
 	return m[addr]
+}
+
+// runsAsRead returns "" when flow runs the content its ProcessDirect
+// addresses were read from (the active designtime version): started, the
+// same version, and not changed after its deployment. Otherwise, or when
+// the tenant's answers leave it open, the reason. The address map comes
+// from designtime content; a flow that is not deployed, or runs an older
+// version, may not listen on the address at all, and another team's flow
+// might.
+func (g *Guard) runsAsRead(ctx context.Context, flow string) string {
+	ictx := internal(ctx)
+	entity := func(path string) map[string]any {
+		b, err := g.Fetch(ictx, path)
+		if err != nil {
+			return nil
+		}
+		var v struct {
+			D map[string]any `json:"d"`
+		}
+		if json.Unmarshal(b, &v) != nil {
+			return nil
+		}
+		return v.D
+	}
+	rt := entity("/api/v1/IntegrationRuntimeArtifacts(" + httpKey(flow) + ")")
+	if rt == nil || str(rt, "Id") != flow {
+		return "it is not deployed"
+	}
+	if st := str(rt, "Status"); st != "STARTED" {
+		return "it is not running (status " + cmp.Or(st, "unknown") + ")"
+	}
+	dt := entity("/api/v1/IntegrationDesigntimeArtifacts(Id=" + httpKey(flow) + ",Version='active')")
+	if dt == nil {
+		return "its designtime artifact could not be read"
+	}
+	if rv, dv := str(rt, "Version"), str(dt, "Version"); rv == "" || rv != dv {
+		return fmt.Sprintf("it runs version %q, the designtime artifact is version %q; deploy it first", rv, dv)
+	}
+	deployed, err1 := cpi.ParseODataTime(str(rt, "DeployedOn"))
+	modified, err2 := cpi.ParseODataTime(str(dt, "ModifiedAt"))
+	switch {
+	case err1 != nil || err2 != nil || deployed.IsZero() || modified.IsZero():
+		return "the tenant does not report when it was deployed and last changed"
+	case modified.After(deployed):
+		return "it was changed after its deployment; deploy it first"
+	}
+	return ""
 }
 
 // withoutDefaultPort drops :443 from https and :80 from http URLs: the
@@ -1263,7 +1426,7 @@ func (g *Guard) recordChildren(r *httpclnt.GuardRequest, body []byte) {
 		of = key(mm[1])
 		flow = g.messages[of]
 	} else if mm := reChild.FindStringSubmatch(p); mm != nil {
-		of = key(strings.Trim(mm[2], "'"))
+		of = childKey(mm[2])
 		flow = g.children[of]
 	}
 	tooling := g.tooling[of]

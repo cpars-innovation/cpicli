@@ -105,11 +105,16 @@ whichever command or MCP tool sends it, including tools added later:
   has not checked (and, with a token transport, the token to another host).
 - **Message details** (errors, attachments, store entries, runs, traces) are allowed for messages of flows in the
   scope. Their child IDs are only accepted when they came with an allowed answer.
-- **Test messages** go only to entry points the guard has seen for flows in the scope, and only with `test`. An
-  endpoint covers its own path and paths below it, not siblings (`/sd/order` does not cover `/sd/orders`).
+- **Test messages** go only to entry points of flows in the scope, and only with `test`. An endpoint covers its own
+  path and paths below it, not siblings (`/sd/order` does not cover `/sd/orders`). A URL goes to the flow with the
+  most specific entry point that covers it, among the entry points of every flow of the tenant: the guard reads
+  them itself (`ServiceEndpoints`, cached for 30 seconds). So `/http/api/*` of an allowed flow does not open
+  `/http/api/hr` of another team's flow. Two flows equally specific, or a list the guard cannot read: refused.
 - **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
   address that belongs to the sender of a flow in the scope; the guard reads those addresses from the allowed flows
-  (externalised parameters resolved).
+  (externalised parameters resolved). The address is read from the flow's designtime content, so the flow must
+  run that content: deployed and started, the same version, and not changed after its deployment. Otherwise
+  (also when the tenant does not report the times) the call is refused: deploy the flow first.
 - **The test tooling** is exempt only by exact name: flows starting with `CPICTL_Test_`, and the Partner Directory
   partners `CPICTL_Test` and `CPICTL_Stub`. Teams share these partners, so their parameters (stub rules,
   stylesheets under test) are decided by their ID: it must start with an owner and a dot, where the owner is a flow

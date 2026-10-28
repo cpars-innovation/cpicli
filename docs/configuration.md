@@ -48,7 +48,10 @@ Config files, first match wins:
 2. A **profile** ([Profiles](#profiles-switching-tenants)): `--profile <name>`, `CPICTL_PROFILE`,
    or the one chosen with `cpictl profile use`. The one chosen with `profile use` is skipped when the tenant
    comes from the environment or a flag (`CPICTL_TMN_HOST`, `--tmn-host`, `--gateway`): such a
-   tenant gets its credentials from the environment or flags too.
+   tenant gets its credentials from the environment or flags too. A profile named with `--profile` keeps its
+   secrets for its own hosts: a host from the environment or a flag that would send one of them elsewhere stops
+   cpictl (exit code 2). That includes the hosts a secret falls back to: a profile without `runtime-oauth-host`
+   sends its runtime secret to `oauth-host`, so `CPICTL_RUNTIME_OAUTH_HOST` alone is refused too.
 3. `CPICTL_CONFIG=<file>`: this file only.
 4. Otherwise `$HOME/cpictl.yaml` (your personal settings and credentials).
 
@@ -249,14 +252,16 @@ cpictl --profile dev packages
 | `--gateway` | `CPICTL_GATEWAY` | Gateway URL including `/t/<SAP tenant>` |
 | — | `CPICTL_GATEWAY_TOKEN` | Your token when not signed in (never a flag or a config file) |
 
-- `--gateway` excludes `--oauth-*` and `--tmn-userid`: in gateway mode the gateway holds the key.
+- `--gateway` excludes `--oauth-*` and `--tmn-userid`: in gateway mode the gateway holds the key. It also
+  excludes the runtime credentials (`--runtime-oauth-clientid`, `--runtime-userid`).
 - A project `cpictl.yaml` must not set `gateway` or `login` (they choose where your token is sent and where you
   sign in): set them in the profile or `$HOME/cpictl.yaml`.
 - `cpictl auth status` (short: `cpictl whoami`) shows who the gateway takes you for, your roles, when
   your token expires, and your scope per SAP tenant.
 - `cpictl auth` is only for gateway mode. Profiles that talk to SAP directly keep their service key in
   the profile and need no sign-in.
-- Not yet in gateway mode: test messages (`send`), which still use the runtime settings above.
+- Test messages (`send`, `send_test_message`, `run_tests`) also go through the gateway: to
+  `<gateway>/t/<SAP tenant>/http/...` with your token. The gateway decides them by your scope.
 
 ## Global flags
 
