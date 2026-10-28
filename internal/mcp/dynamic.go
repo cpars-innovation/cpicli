@@ -181,6 +181,11 @@ func (s *Server) offeredTools() []Tool {
 	return out
 }
 
+// IsListed reports whether a tool is in the tool list now.
+func (s *Server) IsListed(name string) bool {
+	return slices.ContainsFunc(s.listedTools(), func(t Tool) bool { return t.Name == name })
+}
+
 // EnabledToolsets returns the toolsets enabled now in dynamic mode, sorted
 // (nil without dynamic toolsets).
 func (s *Server) EnabledToolsets() []string {
@@ -255,9 +260,13 @@ func (s *Server) enableToolsetTool() Tool {
 		Handler: func(ctx context.Context, args json.RawMessage) (any, error) {
 			var p struct {
 				Toolsets []string `json:"toolsets"`
+				Toolset  string   `json:"toolset"` // the name agents guess first
 			}
 			if err := json.Unmarshal(args, &p); err != nil {
 				return nil, output.Usage(err)
+			}
+			if p.Toolset != "" {
+				p.Toolsets = append(p.Toolsets, p.Toolset)
 			}
 			if len(p.Toolsets) == 0 {
 				return nil, output.Usagef("toolsets is required (%s)", strings.Join(s.toolsetNames(), ", "))
@@ -285,10 +294,10 @@ func (s *Server) enableToolsetTool() Tool {
 				d.enabled[p.Toolsets[i]] = true
 			}
 			d.mu.Unlock()
-			added := []map[string]any{}
+			added := []string{}
 			for _, t := range s.listedTools() {
 				if !before[t.Name] {
-					added = append(added, map[string]any{"name": t.Name, "title": t.Title})
+					added = append(added, t.Name)
 				}
 			}
 			if len(added) > 0 {

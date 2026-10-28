@@ -47,6 +47,9 @@ type HelpInfo struct {
 	ActiveToolsets func() []string
 	// BranchPolicy is the server's branch policy (nil: none).
 	BranchPolicy *BranchPolicy
+	// Listed reports whether a tool is in the client's tool list now (nil:
+	// unknown): help then leaves out its input schema, which the client has.
+	Listed func(name string) bool
 }
 
 // Workflow is a task with the skill and tools for it.
@@ -147,7 +150,7 @@ func HelpTool(info HelpInfo) Tool {
 	}
 	mode := cmp.Or(info.Mode, "none")
 	server := func() map[string]any {
-		server := map[string]any{"mode": mode, "readOnly": readOnly(), "tools": len(info.Tools), "disabledTools": nonNil(info.Removed),
+		server := map[string]any{"mode": mode, "readOnly": readOnly(), "tools": len(info.Tools) + 1, "disabledTools": nonNil(info.Removed),
 			"loop": map[string]any{"required": info.Loop.Required, "caps": map[string]any{"maxIterations": info.Loop.Caps.MaxIterations,
 				"sameErrorLimit": info.Loop.Caps.SameErrorLimit, "wallClockMinutes": info.Loop.Caps.WallClockMinutes, "maxDeploys": info.Loop.Caps.MaxDeploys}},
 			"masking": map[string]any{"maskPatterns": nonNil(info.MaskPatterns), "redactPayloads": info.RedactPayloads}}
@@ -171,7 +174,7 @@ func HelpTool(info HelpInfo) Tool {
 	// index is help without topic: what an agent needs to pick a tool, skill
 	// or topic, in a few hundred tokens; the details are topics
 	index := func() map[string]any {
-		srv := map[string]any{"mode": mode, "readOnly": readOnly(), "tools": len(info.Tools), "scope": info.Scope != nil}
+		srv := map[string]any{"mode": mode, "readOnly": readOnly(), "tools": len(info.Tools) + 1, "scope": info.Scope != nil} // + help
 		if len(info.Removed) > 0 {
 			srv["disabledTools"] = len(info.Removed)
 		}
@@ -197,7 +200,7 @@ func HelpTool(info HelpInfo) Tool {
 		}
 		sk := map[string]string{}
 		for _, s := range skills.List() {
-			sk[s.Name] = s.Description
+			sk[s.Name] = firstSentence(s.Description)
 		}
 		return map[string]any{"server": srv, "toolsets": sets, "workflows": flows, "skills": sk,
 			"more": `help {"topic": X}: X is a tool name (description and input schema), a skill name (its SKILL.md), ` +
@@ -244,8 +247,12 @@ func HelpTool(info HelpInfo) Tool {
 				return instructionsFor(info, available, a.Toolsets)
 			}
 			if t, ok := available[topic]; ok && t.Name != "help" {
-				return map[string]any{"tool": t.Name, "title": t.Title, "available": true, "effect": EffectOf(t.Name), "class": ClassOf(t.Name),
-					"description": t.Description, "inputSchema": t.InputSchema}, nil
+				res := map[string]any{"tool": t.Name, "title": t.Title, "available": true, "effect": EffectOf(t.Name), "class": ClassOf(t.Name),
+					"description": t.Description, "inputSchema": t.InputSchema}
+				if info.Listed != nil && info.Listed(t.Name) {
+					res["inputSchema"] = "in your tool list"
+				}
+				return res, nil
 			}
 			if slices.Contains(info.Removed, topic) {
 				reason := "disabled on this server by its mode or tool filter"
@@ -366,4 +373,12 @@ func nonNil(s []string) []string {
 		return []string{}
 	}
 	return s
+}
+
+// firstSentence is the text up to the first ". " (all of it if none).
+func firstSentence(text string) string {
+	if i := strings.Index(text, ". "); i >= 0 {
+		return text[:i+1]
+	}
+	return text
 }

@@ -17,8 +17,9 @@ var toolSummaries = map[string]string{
 		"Settings .cpi/lint.yaml, baseline .cpi/lint-baseline.json. Local files only; fixes: lint_fix.",
 	"copy_iflow": "Copy a flow (tenant from_artifact_id or local from_dir) into target_dir under a new ID and name: manifest, metainfo, " +
 		".iflw file name, .project and sender addresses. Every sender address needs a new value in addresses ([\"NEW\"] for one, else " +
-		"\"OLD=NEW\") unless keep_addresses: the same address fails the deployment. Check the files the result lists as still naming " +
-		"the source ID. Local files; next upload_artifacts, validate_artifact, deploy.",
+		"\"OLD=NEW\"; a value with = is always OLD=NEW) unless keep_addresses: the same HTTP path or ProcessDirect address fails the " +
+		"deployment, the same directory or queue makes both flows poll it. Check the files the result lists as still naming the " +
+		"source ID. Local files; next upload_artifacts, validate_artifact, deploy.",
 	"run_tests": "Run the test cases of .cpi/tests against the deployed flows: send, wait for the log, check the expectations; " +
 		"per case the failures (expected/actual) and diagnostics (messageGuid, lastError, failedStep). apply_config points receivers " +
 		"at the stub for the run and restores the values. Real processing: development tenant only.",

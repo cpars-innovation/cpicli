@@ -59,6 +59,9 @@ type Server struct {
 	// under it (.cpi/loops); empty: no loop resources.
 	Root string
 
+	// responses are the last send_test_message responses (response_of)
+	responses responseCache
+
 	writeMu sync.Mutex
 	out     io.Writer
 
@@ -336,18 +339,36 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 	}
 
 	args, full := splitDetail(p.Name, p.Arguments)
-	args, saveTo, err := s.payloadArgs(s.tools[idx], args)
+	args, pc, err := s.payloadArgs(s.tools[idx], args)
 	if err != nil {
 		return s.result(ToolResult{ExitCode: output.ExitCode(err), ErrorCategory: errorCategory(err), Error: err.Error()})
 	}
 	log.Info().Str("tool", p.Name).Msg("Tool call started")
 	begin := time.Now()
-	value, err := safeCall(callCtx, s.tools[idx], args)
+	var value any
+	if pc.responseOf != "" {
+		value, err = s.storedResponse(pc)
+	} else {
+		value, err = safeCall(callCtx, s.tools[idx], args)
+	}
 	if shape := leanShapers[p.Name]; shape != nil && err == nil && !full {
 		value = shape(value)
 	}
-	if saveTo != "" && err == nil {
-		value, err = s.savePayloads(value, saveTo)
+	if p.Name == "send_test_message" && err == nil {
+		s.keepResponse(value)
+	}
+	switch {
+	case err != nil:
+	case pc.saveTo != "":
+		value, err = s.savePayloads(value, pc.saveTo)
+	case p.Name == "send_test_message":
+		hint := "call again with save_to (or a larger max_bytes) for the rest"
+		if guid := messageGuidOf(value); guid != "" {
+			hint = fmt.Sprintf(`get_message_content {"response_of": %q, "save_to": "<file>"} saves the rest without sending again`, guid)
+		}
+		value = cutPayloads(value, pc.inline, hint)
+	case hasMaxBytes(s.tools[idx]):
+		value = cutPayloads(value, 0, "call again with save_to (or a larger max_bytes) for the rest")
 	}
 	elapsed := time.Since(begin)
 	code := output.ExitCode(err)

@@ -18,6 +18,9 @@
             }
           ]
         },
+        "note": {
+          "type": "string"
+        },
         "queue": {
           "type": "string"
         },

@@ -191,6 +191,7 @@ CPICTL_* environment variables.`,
 			if dynamic {
 				help.ActiveToolsets = func() []string { return server.EnabledToolsets() }
 			}
+			help.Listed = func(name string) bool { return server.IsListed(name) }
 			tools = append(tools, mcp.HelpTool(help))
 			var instructions string
 			if len(toolsets) > 0 && !dynamic {
@@ -245,7 +246,7 @@ CPICTL_* environment variables.`,
 	c.Flags().StringSlice("tools", nil, "Offer only these tools (names or patterns such as list_*)")
 	c.Flags().StringSlice("toolset", nil, "Offer only the tools of these tasks: "+strings.Join(mcp.ToolsetNames(), ", ")+" (combined with --tools; the mode still applies)")
 	c.Flags().Bool("all-tools", false, "List every tool from the start (about 26,000 tokens per turn), for clients that do not reload the tool list on tools/list_changed. Default: the core tools, the rest on demand (enable_toolset)")
-	c.Flags().Bool("dynamic-toolsets", false, "List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start")
+	c.Flags().Bool("dynamic-toolsets", false, "List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start. The listing is not an access limit: tools the server offers can be called before their toolset is enabled; limit access with --mode, --tools, --read-only or an access scope")
 	c.Flags().StringSlice("opt-in", nil, "Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does")
 	c.Flags().StringSlice("disable-tools", nil, "Do not offer these tools (names or patterns); wins over --tools")
 	c.Flags().String("branch-policy", "", "Policy file (YAML or JSON): tools that change the tenant are refused while a repository under --root is on a read-only branch (off without it)")

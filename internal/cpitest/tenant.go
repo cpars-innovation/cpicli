@@ -1541,7 +1541,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			if rt == nil || rt.otherLocation() || (filter != "" && !strings.Contains(filter, "'"+rt.Status+"'")) {
 				continue
 			}
-			rows = append(rows, map[string]any{"Id": id, "Version": rt.Version, "Name": id, "Type": "INTEGRATION_FLOW", "Status": rt.Status, "DeployedOn": odataDate(rt.DeployedOn)})
+			rows = append(rows, map[string]any{"Id": id, "Version": rt.Version, "Name": id, "Type": runtimeType(m.Artifacts[id].Type), "Status": rt.Status, "DeployedOn": odataDate(rt.DeployedOn)})
 		}
 		writeJSON(w, map[string]any{"d": map[string]any{"results": rows}})
 
@@ -2024,5 +2024,20 @@ func (m *Tenant) handleNumberRange(w http.ResponseWriter, r *http.Request, path 
 		w.WriteHeader(http.StatusAccepted)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// runtimeType is the Type of IntegrationRuntimeArtifacts for a designtime
+// type.
+func runtimeType(designtime string) string {
+	switch designtime {
+	case "ValueMapping":
+		return "VALUE_MAPPING"
+	case "ScriptCollection":
+		return "SCRIPT_COLLECTION"
+	case "MessageMapping":
+		return "MESSAGE_MAPPING"
+	default:
+		return "INTEGRATION_FLOW"
 	}
 }

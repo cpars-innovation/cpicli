@@ -90,7 +90,13 @@ type JMSActionResult struct {
 	MessageIDs  []string `json:"messageIds"`
 	// Response is the tenant's answer to retry and move.
 	Response string `json:"response,omitempty"`
+	// Note says what the action means for the messages.
+	Note string `json:"note,omitempty"`
 }
+
+// retryNote: the tenant's "n message(s) processed" means handed back to the
+// consumer, not delivered.
+const retryNote = "the messages are handed back to their consumer flow; whether they succeed shows in list_jms_messages (retry count, failed) and the consumer's message logs"
 
 // selectMessages resolves a selection to message IDs of the queue. Unknown
 // IDs are usage errors, so a typo is not reported as success.
@@ -140,7 +146,7 @@ func RetryQueueMessages(exe *httpclnt.HTTPExecuter, sel JMSSelection) (*JMSActio
 	if err != nil {
 		return nil, err
 	}
-	return &JMSActionResult{Action: "RETRY", Queue: sel.Queue, MessageIDs: ids, Response: text}, nil
+	return &JMSActionResult{Action: "RETRY", Queue: sel.Queue, MessageIDs: ids, Response: text, Note: retryNote}, nil
 }
 
 // MoveQueueMessages moves messages of a queue to another existing queue,

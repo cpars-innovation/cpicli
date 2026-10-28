@@ -46,7 +46,9 @@ Config files, first match wins:
 
 1. `--config <file>`: this file only.
 2. A **profile** ([Profiles](#profiles-switching-tenants)): `--profile <name>`, `CPICTL_PROFILE`,
-   or the one chosen with `cpictl profile use`.
+   or the one chosen with `cpictl profile use`. The one chosen with `profile use` is skipped when the tenant
+   comes from the environment or a flag (`CPICTL_TMN_HOST`, `--tmn-host`, `--gateway`): such a
+   tenant gets its credentials from the environment or flags too.
 3. `CPICTL_CONFIG=<file>`: this file only.
 4. Otherwise `$HOME/cpictl.yaml` (your personal settings and credentials).
 
@@ -143,7 +145,9 @@ cpictl profile use -                  # back to $HOME/cpictl.yaml
 
 Every command against a tenant logs `Profile <name> (<host>)` first, so you always see where
 it goes. A repository's `cpictl.yaml` is still overlaid; if its hosts differ from the
-profile's, cpictl stops instead of sending the profile's credentials there.
+profile's, cpictl stops instead of sending the profile's credentials there. The same holds for a host
+from the environment or a flag: with `--profile dev` and a different `CPICTL_TMN_HOST`, cpictl
+stops unless the credentials come from the environment or flags as well.
 
 For MCP, start one server per profile, e.g. `"args": ["mcp", "--root", ".", "--profile", "dev"]`
 and `["mcp", "--root", ".", "--profile", "qa", "--read-only"]`. The server keeps its profile

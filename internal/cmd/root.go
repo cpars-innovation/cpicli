@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -514,6 +515,68 @@ func loadConfigFiles(explicit, profile string, offline bool) ([]configFile, erro
 	return files, nil
 }
 
+// connectionKeys choose where a command connects to.
+var connectionKeys = []string{"tmn-host", "gateway"}
+
+// fromFlagOrEnv reports whether a setting is given as a flag or as an
+// environment variable (not by a config file).
+func fromFlagOrEnv(cmd *cobra.Command, key string) bool {
+	return flagOrEnv(cmd, key) != ""
+}
+
+// flagOrEnv is the value of a setting given as a flag, else as an
+// environment variable ("" if neither).
+func flagOrEnv(cmd *cobra.Command, key string) string {
+	if f := cmd.Flags().Lookup(key); f != nil && f.Changed {
+		return f.Value.String()
+	}
+	return os.Getenv(envPrefix + "_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
+}
+
+// connectionOutsideFiles: the tenant or gateway is given as a flag or in the
+// environment.
+func connectionOutsideFiles(cmd *cobra.Command) bool {
+	return slices.ContainsFunc(connectionKeys, func(k string) bool { return fromFlagOrEnv(cmd, k) })
+}
+
+// explicitProfile: --profile, CPICTL_PROFILE, --config or CPICTL_CONFIG
+// chose the configuration (not the active profile).
+func explicitProfile(cmd *cobra.Command) bool {
+	return config.GetString(cmd, "profile") != "" || config.GetString(cmd, "config") != "" ||
+		os.Getenv(envPrefix+"_PROFILE") != "" || os.Getenv(envPrefix+"_CONFIG") != ""
+}
+
+// checkCredentialMix refuses a host from a flag or the environment that
+// differs from the one of a config file whose credentials would be used:
+// the file's secrets would go to a host they do not belong to.
+func checkCredentialMix(cmd *cobra.Command, files []configFile) error {
+	for _, f := range files {
+		if f.project {
+			continue
+		}
+		var secrets []string
+		for _, k := range secretConfigKeys {
+			if f.v.IsSet(k) && !fromFlagOrEnv(cmd, k) {
+				secrets = append(secrets, k)
+			}
+		}
+		if len(secrets) == 0 {
+			continue
+		}
+		for _, k := range append(slices.Clone(hostConfigKeys), "gateway") {
+			if !f.v.IsSet(k) || !fromFlagOrEnv(cmd, k) {
+				continue
+			}
+			if given := flagOrEnv(cmd, k); given != f.v.GetString(k) {
+				return fmt.Errorf("%s is %s from a flag or the environment, but %s holds the credentials for %s (%s): "+
+					"give the credentials too, or use another profile, so they are not sent to another host",
+					k, given, f.path, f.v.GetString(k), strings.Join(secrets, ", "))
+			}
+		}
+	}
+	return nil
+}
+
 // findProjectConfig looks for cpictl.yaml from the working directory up to
 // the first directory with a .git entry; home itself is not a project.
 func findProjectConfig(home string) string {
@@ -647,8 +710,18 @@ func initializeConfig(cmd *cobra.Command) error {
 	if err != nil {
 		return output.Usage(err)
 	}
+	// a tenant given in the environment or as a flag is a connection of its
+	// own: the active profile (chosen earlier, for another tenant) is not
+	// mixed into it
+	skippedProfile := ""
+	if profile != "" && !explicitProfile(cmd) && connectionOutsideFiles(cmd) {
+		skippedProfile, profile = profile, ""
+	}
 	files, err := loadConfigFiles(cfgFile, profile, isOffline(cmd))
 	if err != nil {
+		return output.Usage(err)
+	}
+	if err := checkCredentialMix(cmd, files); err != nil {
 		return output.Usage(err)
 	}
 	loadedConfig = loadedConfig[:0]
@@ -681,6 +754,9 @@ func initializeConfig(cmd *cobra.Command) error {
 	logger.Init(cmd.ErrOrStderr(), format == output.FormatJSON, viper.GetBool("debug"))
 	for _, f := range files {
 		log.Debug().Msgf("Config file %s", f.path)
+	}
+	if skippedProfile != "" {
+		log.Debug().Msgf("Active profile %s not used: the tenant comes from the environment or a flag", skippedProfile)
 	}
 	if profile != "" && !isOffline(cmd) {
 		log.Info().Msgf("Profile %s (%s)", profile, cmp.Or(viper.GetString("gateway"), viper.GetString("tmn-host")))

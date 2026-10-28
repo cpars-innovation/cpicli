@@ -203,6 +203,13 @@ access scope apply as always, and each tool keeps its own approval in the client
   that `enable_toolset` reports `addedTools` but the agent cannot call them.
 - `--toolset`, `--tools` and `--dynamic-toolsets` choose the tools instead: with one of them the
   server lists what it names.
+- The listing is guidance, not an access limit: a tool the server offers can be called before its
+  toolset is enabled. Limit access with `--mode`, `--tools`, `--read-only` or an access scope; tools
+  they remove are refused on call.
+- **Payloads:** `send_test_message` keeps the whole response of its last 20 messages in memory.
+  A cut response says so before the text (`cut`), and
+  `get_message_content {"response_of": "<messageGuid>", "save_to": "<file>"}` saves it without
+  sending the message again.
 
 ### Dynamic toolsets
 

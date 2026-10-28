@@ -2681,7 +2681,7 @@ CPICTL_* environment variables.
       --branch-policy string                Policy file (YAML or JSON): tools that change the tenant are refused while a repository under --root is on a read-only branch (off without it)
       --cache-ttl int                       Seconds list_packages and list_artifacts results are reused (0: no cache); any tool that changes the tenant clears them (default 60)
       --disable-tools strings               Do not offer these tools (names or patterns); wins over --tools
-      --dynamic-toolsets                    List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start
+      --dynamic-toolsets                    List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start. The listing is not an access limit: tools the server offers can be called before their toolset is enabled; limit access with --mode, --tools, --read-only or an access scope
       --loop-max-deploys int                Highest max_deploys loop_start accepts (0: no cap); also lowers the default
       --loop-max-iterations int             Highest max_iterations loop_start accepts (0: no cap); also lowers the default
       --loop-max-minutes int                Highest wall_clock_minutes loop_start accepts (0: no cap); also lowers the default

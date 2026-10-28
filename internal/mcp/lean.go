@@ -14,6 +14,121 @@ import (
 var leanShapers = map[string]func(any) any{
 	"list_message_logs":       leanMessageLogs,
 	"find_messages_by_header": leanMessageLogs,
+	"get_trace_tree":          leanTraceTree,
+	"get_message_log":         leanMessageLogDetail,
+}
+
+// asMap returns a result as a JSON object (nil if it is none).
+func asMap(v any) map[string]any {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	var m map[string]any
+	if json.Unmarshal(data, &m) != nil {
+		return nil
+	}
+	return m
+}
+
+// sameError marks an error text that the result already has elsewhere.
+const sameError = "same as firstFailure.errorText"
+
+// leanTraceTree writes the error text once (firstFailure) and puts each
+// hop's link kind on the node it leads to instead of a separate hop list.
+func leanTraceTree(v any) any {
+	m := asMap(v)
+	if m == nil {
+		return v
+	}
+	ff, _ := m["firstFailure"].(map[string]any)
+	ffText, _ := ff["errorText"].(string)
+	links := map[string]any{}
+	hops, _ := m["hops"].([]any)
+	for _, h := range hops {
+		if h, ok := h.(map[string]any); ok {
+			if to, ok := h["toMessage"].(string); ok {
+				links[to] = h["link"]
+			}
+		}
+	}
+	var walk func(nodes []any)
+	walk = func(nodes []any) {
+		for _, n := range nodes {
+			node, ok := n.(map[string]any)
+			if !ok {
+				continue
+			}
+			guid, _ := node["messageGuid"].(string)
+			if l, ok := links[guid]; ok {
+				node["link"] = l
+			}
+			if ffText != "" && node["errorText"] == ffText {
+				node["errorText"] = sameError
+			}
+			children, _ := node["children"].([]any)
+			if len(children) == 0 {
+				delete(node, "children")
+			}
+			walk(children)
+		}
+	}
+	roots, _ := m["roots"].([]any)
+	walk(roots)
+	if len(hops) > 0 {
+		delete(m, "hops")
+	}
+	m["detail"] = "lean; detail=full adds hops and repeated error texts"
+	return m
+}
+
+// leanMessageLogDetail writes the message's error text once and refers to
+// the failed step instead of repeating it.
+func leanMessageLogDetail(v any) any {
+	m := asMap(v)
+	if m == nil {
+		return v
+	}
+	text, _ := m["errorText"].(string)
+	if m["artifactName"] == m["artifactId"] {
+		delete(m, "artifactName")
+	}
+	steps, _ := m["steps"].(map[string]any)
+	if steps == nil {
+		return m
+	}
+	runs, _ := steps["runs"].([]any)
+	for _, r := range runs {
+		run, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		list, _ := run["steps"].([]any)
+		for _, st := range list {
+			step, ok := st.(map[string]any)
+			if !ok {
+				continue
+			}
+			if step["runId"] == run["id"] {
+				delete(step, "runId")
+			}
+			if text != "" && step["error"] == text {
+				step["error"] = "same as errorText"
+			}
+		}
+	}
+	if f, ok := steps["failedStep"].(map[string]any); ok {
+		ref := map[string]any{"stepId": f["stepId"], "modelStepId": f["modelStepId"], "activity": f["activity"]}
+		if e, ok := f["error"].(string); ok && e != text {
+			ref["error"] = e
+		}
+		steps["failedStep"] = ref
+	}
+	if steps["messageGuid"] == m["messageGuid"] {
+		delete(steps, "messageGuid")
+	}
+	m["detail"] = "lean; detail=full repeats the failed step and error texts"
+	return m
 }
 
 const detailProp = "detail"
@@ -65,6 +180,7 @@ type leanMessageLog struct {
 	CustomStatus         string     `json:"customStatus,omitempty"`
 	ArtifactID           string     `json:"artifactId,omitempty"`
 	ArtifactName         string     `json:"artifactName,omitempty"`
+	PackageID            string     `json:"packageId,omitempty"`
 	CorrelationID        string     `json:"correlationId,omitempty"`
 	ApplicationMessageID string     `json:"applicationMessageId,omitempty"`
 	Sender               string     `json:"sender,omitempty"`
@@ -75,7 +191,7 @@ type leanMessageLog struct {
 	ErrorTruncated       bool       `json:"errorTruncated,omitempty"`
 }
 
-const leanLogsNote = "lean rows: packageId, packageName, predecessorMessageGuid, logStart, logLevel, webLink and an artifactName equal to artifactId are left out; detail=full for all fields"
+const leanLogsNote = "lean; detail=full adds packageName, predecessor, logStart, logLevel, webLink"
 
 func leanMessageLogs(v any) any {
 	l, ok := v.(*ops.MessageLogList)
@@ -84,7 +200,7 @@ func leanMessageLogs(v any) any {
 	}
 	rows := make([]leanMessageLog, 0, len(l.Logs))
 	for _, m := range l.Logs {
-		r := leanMessageLog{MessageGuid: m.MessageGuid, Status: m.Status, CustomStatus: m.CustomStatus, ArtifactID: m.ArtifactID,
+		r := leanMessageLog{MessageGuid: m.MessageGuid, Status: m.Status, CustomStatus: m.CustomStatus, ArtifactID: m.ArtifactID, PackageID: m.PackageID,
 			CorrelationID: m.CorrelationID, ApplicationMessageID: m.ApplicationMessageID, Sender: m.Sender, Receiver: m.Receiver,
 			LogEnd: m.LogEnd, DurationMs: m.DurationMs, ErrorText: m.ErrorText, ErrorTruncated: m.ErrorTruncated}
 		if m.ArtifactName != m.ArtifactID {

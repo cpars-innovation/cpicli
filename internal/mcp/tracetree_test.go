@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -21,10 +22,16 @@ func TestTraceTreeByMessage(t *testing.T) {
 	byID := session(t, mock, t.TempDir(),
 		call(1, "get_trace_tree", map[string]any{"message_guid": "M2"}),
 		call(2, "get_trace_tree", map[string]any{}),
-		call(3, "get_trace_tree", map[string]any{"message_guid": "M2", "key_headers": []string{"OrderNo"}}))
+		call(3, "get_trace_tree", map[string]any{"message_guid": "M2", "key_headers": []string{"OrderNo"}}),
+		call(4, "get_trace_tree", map[string]any{"message_guid": "M2", "detail": "full"}))
 	res := toolResult(t, byID["1"])
 	require.False(t, res.IsError, res.Content[0].Text)
-	assert.Contains(t, res.Content[0].Text, `"hops":[{"from":"Orders_In","to":"Orders_Route","fromMessage":"M1","toMessage":"M2","link":"predecessor"}]`)
+	// lean: the link kind on the node, the error text once
+	assert.Contains(t, res.Content[0].Text, `"link":"predecessor"`)
+	assert.Equal(t, 1, strings.Count(res.Content[0].Text, `"boom"`))
+	assert.NotContains(t, res.Content[0].Text, `"hops"`)
+	full := toolResult(t, byID["4"])
+	assert.Contains(t, full.Content[0].Text, `"hops":[{"from":"Orders_In","to":"Orders_Route","fromMessage":"M1","toMessage":"M2","link":"predecessor"}]`)
 	assert.Contains(t, res.Content[0].Text, `"pathKey":"`)
 	assert.Equal(t, "usage", toolResult(t, byID["2"]).StructuredContent.ErrorCategory)
 	assert.Equal(t, "usage", toolResult(t, byID["3"]).StructuredContent.ErrorCategory, "key headers need a scope (without the custom header search)")

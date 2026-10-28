@@ -5,6 +5,48 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.34.1
+
+Fixes from the agent test of 0.34.0 (feedback by a Claude Code agent on the mock tenant).
+
+- **Security: a tenant from the environment no longer borrows the active profile's credentials.** With
+  `CPICTL_TMN_HOST` (or `--tmn-host`, `--gateway`) set and no `--profile`, cpictl loaded the active profile
+  anyway and kept its OAuth host and client: a test against the mock tenant sent a token request towards the
+  real tenant's host. Now:
+  - a tenant from the environment or a flag skips the active profile (`--profile` or `CPICTL_PROFILE` still
+    load one);
+  - an explicit profile (or `$HOME/cpictl.yaml`, `--config`) with a different host from the environment or a
+    flag is refused before any request, when the file's secrets would be used: give the credentials too, or use
+    another profile.
+- **`send_test_message` keeps the whole response** of its last 20 messages. `get_message_content` takes
+  `response_of: <messageGuid>` (with `save_to` or `max_bytes`) and returns it without sending the message again.
+  Before, the only way to the whole payload was a second send.
+- **A cut payload says so first:** `cut` ("16384 of 34785 bytes shown; ...") comes before the text and names how
+  to get the rest.
+- **Lean results:**
+  - message log rows have `packageId` again, and a shorter `detail` note;
+  - `get_trace_tree` writes the error text once (`firstFailure`) and puts each hop's link kind on its node
+    instead of a separate `hops` list (−30%);
+  - `get_message_log` with steps refers to the failed step instead of repeating it, and the step errors to the
+    message's `errorText` (−24%);
+  - `detail: "full"` returns the former shape for all of them.
+- **`help`:** a tool's input schema only when the client does not list the tool yet; the index shows the first
+  sentence of each skill's description; the tool count includes `help`.
+- **`enable_toolset`** also takes `toolset` (one name) and returns only the added tool names.
+- **`retry_jms_messages`** adds a `note`: the tenant's "n message(s) processed" means handed back to the consumer
+  flow, not delivered.
+- **copy_iflow's summary** keeps the warning that the same directory or queue makes both flows poll it.
+- **Mock tenant:** runtime artifacts have the type of their designtime artifact (`VALUE_MAPPING`, ...), not always
+  `INTEGRATION_FLOW`.
+- **Docs:** the tool listing of `--dynamic-toolsets` and on-demand mode is not an access limit; `--mode`,
+  `--tools`, `--read-only` and access scopes are.
+
+**What to do:**
+- **Scripts and CI jobs** that set `CPICTL_TMN_HOST` with only part of the credentials and relied on the
+  active profile for the rest: set all credentials in the environment, or pass `--profile`.
+- **Agents:** for a cut test response use `get_message_content {"response_of": ...}` instead of sending again.
+- **Code that reads `get_trace_tree` `hops` or `get_message_log` `failedStep` from MCP:** pass `detail: "full"`.
+
 ## 0.34.0
 
 **Fewer tokens for agents (MCP).** Measured against the mock tenant (`--mode full`, ≈3.6 bytes per token):

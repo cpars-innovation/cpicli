@@ -78,7 +78,7 @@ func TestMCPToolsOnDemandByDefault(t *testing.T) {
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"enable_toolset","arguments":{"toolsets":["build"]}}}`)
 	assert.Equal(t, []string{"notifications/tools/list_changed"}, notes)
 	text := byID["3"]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
-	assert.Contains(t, text, `"name":"deploy"`)
+	assert.Contains(t, text, `"deploy"`)
 	assert.Contains(t, text, "Build loop")
 
 	byID, _ = mcpSession(t, []string{"--all-tools"}, listTools)

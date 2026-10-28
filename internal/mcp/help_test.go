@@ -176,3 +176,15 @@ func TestHelpInstructionsPerToolset(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid toolset")
 	assert.Equal(t, Instructions, ToolsetInstructions(append(ToolsetNames(), OtherToolset)), "all toolsets give the full instructions")
 }
+
+// help leaves out the input schema of a tool the client already lists.
+func TestHelpToolSchemaOnlyWhenNotListed(t *testing.T) {
+	tools := allToolsForTest()
+	info := HelpInfo{Tools: tools, Listed: func(name string) bool { return name == "deploy" }}
+	got, err := callHelp(t, HelpTool(info), "deploy")
+	require.NoError(t, err)
+	assert.Equal(t, "in your tool list", got["inputSchema"])
+	got, err = callHelp(t, HelpTool(info), "list_jms_queues")
+	require.NoError(t, err)
+	assert.IsType(t, map[string]any{}, got["inputSchema"])
+}
