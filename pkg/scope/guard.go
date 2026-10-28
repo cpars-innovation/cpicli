@@ -85,13 +85,14 @@ type Guard struct {
 	targets      map[string]string    // correlation ID -> allowed flow outside the tooling that shares it
 	noTarget     map[string]time.Time // correlation ID -> until when "no allowed flow" holds
 	correlations map[string]string    // tooling message GUID -> correlation ID ("": not looked up)
-	endpoints    map[string]string    // entry point URL -> flow, for allowed flows
 	// allEndpoints are the entry points of every flow of the tenant (the
 	// guard's own lookup, and every endpoint list seen before filtering), so
 	// that an allowed flow's entry point does not cover another team's below
 	// it
 	allEndpoints map[string]string
 	epBuiltAt    time.Time
+	epBuilding   chan struct{}     // closed when the running refresh ends
+	epErr        error             // the last refresh's error
 	pdFlows      map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
 	pdBuiltAt    time.Time
 	tenant       string // scheme://host:port of the tenant API
@@ -272,8 +273,9 @@ func (g *Guard) packageOf(ctx context.Context, id string) string {
 			return pkg
 		}
 		if !g.failedAt.IsZero() && time.Since(g.failedAt) < mapRetry {
+			usable := g.artifacts != nil && age <= max(mapMaxStale, g.Refresh)
 			g.mu.Unlock()
-			if g.artifacts != nil && age <= max(mapMaxStale, g.Refresh) {
+			if usable {
 				return pkg
 			}
 			return ""
@@ -291,9 +293,17 @@ func (g *Guard) packageOf(ctx context.Context, id string) string {
 		g.building = ch
 		g.mu.Unlock()
 
-		bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mapBuildTimeout)
-		m, err := g.buildArtifactMap(bctx)
-		cancel()
+		m, err := func() (m map[string]string, err error) {
+			// a panic must not leave g.building set (every caller would wait)
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("listing the artifacts failed: %v", p)
+				}
+			}()
+			bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mapBuildTimeout)
+			defer cancel()
+			return g.buildArtifactMap(bctx)
+		}()
 		g.mu.Lock()
 		if err == nil {
 			g.artifacts, g.builtAt, g.failedAt = m, time.Now(), time.Time{}
@@ -760,11 +770,8 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 
 	case p == "ServiceEndpoints":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
-			g.mu.Lock()
-			g.allEndpoints = mergeEndpoints(g.allEndpoints, b)
-			g.mu.Unlock()
 			return filterResults(b, func(e map[string]any) bool { return g.allowsArtifact(r.Ctx, str(e, "Name"), ActionRead) })
-		}, record: (*Guard).recordEndpoints}, nil
+		}}, nil
 
 	case p == "MessageProcessingLogs":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
@@ -893,7 +900,11 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 			return decision{}, g.refuse(&Refusal{Reason: "a test message may not set " + k + " under a scope (it would join another message's correlation group)"})
 		}
 	}
-	target, _, _ := strings.Cut(withoutDefaultPort(r.Base)+r.Path, "?")
+	written, _, _ := strings.Cut(withoutDefaultPort(r.Base)+r.Path, "?")
+	target, ok := endpointKey(written)
+	if !ok {
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint})
+	}
 	flow, why := g.endpointOwner(r.Ctx, target)
 	if flow == "" {
 		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " " + why})
@@ -947,29 +958,28 @@ func (g *Guard) mayOnFlow(ctx context.Context, id, action string) bool {
 // shorter one). The caller's need on that flow decides. Two flows equally
 // specific, or none: "" with the reason.
 func (g *Guard) endpointOwner(ctx context.Context, target string) (string, string) {
+	// the reason stays generic: the error would show the caller the
+	// tenant's API path and answer
 	if err := g.refreshEndpoints(ctx); err != nil {
-		return "", "cannot be checked: the tenant's entry points could not be read (" + err.Error() + ")"
+		return "", "cannot be checked: the tenant's entry points could not be read"
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	// only the tenant-wide list decides: entry points seen in earlier
+	// answers may belong to a flow that has moved since (cpicli#55)
 	best, owners := -1, map[string]bool{}
-	consider := func(eps map[string]string) {
-		for ep, f := range eps {
-			ep = withoutDefaultPort(ep)
-			if !endpointCovers(ep, target) {
-				continue
-			}
-			n := endpointSpecificity(ep, target)
-			switch {
-			case n > best:
-				best, owners = n, map[string]bool{f: true}
-			case n == best:
-				owners[f] = true
-			}
+	for ep, f := range g.allEndpoints {
+		if !endpointCovers(ep, target) {
+			continue
+		}
+		n := endpointSpecificity(ep, target)
+		switch {
+		case n > best:
+			best, owners = n, map[string]bool{f: true}
+		case n == best:
+			owners[f] = true
 		}
 	}
-	consider(g.allEndpoints)
-	consider(g.endpoints)
 	// two flows equally specific: refused, with the text of an unknown
 	// endpoint (the caller learns nothing about the other flow)
 	if best < 0 || len(owners) > 1 {
@@ -998,24 +1008,65 @@ func endpointSpecificity(ep, target string) int {
 // guard's own call, cached like the artifact map).
 // An error leaves no decision: without every flow's entry points, an
 // allowed one could cover another team's.
+// One refresh runs at a time; the others wait for its result.
 func (g *Guard) refreshEndpoints(ctx context.Context) error {
-	g.mu.Lock()
-	fresh := !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
-	g.mu.Unlock()
-	switch {
-	case fresh:
-		return nil
-	case g.Fetch == nil:
-		return errors.New("the guard has no Fetch")
-	}
-	body, err := g.Fetch(internal(ctx), "/api/v1/ServiceEndpoints?$expand=EntryPoints")
-	if err != nil {
+	for {
+		g.mu.Lock()
+		fresh := !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
+		ch, lastErr := g.epBuilding, g.epErr
+		switch {
+		case fresh:
+			g.mu.Unlock()
+			return nil
+		case g.Fetch == nil:
+			g.mu.Unlock()
+			return errors.New("the guard has no Fetch")
+		case ch != nil:
+			g.mu.Unlock()
+			select {
+			case <-ch:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			g.mu.Lock()
+			fresh, lastErr = !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second), g.epErr
+			g.mu.Unlock()
+			if fresh {
+				return nil
+			}
+			if lastErr != nil {
+				return lastErr
+			}
+			continue
+		}
+		ch = make(chan struct{})
+		g.epBuilding = ch
+		g.mu.Unlock()
+
+		err := func() (err error) {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("reading the entry points failed: %v", p)
+				}
+			}()
+			bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mapBuildTimeout)
+			defer cancel()
+			body, err := g.Fetch(internal(bctx), "/api/v1/ServiceEndpoints?$expand=EntryPoints")
+			if err != nil {
+				return err
+			}
+			eps := mergeEndpoints(nil, body)
+			g.mu.Lock()
+			g.allEndpoints, g.epBuiltAt = eps, time.Now()
+			g.mu.Unlock()
+			return nil
+		}()
+		g.mu.Lock()
+		g.epBuilding, g.epErr = nil, err
+		g.mu.Unlock()
+		close(ch)
 		return err
 	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.allEndpoints, g.epBuiltAt = mergeEndpoints(nil, body), time.Now()
-	return nil
 }
 
 // mergeEndpoints adds the entry points of an endpoint list to m.
@@ -1029,12 +1080,43 @@ func mergeEndpoints(m map[string]string, body []byte) map[string]string {
 		for _, x := range list {
 			if ep, ok := x.(map[string]any); ok {
 				if u := str(ep, "Url"); u != "" {
-					m[u] = str(e, "Name")
+					if n, ok := endpointKey(withoutDefaultPort(u)); ok {
+						m[n] = str(e, "Name")
+					}
 				}
 			}
 		}
 	}
 	return m
+}
+
+// endpointKey is a runtime URL (or an entry point) the way the runtime
+// routes it: each path segment decoded, and path parameters (";…") dropped,
+// as servlet containers match paths. Matching the URL as written would let
+// "/http/shared/bill%69ng" or "/http/shared/billing;x" pass as below
+// "/http/shared" while the tenant delivers it to "/http/shared/billing"
+// (cpicli#55). A segment that cannot be decoded, or that decodes to a
+// separator, gives false.
+func endpointKey(u string) (string, bool) {
+	start := 0
+	if i := strings.Index(u, "://"); i >= 0 {
+		start = i + 3
+		if j := strings.IndexByte(u[start:], '/'); j >= 0 {
+			start += j
+		} else {
+			return u, true
+		}
+	}
+	segs := strings.Split(u[start:], "/")
+	for i, seg := range segs {
+		name, _, _ := strings.Cut(seg, ";")
+		dec, err := url.PathUnescape(name)
+		if err != nil || strings.ContainsAny(dec, "/\\;") {
+			return "", false
+		}
+		segs[i] = dec
+	}
+	return u[:start] + strings.Join(segs, "/"), true
 }
 
 // endpointCovers reports whether target is the entry point ep or below it
@@ -1543,25 +1625,6 @@ func (g *Guard) recordChildren(r *httpclnt.GuardRequest, body []byte) {
 			g.children[id] = flow
 			if tooling {
 				g.tooling[id] = true
-			}
-		}
-	}
-}
-
-func (g *Guard) recordEndpoints(_ *httpclnt.GuardRequest, body []byte) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.endpoints == nil {
-		g.endpoints = map[string]string{}
-	}
-	for _, e := range results(body) {
-		eps, _ := e["EntryPoints"].(map[string]any)
-		list, _ := eps["results"].([]any)
-		for _, x := range list {
-			if m, ok := x.(map[string]any); ok {
-				if u := str(m, "Url"); u != "" {
-					g.endpoints[u] = str(e, "Name")
-				}
 			}
 		}
 	}

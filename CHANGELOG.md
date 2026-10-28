@@ -5,6 +5,32 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.7
+
+From the cpictl gateway's verification of 0.35.6 (cpicli#55). Both S1 findings get past the endpoint routing of
+0.35.3, and both are covered by tests that fail on 0.35.6.
+
+- **Escaped and parameterised URLs are matched as the runtime routes them (S1).** The guard compared the URL as
+  written, while the runtime decodes it. So `/http/shared/bill%69ng` passed as below an allowed `/http/shared/*`
+  and was delivered to another team's `/http/shared/billing`. The same applied to `/cxf/…` and to `;x` path
+  parameters. Now each path segment is decoded, and path parameters are dropped, on both the URL and the entry
+  points before matching. A segment that decodes to a separator is refused.
+- **Only the tenant's current endpoint list decides (S1).** Entry points seen in earlier answers stayed valid for
+  the life of the process. A team could record an address of its own flow, move the flow away, and reach another
+  team's flow that took over the range. Ownership now comes only from the guard's own `ServiceEndpoints` read,
+  which is replaced on every refresh.
+- **Smaller fixes:**
+  - one endpoint refresh at a time;
+  - a panic in a rebuild no longer leaves the guard waiting for ever;
+  - an unlocked read in the artifact lookup is fixed;
+  - the "cannot be checked" refusal no longer includes the tenant's error text.
+- **Documented limits** (`docs/access-scope.md`): inside your own wildcard range, another team's address can be
+  told apart from an unused one (existence, not the owner), and a flow deployed in the last 30 seconds may not be
+  in the list yet.
+
+**What to do:** update to 0.35.7 where an access scope is used (the cpictl gateway, Studio's backend). The gateway
+can drop its stopgap that refuses `%` in runtime paths.
+
 ## 0.35.6
 
 From the cpictl gateway's verification of 0.35.5 (cpicli#54):

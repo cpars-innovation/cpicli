@@ -202,6 +202,7 @@ func TestGuardRuntimeEndpointsNeedASeenEntryPoint(t *testing.T) {
 	// the tenant lists entry points without the default port the executer writes
 	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd/orders"}]}},
 		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/fi/post"}]}}]}}`
+	endpoints(g, eps)
 	r := req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", "")
 	out, err := g.After(r, 200, nil, []byte(eps))
 	require.NoError(t, err)
@@ -225,6 +226,7 @@ func TestGuardHarnessTargets(t *testing.T) {
 	}
 	runs(g, map[string]string{"SD_A": `{"d":{"Id":"SD_A","Status":"STARTED","Version":"1.0.1","DeployedOn":"/Date(1700000100000)/"}}`}, nil)
 	eps := `{"d":{"results":[{"Name":"CPICTL_Test_Harness","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test"}]}}]}}`
+	endpoints(g, eps)
 	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
 	call := func(addr string) *httpclnt.GuardRequest {
@@ -238,6 +240,21 @@ func TestGuardHarnessTargets(t *testing.T) {
 	g.ProcessDirectAddresses = nil
 	g.pdFlows = nil
 	refused(t, g.Before(call("/sd/in")))
+}
+
+// endpoints makes g's Fetch answer the tenant-wide endpoint list with eps,
+// read at the next decision.
+func endpoints(g *Guard, eps string) {
+	g.mu.Lock()
+	g.epBuiltAt = time.Time{}
+	g.mu.Unlock()
+	fetch := g.Fetch
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if strings.HasPrefix(path, "/api/v1/ServiceEndpoints") {
+			return []byte(eps), nil
+		}
+		return fetch(ctx, path)
+	}
 }
 
 // runs makes g's Fetch answer the runtime artifacts in rt (Id -> entity) and
@@ -297,6 +314,7 @@ func TestGuardHarnessNeedsTheRunningFlow(t *testing.T) {
 				return map[string][]string{"SD_A": {"/sd/in"}}[id], nil
 			}
 			runs(g, c.rt, c.dt)
+			endpoints(g, eps)
 			_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 			require.NoError(t, err)
 			if c.why == "" {
@@ -335,6 +353,7 @@ func TestGuardGrantsDecideEndpointsPerFlow(t *testing.T) {
 	g := testGuard(t, grantsRW)
 	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd"}]}},
 		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/fi"}]}}]}}`
+	endpoints(g, eps)
 	out, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "FI_B", "FI's endpoints are readable")
@@ -414,6 +433,7 @@ func TestGuardRefusesAmbiguousRequests(t *testing.T) {
 
 	// runtime endpoints may carry ";" (OData services), never dot segments
 	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/gw/odata/SD/Orders;v=1"}]}}]}}`
+	endpoints(g, eps)
 	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
 	g.Scope.Actions = append(g.Scope.Actions, ActionTest)
@@ -700,6 +720,7 @@ func TestGuardToolingLookupsAreBounded(t *testing.T) {
 func TestGuardRefusesChosenCorrelation(t *testing.T) {
 	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
 	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd"}]}}]}}`
+	endpoints(g, eps)
 	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
 	send := func(h map[string]string) *httpclnt.GuardRequest {
@@ -874,6 +895,7 @@ func TestScopeDoesNotImportTheClient(t *testing.T) {
 func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
 	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
 	eps := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd/orders"}]}}]}}`
+	endpoints(g, eps)
 	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
 	g.Fetch = nil
@@ -881,7 +903,7 @@ func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
 	g.epBuiltAt = time.Time{}
 	g.mu.Unlock()
 	r := refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd/orders"}))
-	assert.Contains(t, r.Error(), "no Fetch")
+	assert.Contains(t, r.Error(), "could not be read")
 	assert.Contains(t, g.runsAsRead(context.Background(), "SD_A"), "no Fetch")
 }
 
@@ -941,4 +963,97 @@ func TestGuardArtifactMapRebuilds(t *testing.T) {
 	}
 	wg.Wait()
 	assert.EqualValues(t, 1, lists.Load())
+}
+
+// The runtime decodes a path and drops path parameters before it routes: the
+// guard matches the same way, so an escaped or parameterised URL below an
+// allowed entry point cannot reach another team's endpoint (cpicli#55).
+func TestGuardEndpointMatchedAsTheRuntimeRoutes(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	endpoints(g, `{"d":{"results":[
+		{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/shared/*"},{"Url":"https://rt/cxf/*"},{"Url":"https://rt/gw/odata/SAP/SD_SRV;v=1"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/shared/billing"},{"Url":"https://rt/cxf/billing"},{"Url":"https://rt/gw/odata/SAP/FI_SRV;v=1"}]}}]}}`)
+	send := func(path string) error {
+		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path})
+	}
+	for _, p := range []string{"/http/shared/bill%69ng", "/http/shared/billing;x", "/http/shared/%62illing/sub",
+		"/cxf/bill%69ng", "/cxf/billing;jsessionid=1", "/gw/odata/SAP/FI_SRV;v=1/Invoices"} {
+		r := refused(t, send(p))
+		assert.NotContains(t, r.Error(), "FI_B", p)
+	}
+	for _, p := range []string{"/http/shared/orders", "/http/shared/ord%65rs", "/cxf/orders", "/gw/odata/SAP/SD_SRV;v=1/Orders"} {
+		assert.NoError(t, send(p), p)
+	}
+}
+
+// Only the tenant's current list decides: an entry point seen earlier for a
+// flow that has moved since does not keep its address (cpicli#55).
+func TestGuardEndpointFromAnEarlierListDoesNotCount(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test","deploy"]}`)
+	before := `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/shared/billing/x"}]}}]}}`
+	endpoints(g, before)
+	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(before))
+	require.NoError(t, err)
+	send := &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/shared/billing/x"}
+	require.NoError(t, g.Before(send))
+
+	// SD_A moved, FI_B took the range; the client's own (filtered) list still
+	// shows nothing new
+	endpoints(g, `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/orders"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/shared/billing/*"}]}}]}}`)
+	_, err = g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(before))
+	require.NoError(t, err)
+	refused(t, g.Before(send))
+}
+
+// One endpoint refresh for many callers; a panicking artifact rebuild does
+// not leave the guard waiting for ever (cpicli#55).
+func TestGuardRefreshesOnceAndSurvivesAPanic(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test","deploy"]}`)
+	var lists atomic.Int32
+	endpoints(g, `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd"}]}}]}}`)
+	inner := g.Fetch
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if strings.HasPrefix(path, "/api/v1/ServiceEndpoints") {
+			lists.Add(1)
+			time.Sleep(20 * time.Millisecond)
+		}
+		return inner(ctx, path)
+	}
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd"}))
+		}()
+	}
+	wg.Wait()
+	assert.EqualValues(t, 1, lists.Load())
+
+	deploy := req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'", "")
+	panicking := atomic.Bool{}
+	panicking.Store(true)
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if panicking.Load() && path == "/api/v1/IntegrationPackages" {
+			panic("made-up failure")
+		}
+		return inner(ctx, path)
+	}
+	g.mu.Lock()
+	g.builtAt = time.Time{}
+	g.mu.Unlock()
+	refused(t, g.Before(deploy))
+	panicking.Store(false)
+	g.mu.Lock()
+	g.failedAt = time.Time{}
+	g.mu.Unlock()
+	done := make(chan error, 1)
+	go func() { done <- g.Before(deploy) }()
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the guard waits for a rebuild that ended in a panic")
+	}
 }
