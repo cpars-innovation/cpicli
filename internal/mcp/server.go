@@ -59,8 +59,19 @@ type Server struct {
 	// under it (.cpi/loops); empty: no loop resources.
 	Root string
 
-	// responses are the last send_test_message responses (response_of)
-	responses responseCache
+	// Content is the store of payloads (nil: <Root>/.cpi/cache/content).
+	Content     *ContentStore
+	contentOnce sync.Once
+	// FullResults turns the lean and compact parts of the view step off
+	// (--full-results): results as the CLI prints them.
+	FullResults bool
+	// VerboseResults returns every result in the envelope {ok, exitCode,
+	// durationMs, result} (--verbose-results); default: the result alone,
+	// errors as {errorCategory, error, exitCode}.
+	VerboseResults bool
+	// StructuredContent also sends the result as structuredContent
+	// (--structured-content), in the verbose envelope.
+	StructuredContent bool
 
 	writeMu sync.Mutex
 	out     io.Writer
@@ -347,28 +358,9 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 	begin := time.Now()
 	var value any
 	if pc.responseOf != "" {
-		value, err = s.storedResponse(pc)
+		value, err = s.storedResponse(pc.responseOf)
 	} else {
 		value, err = safeCall(callCtx, s.tools[idx], args)
-	}
-	if shape := leanShapers[p.Name]; shape != nil && err == nil && !full {
-		value = shape(value)
-	}
-	if p.Name == "send_test_message" && err == nil {
-		s.keepResponse(value)
-	}
-	switch {
-	case err != nil:
-	case pc.saveTo != "":
-		value, err = s.savePayloads(value, pc.saveTo)
-	case p.Name == "send_test_message":
-		hint := "call again with save_to (or a larger max_bytes) for the rest"
-		if guid := messageGuidOf(value); guid != "" {
-			hint = fmt.Sprintf(`get_message_content {"response_of": %q, "save_to": "<file>"} saves the rest without sending again`, guid)
-		}
-		value = cutPayloads(value, pc.inline, hint)
-	case hasMaxBytes(s.tools[idx]):
-		value = cutPayloads(value, 0, "call again with save_to (or a larger max_bytes) for the rest")
 	}
 	elapsed := time.Since(begin)
 	code := output.ExitCode(err)
@@ -380,6 +372,16 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 	}
 	if s.Redactor != nil {
 		res.Result = s.Redactor.Apply(p.Name, value)
+	}
+	if res.Result != nil {
+		viewed, vErr := s.view(p.Name, full, pc, res.Result)
+		if vErr != nil && err == nil {
+			err, code = vErr, output.ExitCode(vErr)
+			res.OK, res.ExitCode = false, code
+		}
+		if vErr == nil {
+			res.Result = viewed
+		}
 	}
 	if err != nil {
 		res.ErrorCategory = errorCategory(err)
@@ -394,22 +396,43 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 	return s.result(res)
 }
 
-// result encodes a tool call result: the text content and the structured
-// content carry the same JSON.
+// result encodes a tool call result as text content: the result alone on
+// success ({notice, result} for a deprecated tool), {errorCategory, error,
+// exitCode, result} on error, or with VerboseResults the whole envelope.
+// structuredContent only with StructuredContent (the text is what models
+// read; MCP ties structuredContent to an outputSchema, which no tool has).
 func (s *Server) result(res ToolResult) (any, *rpcError) {
+	var out any = res
+	if !s.VerboseResults {
+		switch {
+		case !res.OK:
+			e := struct {
+				ErrorCategory string `json:"errorCategory,omitempty"`
+				Error         string `json:"error,omitempty"`
+				ExitCode      int    `json:"exitCode"`
+				Result        any    `json:"result,omitempty"`
+			}{res.ErrorCategory, res.Error, res.ExitCode, res.Result}
+			out = e
+		case res.Notice != "":
+			out = map[string]any{"notice": res.Notice, "result": res.Result}
+		default:
+			out = res.Result
+		}
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false) // keep XML payloads readable
-	mErr := enc.Encode(res)
-	text := bytes.TrimSpace(buf.Bytes())
-	if mErr != nil {
+	if mErr := enc.Encode(out); mErr != nil {
 		return nil, &rpcError{Code: codeInvalidParams, Message: "failed to encode result: " + mErr.Error()}
 	}
-	return map[string]any{
-		"content":           []map[string]any{{"type": "text", "text": string(text)}},
-		"structuredContent": res,
-		"isError":           !res.OK,
-	}, nil
+	reply := map[string]any{
+		"content": []map[string]any{{"type": "text", "text": string(bytes.TrimSpace(buf.Bytes()))}},
+		"isError": !res.OK,
+	}
+	if s.StructuredContent {
+		reply["structuredContent"] = res
+	}
+	return reply, nil
 }
 
 func safeCall(ctx context.Context, tool Tool, args json.RawMessage) (v any, err error) {

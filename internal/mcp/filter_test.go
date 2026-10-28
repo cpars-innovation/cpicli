@@ -24,7 +24,7 @@ func toolNames(tools []Tool) []string {
 // A new tool must be classified, otherwise read-only servers could offer it.
 func TestEveryToolHasAnEffect(t *testing.T) {
 	// help is added by the server command after filtering
-	all := append(NewLedger(t.TempDir()).Wrap(Tools(Config{})), HelpTool(HelpInfo{}))
+	all := append(NewLedger(t.TempDir()).Wrap(Tools(Config{})), HelpTool(HelpInfo{}), testContentTool())
 	dyn := NewServer("x", "t", "", nil)
 	require.NoError(t, dyn.UseDynamicToolsets(nil))
 	all = append(all, dyn.tools...) // list_toolsets, enable_toolset
@@ -124,8 +124,15 @@ func TestToolsets(t *testing.T) {
 	}
 }
 
+// allToolsForTest are the tools of a server: those of Tools and get_content
+// (the server command adds it, with help, after filtering).
 func allToolsForTest() []Tool {
-	return NewLedger(os.TempDir()).Wrap(Tools(Config{}))
+	return append(NewLedger(os.TempDir()).Wrap(Tools(Config{})), testContentTool())
+}
+
+func testContentTool() Tool {
+	store := NewContentStore(os.TempDir())
+	return ContentTool(func() *ContentStore { return store }, func() string { return "" }, false)
 }
 
 // --opt-in adds an opt-in tool without limiting the others; deny and the

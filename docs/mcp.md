@@ -111,6 +111,9 @@ server: [plugin.md](plugin.md).
 | `--poll-interval` | `10` | Default seconds between deploy/undeploy status checks |
 | `--max-checks` | `30` | Default maximum number of status checks per artifact |
 | `--cache-ttl` | `60` | Seconds `list_packages` / `list_artifacts` results are reused (`0`: no cache). Every tool that changes the tenant clears the cache; results from the cache have `cached: true` |
+| `--full-results` | `false` | Results as the CLI prints them: no lean fields, empty values and columns, see [Results](#results) |
+| `--verbose-results` | `false` | Every result in the envelope `{ok, exitCode, durationMs, result}` |
+| `--structured-content` | `false` | Also send each result as `structuredContent` (verbose envelope) |
 | `--all-tools` | `false` | List every tool from the start instead of the core tools plus the rest on demand, see [Tools on demand](#tools-on-demand) |
 | `--read-only` | `false` | Offer only tools that do not change the tenant or trigger processing |
 | `--tools` | all | Offer only these tools: names or patterns, e.g. `list_*,get_*,validate_artifact` |
@@ -195,9 +198,12 @@ server lists the tools and sends `notifications/tools/list_changed`, and the res
 toolset's instructions (for `build`: drift before upload, loops, versioning). The mode, filters and
 access scope apply as always, and each tool keeps its own approval in the client.
 
-- **Claude Code** (`clientInfo.name` `claude-code`) gets every tool and the full instructions: it
-  loads tool schemas only when the model needs one, so a short list would only add a round trip.
-  Measured on the mock tenant, sending a test message took 5 turns on demand and 3 with every tool.
+- **Claude Code** (`clientInfo.name` `claude-code`) gets every tool: it loads tool schemas only
+  when the model needs one, so a short list would only add a round trip (measured on the mock
+  tenant: 5 turns on demand, 3 with every tool to send a test message). Its instructions are the
+  general part and an index of the toolsets; it reads a task's part with
+  `help {"topic": "instructions", "toolsets": ["build"]}` (about 750 tokens per turn instead of
+  2,800).
 - **Clients that do not reload the tool list** on `tools/list_changed`: start the server with
   `--all-tools` (or `CPICTL_ALL_TOOLS=true`, `all-tools: true` in `cpictl.yaml`). The symptom is
   that `enable_toolset` reports `addedTools` but the agent cannot call them.
@@ -206,10 +212,6 @@ access scope apply as always, and each tool keeps its own approval in the client
 - The listing is guidance, not an access limit: a tool the server offers can be called before its
   toolset is enabled. Limit access with `--mode`, `--tools`, `--read-only` or an access scope; tools
   they remove are refused on call.
-- **Payloads:** `send_test_message` keeps the whole response of its last 20 messages in memory.
-  A cut response says so before the text (`cut`), and
-  `get_message_content {"response_of": "<messageGuid>", "save_to": "<file>"}` saves it without
-  sending the message again.
 
 ### Dynamic toolsets
 
@@ -360,7 +362,8 @@ change) in v0.25.0 and removed in v0.27.0. A call to an old name fails with `err
 | `message_summary` | | Volume and failures over a window: per flow (count per status, failures, durations), per connection between flows (predecessor links, or graph connections by correlation ID), failures grouped by error fingerprint with sample, count, first / last and newest GUID |
 | `get_trace_tree` | | Path across flows from a trace ID or a message GUID (correlation ID, optionally joined by key custom headers): tree, hops, `pathKey`, `firstFailure` |
 | `get_message_log` | | One message: error text, `errorInformation` (`lastErrorModelStepId`), custom header properties, adapter attributes, attachments, persisted messages; `include_steps` adds the processing steps and the first failing step (`step_properties` each step's properties) |
-| `get_message_content` | | Content of a log attachment (`attachment_id`) or of a message a Persist step wrote (`store_entry_id`); text inline, binary base64, truncated to `max_bytes` |
+| `get_message_content` | | Content of a log attachment (`attachment_id`), of a message a Persist step wrote (`store_entry_id`), or the stored response of a `send_test_message` (`response_of`); text inline, binary base64, see [Results](#results) |
+| `get_content` | local | Stored content by reference (`ref` from a result): a part from `offset`, or the whole into `save_to` |
 | `set_log_level` | runtime setting | NONE / INFO / DEBUG / TRACE for a deployed flow; the server sets it back to INFO after `revert_after_minutes` (default 10 for TRACE and DEBUG) and on shutdown; result `revertsAt` |
 | `get_message_trace` | | Traced steps of a message with trace IDs; with `trace_id` the payload, headers and exchange properties at that step (sensitive values masked); `status: "missing_role"` (ok) when the key may not read message content |
 | `list_data_stores`, `list_data_store_entries`, `get_data_store_entry` | | Data stores, their entries (metadata) and one entry's content |
@@ -423,25 +426,51 @@ change) in v0.25.0 and removed in v0.27.0. A call to an old name fails with `err
 | `config_diff` | | Configure YAML vs tenant parameters: update / unchanged / unknown_key |
 | `pd_deploy` | Partner Directory, **destructive with full_sync** | Upload Partner Directory parameters; dry run unless `dry_run: false`; `keys: ["PID:ID"]` changes only those parameters |
 
-Content tools (`get_resource`, `get_message_content`, ...) return
-`{size, text | base64, truncated}`; `max_bytes` (max 1 MB) limits the size. The default is 16 KB
-for message payloads (`get_message_content`, `get_message_trace`, `send_test_message`, data store
-entries, variables) and 64 KB for `get_resource` and `get_pd_parameters`. A cut result says
-`truncated: true` with the full `size`.
+### Results
 
-**Payloads to a file:** every tool with `max_bytes` also takes `save_to` (a path under `--root`).
-The content (up to 1 MB) is written there and the result has
-`{size, savedTo, savedBytes, sha256, truncated}` instead of the text, so an agent can search the
-file with its own tools instead of reading the payload into its context. A result with several
-contents writes `<name>-2.<ext>`, `<name>-3.<ext>`, ... Refused with `--redact-payloads`.
+A tool call returns the result alone as JSON text. An error returns
+`{"errorCategory", "error", "exitCode"}` (and `result` when there is a partial one) with MCP's
+`isError` set. Before it is sent, the result goes through one view step. The CLI's `--json` output,
+the Go API and the loop ledger see the result before it, unchanged.
 
-**Lean message lists:** `list_message_logs` and `find_messages_by_header` return lean rows by
-default (status, IDs, artifact, end time, duration, error text) and say in `detail` what they leave
-out; `detail: "full"` returns every field. About half the tokens per row.
+- **Payloads** (message bodies, attachments, persisted messages, trace payloads, data store
+  entries, variables, resources) are read whole and stored in the content store
+  (`<root>/.cpi/cache/content`, kept out of Git, entries removed after 7 days or beyond 500 MB).
+  Above the inline limit the result shows `{ref, size, cut, text | base64}`: the first bytes, and
+  in `cut` how to get the rest. `max_bytes` sets the inline limit (default 16 KB, 64 KB for
+  `get_resource` and `get_pd_parameters`; at most 1 MB).
+- **`get_content {ref, offset, max_bytes, save_to}`** reads stored content by reference: a part
+  from `offset` (the result says `next`), or the whole content into a file. The store survives a
+  restart of the server.
+- **`save_to`** on every tool with `max_bytes` writes the payload to a file under `--root` and
+  returns `{size, savedTo, sha256}` instead of the text. A result with several contents writes
+  `<name>-2.<ext>`, ... `get_message_content {"response_of": "<messageGuid>"}` returns or saves
+  the response of a `send_test_message` without sending it again.
+- **`--redact-payloads`:** nothing is stored; `save_to`, `get_content` and `response_of` are
+  refused.
+- **Lean results** (`detail: "full"` for every field):
+  - `list_message_logs`, `find_messages_by_header`: the triage fields of each row;
+  - `get_trace_tree`: the error text once (`firstFailure`), the link kind on each node instead of
+    a `hops` list;
+  - `get_message_log` with steps: the failed step by reference, step errors once;
+  - `message_summary`: no sampled occurrences or time buckets, and one error group for a failure
+    a flow passes on to the flow it calls (same error text, linked by an edge): reported where it
+    failed, with `flows`.
+- **Compact:** empty values (`null`, `""`, `[]`, `{}`) are left out; a list of 5 or more objects is
+  written as `{"columns": [...], "rows": [[...], ...]}` (a missing value is `null`).
+- **`--full-results`** turns lean and compact off for every call (payloads are still stored and
+  shown by reference). **`--verbose-results`** returns every result in the envelope
+  `{ok, exitCode, durationMs, result}`. **`--structured-content`** also sends that envelope as
+  `structuredContent` (models read the text; MCP ties `structuredContent` to an output schema).
 
 **Short descriptions:** `tools/list` sends a summary for the tools with a long description (what
-the tool does, what it needs, its side effects, the next step). `help {"topic": "<tool>"}` returns
-the full description; the server instructions say so.
+the tool does, what it needs, its side effects, the next step), shorter descriptions for the
+parameters of the largest schemas, and none for a parameter whose description only repeats its
+name. `help {"topic": "<tool>"}` returns the full description and schema; the server instructions
+say so.
+
+A golden test (`TestTokenBudgets`) runs calls against the demo tenant and fails when one grows more
+than 10% over its budget (`internal/cmd/testdata/token-budgets.json`).
 
 Every tool has a JSON schema with `additionalProperties: false`: a misspelt argument is an
 error, never silently ignored. `tools/list` returns the schemas and MCP annotations

@@ -2682,6 +2682,7 @@ CPICTL_* environment variables.
       --cache-ttl int                       Seconds list_packages and list_artifacts results are reused (0: no cache); any tool that changes the tenant clears them (default 60)
       --disable-tools strings               Do not offer these tools (names or patterns); wins over --tools
       --dynamic-toolsets                    List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start. The listing is not an access limit: tools the server offers can be called before their toolset is enabled; limit access with --mode, --tools, --read-only or an access scope
+      --full-results                        Return results as the CLI prints them: no lean fields, empty values and columns (payloads are still stored and shown by reference)
       --loop-max-deploys int                Highest max_deploys loop_start accepts (0: no cap); also lowers the default
       --loop-max-iterations int             Highest max_iterations loop_start accepts (0: no cap); also lowers the default
       --loop-max-minutes int                Highest wall_clock_minutes loop_start accepts (0: no cap); also lowers the default
@@ -2700,8 +2701,10 @@ CPICTL_* environment variables.
       --runtime-oauth-host string           OAuth token server host for runtime endpoints (default: --oauth-host)
       --runtime-password string             Password for Basic Auth on runtime endpoints
       --runtime-userid string               User ID for Basic Auth on runtime endpoints
+      --structured-content                  Also send each result as structuredContent, in the verbose envelope (for SDK clients that read it)
       --tools strings                       Offer only these tools (names or patterns such as list_*)
       --toolset strings                     Offer only the tools of these tasks: build, improve, inspect, monitor, partner-directory, promote, security, test (combined with --tools; the mode still applies)
+      --verbose-results                     Return every result in the envelope {ok, exitCode, durationMs, result} (default: the result alone; errors as {errorCategory, error, exitCode})
       --versioning string                   Versions: manifest (Bundle-Version of the repository, downgrade guard on), keep (the tenant's versions, guard off) or tenant-bump (max(designtime, runtime)+1); env CPICTL_VERSIONING, set it per pipeline/branch (docs/versioning.md)
 ```
 

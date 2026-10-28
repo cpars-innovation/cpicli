@@ -1,0 +1,15 @@
+{
+  "claude-code instructions": 793,
+  "claude-code tool list": 22238,
+  "get_message_log {\"include_steps\":true,\"message_guid\":\"AGD0000000000000000000000093\"}": 443,
+  "get_trace_tree {\"message_guid\":\"AGD0000000000000000000000092\"}": 383,
+  "help {}": 1895,
+  "list_artifacts {\"package_id\":\"Orders\"}": 182,
+  "list_message_logs {\"since\":\"7d\",\"statuses\":[\"FAILED\"]}": 429,
+  "list_message_logs {\"since\":\"7d\",\"top\":50}": 1889,
+  "list_packages {}": 88,
+  "list_runtime_artifacts {}": 244,
+  "message_summary {\"since\":\"7d\"}": 583,
+  "other instructions": 934,
+  "other tool list": 2727
+}

@@ -1990,8 +1990,8 @@ func mustAbs(p string) string {
 }
 
 func checkMaxBytes(n int) error {
-	if n < 0 || n > 1048576 {
-		return output.Usagef("max_bytes must be between 1 and 1048576")
+	if n < 0 || n > fetchBytes {
+		return output.Usagef("max_bytes must be between 1 and %d", maxInlineBytes)
 	}
 	return nil
 }

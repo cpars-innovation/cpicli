@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,101 +15,116 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func payloadServer(t *testing.T, body []byte) (*Server, string) {
+// payloadServer serves a send_test_message and a get_message_content that
+// return body (as the handlers do: cut at max_bytes), plus get_content.
+func payloadServer(t *testing.T, root string, body []byte, sends *int) *Server {
 	t.Helper()
-	tools := []Tool{{Name: "get_message_content", InputSchema: object(props{"id": str("ID"), "max_bytes": maxBytesSchema()}),
-		Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
+	handler := func(withGuid bool) func(context.Context, json.RawMessage) (any, error) {
+		return func(ctx context.Context, raw json.RawMessage) (any, error) {
 			var a struct {
-				ID       string `json:"id"`
-				MaxBytes int    `json:"max_bytes"`
+				MaxBytes int `json:"max_bytes"`
 			}
-			if err := decode(raw, &a); err != nil {
+			if err := json.Unmarshal(raw, &a); err != nil {
 				return nil, err
 			}
-			return map[string]any{"id": a.ID, "content": ops.NewContent(body, a.MaxBytes)}, nil
-		}}}
-	withSaveTo(tools)
-	srv := NewServer("cpicli", "test", "", tools)
-	srv.Root = t.TempDir()
-	return srv, srv.Root
-}
-
-func TestPayloadInlineDefaultAndSaveTo(t *testing.T) {
-	body := []byte(strings.Repeat("<a>x</a>", 5000)) // 40000 bytes
-	srv, root := payloadServer(t, body)
-	resp := serve(t, srv,
-		call(1, "get_message_content", map[string]any{"id": "1"}),
-		call(2, "get_message_content", map[string]any{"id": "1", "max_bytes": 50000}),
-		call(3, "get_message_content", map[string]any{"id": "1", "save_to": "out/body.xml"}),
-		call(4, "get_message_content", map[string]any{"id": "1", "save_to": "../outside.xml"}),
-	)
-	inline := toolResult(t, resp["1"]).StructuredContent.Result.(map[string]any)["content"].(map[string]any)
-	assert.Equal(t, true, inline["truncated"], "cut to the inline default, visibly")
-	assert.Len(t, inline["text"], inlinePayloadBytes)
-	assert.EqualValues(t, len(body), inline["size"])
-	whole := toolResult(t, resp["2"]).StructuredContent.Result.(map[string]any)["content"].(map[string]any)
-	assert.Len(t, whole["text"], len(body), "max_bytes still raises the limit")
-
-	saved := toolResult(t, resp["3"]).StructuredContent
-	require.True(t, saved.OK, saved.Error)
-	c := saved.Result.(map[string]any)["content"].(map[string]any)
-	assert.NotContains(t, c, "text")
-	assert.Equal(t, "out/body.xml", c["savedTo"], "root-relative path")
-	assert.Len(t, c["sha256"], 64)
-	got, err := os.ReadFile(filepath.Join(root, "out", "body.xml"))
-	require.NoError(t, err)
-	assert.Equal(t, body, got)
-	assert.Equal(t, "usage", toolResult(t, resp["4"]).StructuredContent.ErrorCategory, "only under the root")
-
-	srv.Redactor.RedactPayloads = true
-	resp = serve(t, srv, call(5, "get_message_content", map[string]any{"id": "1", "save_to": "b.xml"}))
-	assert.Contains(t, toolResult(t, resp["5"]).StructuredContent.Error, "redacts")
-}
-
-// A cut send_test_message response says how to get the rest, and
-// get_message_content response_of returns or saves it without sending the
-// message again.
-func TestSendResponseKeptForResponseOf(t *testing.T) {
-	body := []byte(strings.Repeat("<a>x</a>", 5000)) // 40000 bytes
-	sends := 0
-	tools := []Tool{
-		{Name: "send_test_message", InputSchema: object(props{"max_bytes": maxBytesSchema()}),
-			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) {
-				var a struct {
-					MaxBytes int `json:"max_bytes"`
-				}
-				if err := decode(raw, &a); err != nil {
-					return nil, err
-				}
-				sends++
+			if withGuid {
+				*sends++
 				return map[string]any{"messageGuid": "G1", "httpStatus": 200, "response": ops.NewContent(body, a.MaxBytes)}, nil
-			}},
-		{Name: "get_message_content", InputSchema: object(props{"attachment_id": str("ID"), "max_bytes": maxBytesSchema()}),
-			Handler: func(ctx context.Context, raw json.RawMessage) (any, error) { return nil, nil }},
+			}
+			return map[string]any{"id": "e1", "content": ops.NewContent(body, a.MaxBytes)}, nil
+		}
+	}
+	tools := []Tool{
+		{Name: "send_test_message", InputSchema: object(props{"max_bytes": maxBytesSchema()}), Handler: handler(true)},
+		{Name: "get_message_content", InputSchema: object(props{"store_entry_id": str("ID"), "max_bytes": maxBytesSchema()}), Handler: handler(false)},
 	}
 	withSaveTo(tools)
-	srv := NewServer("cpicli", "test", "", tools)
-	srv.Root = t.TempDir()
+	var srv *Server
+	tools = append(tools, ContentTool(func() *ContentStore { return srv.Contents() }, func() string { return root }, false))
+	srv = NewServer("cpicli", "test", "", tools)
+	srv.Root = root
+	return srv
+}
 
-	resp := serve(t, srv, call(1, "send_test_message", map[string]any{}))
-	r := toolResult(t, resp["1"])
-	c := r.StructuredContent.Result.(map[string]any)["response"].(map[string]any)
-	assert.Len(t, c["text"], inlinePayloadBytes)
-	assert.EqualValues(t, len(body), c["size"])
-	assert.Contains(t, c["cut"], `"response_of": "G1"`)
-	assert.Less(t, strings.Index(r.Content[0].Text, `"cut"`), strings.Index(r.Content[0].Text, `"text"`), "the cut is said before the text")
+func sha(b []byte) string {
+	s := sha256.Sum256(b)
+	return hex.EncodeToString(s[:])
+}
 
-	resp = serve(t, srv,
-		call(2, "get_message_content", map[string]any{"response_of": "G1", "save_to": "resp.xml"}),
-		call(3, "get_message_content", map[string]any{"response_of": "G1", "max_bytes": 50000}),
-		call(4, "get_message_content", map[string]any{"response_of": "nope"}))
-	saved := toolResult(t, resp["2"]).StructuredContent
-	require.True(t, saved.OK, saved.Error)
-	got, err := os.ReadFile(filepath.Join(srv.Root, "resp.xml"))
+// A cut payload is stored whole and says first how to get the rest; nothing
+// is lost above 1 MiB, and the store survives a restart of the server.
+func TestPayloadStoredByReference(t *testing.T) {
+	root := t.TempDir()
+	for _, size := range []int{40_000, 2_400_000, 20_000_000} {
+		body := []byte(strings.Repeat("<a>x</a>", size/8))
+		sends := 0
+		srv := payloadServer(t, root, body, &sends)
+		resp := serveCompact(t, srv, call(1, "send_test_message", map[string]any{}))
+		r := toolResult(t, resp["1"])
+		require.False(t, r.IsError, r.Content[0].Text)
+		c := r.StructuredContent.Result.(map[string]any)["response"].(map[string]any)
+		ref := c["ref"].(string)
+		assert.Len(t, c["text"], inlinePayloadBytes)
+		assert.EqualValues(t, len(body), c["size"])
+		assert.Contains(t, c["cut"], `get_content {"ref": "`+ref+`"}`)
+		text := r.Content[0].Text
+		assert.Less(t, strings.Index(text, `"cut"`), strings.Index(text, `"text"`), "the cut is said before the text")
+
+		// a new server (restart) reads it from the store, by offset and whole
+		srv = payloadServer(t, root, body, &sends)
+		resp = serveCompact(t, srv,
+			call(2, "get_content", map[string]any{"ref": ref, "offset": len(body) - 100}),
+			call(3, "get_content", map[string]any{"ref": ref, "save_to": "out/body.xml"}),
+			call(4, "get_message_content", map[string]any{"response_of": "G1", "save_to": "out/again.xml"}))
+		require.False(t, toolResult(t, resp["2"]).IsError, toolResult(t, resp["2"]).Content[0].Text)
+		part := toolResult(t, resp["2"]).StructuredContent.Result.(map[string]any)
+		assert.Equal(t, string(body[len(body)-100:]), part["text"])
+		assert.NotContains(t, part, "next", "the end reached")
+		saved := toolResult(t, resp["3"]).StructuredContent
+		require.True(t, saved.OK, saved.Error)
+		assert.Equal(t, sha(body), saved.Result.(map[string]any)["sha256"])
+		got, err := os.ReadFile(filepath.Join(root, "out", "body.xml"))
+		require.NoError(t, err)
+		assert.Equal(t, len(body), len(got))
+		assert.Equal(t, sha(body), sha(got))
+		again := toolResult(t, resp["4"]).StructuredContent
+		require.True(t, again.OK, again.Error)
+		assert.Equal(t, sha(body), again.Result.(map[string]any)["response"].(map[string]any)["sha256"])
+		assert.Equal(t, 1, sends, "the message was sent once")
+	}
+	ignore, err := os.ReadFile(filepath.Join(root, ".cpi", "cache", ".gitignore"))
 	require.NoError(t, err)
-	assert.Equal(t, body, got)
-	whole := toolResult(t, resp["3"]).StructuredContent.Result.(map[string]any)["response"].(map[string]any)
-	assert.Len(t, whole["text"], len(body))
-	assert.Equal(t, "usage", toolResult(t, resp["4"]).StructuredContent.ErrorCategory)
-	assert.Equal(t, 1, sends, "the message was sent once")
+	assert.Contains(t, string(ignore), "*", "the cache stays out of Git")
+}
+
+// Small contents stay inline; max_bytes and save_to work on any payload
+// tool; paths stay under the root; a redacting server stores nothing.
+func TestPayloadInlineSaveAndRedaction(t *testing.T) {
+	root := t.TempDir()
+	body := []byte("<persisted/>")
+	sends := 0
+	srv := payloadServer(t, root, body, &sends)
+	resp := serveCompact(t, srv,
+		call(1, "get_message_content", map[string]any{"store_entry_id": "e1"}),
+		call(2, "get_message_content", map[string]any{"store_entry_id": "e1", "max_bytes": 5}),
+		call(3, "get_message_content", map[string]any{"store_entry_id": "e1", "save_to": "../outside.xml"}),
+		call(4, "get_message_content", map[string]any{"store_entry_id": "e1", "max_bytes": 2 << 20}),
+		call(5, "get_content", map[string]any{"ref": "c:nope"}))
+	assert.JSONEq(t, `{"id":"e1","content":{"size":12,"text":"<persisted/>"}}`, toolResult(t, resp["1"]).Content[0].Text)
+	cut := toolResult(t, resp["2"]).StructuredContent.Result.(map[string]any)["content"].(map[string]any)
+	assert.Equal(t, "<pers", cut["text"])
+	assert.Contains(t, cut["cut"], "5 of 12 bytes shown")
+	for _, id := range []string{"3", "4", "5"} {
+		assert.Equal(t, "usage", toolResult(t, resp[id]).StructuredContent.ErrorCategory, id)
+	}
+
+	srv = payloadServer(t, t.TempDir(), body, &sends)
+	srv.Redactor.RedactPayloads = true
+	resp = serveCompact(t, srv,
+		call(6, "get_message_content", map[string]any{"store_entry_id": "e1", "save_to": "b.xml"}),
+		call(7, "get_message_content", map[string]any{"store_entry_id": "e1", "max_bytes": 5}))
+	assert.Contains(t, toolResult(t, resp["6"]).StructuredContent.Error, "redacts")
+	assert.NotContains(t, toolResult(t, resp["7"]).Content[0].Text, `"ref"`, "nothing stored")
+	_, err := os.Stat(filepath.Join(srv.Root, ".cpi", "cache"))
+	assert.True(t, os.IsNotExist(err))
 }

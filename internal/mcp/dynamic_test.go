@@ -35,6 +35,7 @@ func dynamicServer(t *testing.T, filter ToolFilter, initial ...string) *Server {
 	tools = append(tools, HelpTool(HelpInfo{Tools: tools, Removed: removed}))
 	srv := NewServer("cpicli", "test", Instructions+DynamicInstructions(), tools)
 	require.NoError(t, srv.UseDynamicToolsets(initial))
+	srv.FullResults = true
 	return srv
 }
 

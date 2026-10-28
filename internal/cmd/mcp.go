@@ -192,7 +192,8 @@ CPICTL_* environment variables.`,
 				help.ActiveToolsets = func() []string { return server.EnabledToolsets() }
 			}
 			help.Listed = func(name string) bool { return server.IsListed(name) }
-			tools = append(tools, mcp.HelpTool(help))
+			tools = append(tools, mcp.HelpTool(help),
+				mcp.ContentTool(func() *mcp.ContentStore { return server.Contents() }, func() string { return root }, redactPayloads))
 			var instructions string
 			if len(toolsets) > 0 && !dynamic {
 				// only the parts of these toolsets, and no list of the many
@@ -217,10 +218,13 @@ CPICTL_* environment variables.`,
 			}
 			server = mcp.NewServer("cpicli", version, instructions, tools)
 			server.Removed, server.Redactor, server.Root = reasons, redactor, root
+			server.FullResults = config.GetBool(cmd, "full-results")
+			server.VerboseResults = config.GetBool(cmd, "verbose-results")
+			server.StructuredContent = config.GetBool(cmd, "structured-content")
 			if onDemand {
 				// a client that loads tool schemas on demand itself gets
-				// every tool, with the instructions for all of them
-				all := mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
+				// every tool, and the instructions of the tasks by help
+				all := mcp.FilteredInstructions(mcp.ToolsetInstructions(nil), filter, removed) + help.ServerInstructions + mcp.TaskInstructionsIndex()
 				if err := server.UseOnDemandTools(nil, all); err != nil {
 					return err
 				}
@@ -245,6 +249,9 @@ CPICTL_* environment variables.`,
 	c.Flags().Bool("read-only", false, "Offer only tools that do not change the tenant or trigger processing")
 	c.Flags().StringSlice("tools", nil, "Offer only these tools (names or patterns such as list_*)")
 	c.Flags().StringSlice("toolset", nil, "Offer only the tools of these tasks: "+strings.Join(mcp.ToolsetNames(), ", ")+" (combined with --tools; the mode still applies)")
+	c.Flags().Bool("full-results", false, "Return results as the CLI prints them: no lean fields, empty values and columns (payloads are still stored and shown by reference)")
+	c.Flags().Bool("verbose-results", false, "Return every result in the envelope {ok, exitCode, durationMs, result} (default: the result alone; errors as {errorCategory, error, exitCode})")
+	c.Flags().Bool("structured-content", false, "Also send each result as structuredContent, in the verbose envelope (for SDK clients that read it)")
 	c.Flags().Bool("all-tools", false, "List every tool from the start (about 26,000 tokens per turn), for clients that do not reload the tool list on tools/list_changed. Default: the core tools, the rest on demand (enable_toolset)")
 	c.Flags().Bool("dynamic-toolsets", false, "List only help, doctor, list_toolsets and enable_toolset at the start; the agent enables the toolsets it needs (the client must support tools/list_changed). --toolset then names the toolsets enabled at the start. The listing is not an access limit: tools the server offers can be called before their toolset is enabled; limit access with --mode, --tools, --read-only or an access scope")
 	c.Flags().StringSlice("opt-in", nil, "Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does")

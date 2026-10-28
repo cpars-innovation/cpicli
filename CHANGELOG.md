@@ -5,6 +5,66 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+From two agent-test handoffs ("next token reductions" and "how results get to the agent"). MCP only: the CLI's
+`--json` output and the Go API are unchanged.
+
+**Measured** on the demo mock tenant (tokens ≈ characters / 3.6, the text a model reads):
+
+| Call | 0.34.1 | Now |
+|---|---|---|
+| Instructions, Claude Code | 2,783 | 742 |
+| `message_summary` 7 days | 1,081 | 583 |
+| `list_message_logs` top 50 | 3,134 | 1,889 |
+| `list_runtime_artifacts` | 373 | 244 |
+| `list_artifacts` (Orders) | 262 | 182 |
+| a 2.4 MB test response | cut at 1 MiB, the rest lost | first 16 KB, the rest by reference |
+
+- **No more data loss on payloads over 1 MiB.** Payloads are read whole and stored in a content store
+  (`<root>/.cpi/cache/content`, kept out of Git, entries removed after 7 days or beyond 500 MB). A result shows the
+  first 16 KB (`max_bytes`) with `ref` and `cut`, which says how to get the rest. The new tool
+  **`get_content {ref, offset, max_bytes, save_to}`** reads it by offset or writes it whole into a file, also after a
+  restart of the server. `get_message_content response_of` now reads the store too. Tested with 2.4 MB and 20 MB
+  responses (sha256 of the saved file matches the sent body). With `--redact-payloads` nothing is stored.
+- **Results are the data alone.** On success the text is the result; `ok`, `exitCode` and `durationMs` are gone
+  (MCP's `isError` says it). Errors are `{errorCategory, error, exitCode}`, plus `result` when there is a partial
+  one. `--verbose-results` returns the former envelope.
+- **No `structuredContent`** by default: models read the text, and MCP ties `structuredContent` to an output schema,
+  which no tool has. It doubled every result on the wire. `--structured-content` sends it again (in the verbose
+  envelope).
+- **One view step** replaces four JSON round trips. It keeps the order of fields and applies:
+  - the lean shape of a tool (`detail: "full"` for every field);
+  - payload references;
+  - empty values (`null`, `""`, `[]`, `{}`) left out;
+  - lists of 5 or more objects as `{"columns": [...], "rows": [[...]]}`.
+
+  `--full-results` turns lean and compact off for every call.
+- **`message_summary` lean:** no sampled occurrences and time buckets, and **one error group for a failure a flow
+  passes on**. The same error text in a caller and the flow it calls is one group, reported where it failed (step
+  and message of the callee) with `flows: [caller, callee]`. In the demo, Billing_In (RETRY at `EndEvent_1`) and
+  Billing_Post (FAILED at `ServiceTask_0`) are one group now.
+- **Short instructions for Claude Code:** the general part and an index of the toolsets; it reads a task's part with
+  `help {"topic": "instructions", "toolsets": [...]}`. 742 instead of 2,783 tokens on every turn.
+- **Shorter parameter descriptions** in `tools/list` for the largest schemas (`send_test_message`,
+  `set_stub_response`, `list_message_logs`, `get_trace_tree`), and none for a parameter whose description only
+  repeats its name. `help {"topic": "<tool>"}` returns the full schema.
+- **Token budgets in CI:** `TestTokenBudgets` runs golden calls against the demo tenant and fails when one grows
+  more than 10% over its budget (`internal/cmd/testdata/token-budgets.json`).
+- **Fix:** `--toolset` no longer fails with "tool pattern get_content matches no tool".
+
+**What to do:**
+- **Code that reads `cpictl mcp` results** (Studio, gateway, scripts):
+  - read the result from the text content, not `structuredContent`; or pass `--structured-content
+    --verbose-results` for the former reply;
+  - for the former shapes (no columns, empty values kept, no lean), also pass `--full-results`, or `detail:
+    "full"` per call on the lean tools;
+  - a payload above the inline limit has `ref` instead of the whole text: read it with `get_content`.
+- **Agents and skills:** use `get_content {ref}` (with `save_to` for a file you search) when a result says `cut`.
+  Read a task's instructions with `help {"topic": "instructions", "toolsets": [...]}` when the server sent only the
+  index.
+- **Repositories:** `.cpi/cache/` holds payloads and has its own `.gitignore`; nothing to commit.
+- **Contributors:** a change that makes a golden call bigger fails `TestTokenBudgets`. Make it smaller, or update the
+  budgets with `go test ./internal/cmd -run TestTokenBudgets -update` and say why in the release notes.
+
 ## 0.34.1
 
 Fixes from the agent test of 0.34.0 (feedback by a Claude Code agent on the mock tenant).

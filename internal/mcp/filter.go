@@ -43,7 +43,7 @@ var toolEffects = map[string]Effect{
 	"retry_jms_messages": EffectTenant, "move_jms_messages": EffectTenant, "delete_jms_messages": EffectTenant, "set_jms_queue_state": EffectTenant,
 	"list_log_files": EffectRead, "get_log_file": EffectRead, "list_idempotent_entries": EffectRead, "list_id_mappings": EffectRead,
 	"drift": EffectRead, "doctor": EffectRead, "lint": EffectRead, "compare": EffectRead, "message_summary": EffectRead, "transport_check": EffectRead,
-	"graph_search": EffectRead, "list_tests": EffectRead, "help": EffectRead, "list_toolsets": EffectRead, "enable_toolset": EffectRead, "graph_neighbors": EffectRead, "graph_path": EffectRead,
+	"graph_search": EffectRead, "list_tests": EffectRead, "help": EffectRead, "get_content": EffectLocal, "list_toolsets": EffectRead, "enable_toolset": EffectRead, "graph_neighbors": EffectRead, "graph_path": EffectRead,
 	"loop_status": EffectRead, "loop_start": EffectLocal, "loop_end": EffectLocal,
 	"list_keystore_history": EffectRead, "get_certificate_chain": EffectRead, "get_csr": EffectRead, "get_ssh_public_key": EffectRead,
 	"list_pgp_keys": EffectRead, "list_access_policies": EffectRead, "list_audit_logs": EffectRead, "list_pd_partners": EffectRead,
@@ -345,7 +345,7 @@ var Toolsets = map[string][]string{
 	"inspect": {
 		"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "list_runtime_artifacts",
 		"list_service_endpoints", "graph_search", "graph_neighbors", "graph_path", "discover_tenant", "drift", "compare",
-		"list_value_mappings", "get_value_mapping"},
+		"list_value_mappings", "get_value_mapping", "get_content"},
 	"build": {
 		"list_packages", "list_artifacts", "list_resources", "get_resource", "get_parameters", "set_parameters", "download_artifact",
 		"copy_iflow", "layout_iflow", "create_package", "upload_artifacts", "validate_artifact", "check_guidelines", "deploy",
@@ -356,14 +356,14 @@ var Toolsets = map[string][]string{
 		"list_tests", "run_tests", "run_script_cases", "run_script_cases_online", "send_test_message", "idoc_template",
 		"list_service_endpoints", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_content",
 		"get_trace_tree", "set_log_level", "get_message_trace", "list_runtime_artifacts", "install_test_tools", "set_stub_response",
-		"loop_start", "loop_status", "loop_end"},
+		"loop_start", "loop_status", "loop_end", "get_content"},
 	"monitor": {
 		"message_summary", "list_message_logs", "find_messages_by_header", "get_message_log", "get_message_content", "get_trace_tree",
 		"get_message_trace", "set_log_level", "list_runtime_artifacts", "list_runtimes", "list_log_files", "get_log_file",
 		"list_data_stores", "list_data_store_entries", "get_data_store_entry", "list_variables", "list_jms_queues", "get_jms_broker",
 		"list_jms_messages", "retry_jms_messages", "move_jms_messages", "set_jms_queue_state", "list_number_ranges",
 		"list_idempotent_entries", "list_id_mappings", "list_keystore", "list_audit_logs", "graph_neighbors",
-		"list_integration_connections", "get_tenant_settings", "download_log_archive"},
+		"list_integration_connections", "get_tenant_settings", "download_log_archive", "get_content"},
 	"promote": {
 		"compare", "transport_check", "drift", "list_artifacts", "get_parameters", "config_diff", "list_credentials", "list_keystore",
 		"pd_dependencies", "pd_diff", "list_runtime_artifacts", "graph_neighbors", "changed_since"},
@@ -410,7 +410,8 @@ func ToolsetTools(names []string) ([]string, error) {
 			return nil, output.Usagef("invalid toolset %q (%s)", n, strings.Join(ToolsetNames(), ", "))
 		}
 		for _, t := range tools {
-			if !slices.Contains(out, t) {
+			// get_content is added by the server after filtering (like help)
+			if !slices.Contains(out, t) && t != "get_content" {
 				out = append(out, t)
 			}
 		}

@@ -35,7 +35,15 @@ func sessionWith(t *testing.T, cfg Config, msgs ...string) map[string]rpcResp {
 	return serve(t, NewServer("cpicli", "test", Instructions, Tools(cfg)), msgs...)
 }
 
+// serve runs the messages on srv with full results (the shapes the
+// existing tests check); serveCompact keeps the server's default view.
 func serve(t *testing.T, srv *Server, msgs ...string) map[string]rpcResp {
+	t.Helper()
+	srv.FullResults = true
+	return serveCompact(t, srv, msgs...)
+}
+
+func serveCompact(t *testing.T, srv *Server, msgs ...string) map[string]rpcResp {
 	t.Helper()
 	var out bytes.Buffer
 	require.NoError(t, srv.Serve(context.Background(), strings.NewReader(strings.Join(msgs, "\n")+"\n"), &out))
@@ -73,6 +81,21 @@ func toolResult(t *testing.T, r rpcResp) toolCallResult {
 	require.NoError(t, json.Unmarshal(r.Result, &res))
 	require.Len(t, res.Content, 1)
 	assert.True(t, json.Valid([]byte(res.Content[0].Text)))
+	var raw struct {
+		StructuredContent json.RawMessage `json:"structuredContent"`
+	}
+	_ = json.Unmarshal(r.Result, &raw)
+	if len(raw.StructuredContent) == 0 {
+		// the default reply has the result alone as text, errors as
+		// {errorCategory, error, exitCode, result}
+		sc := ToolResult{OK: !res.IsError}
+		if res.IsError {
+			require.NoError(t, json.Unmarshal([]byte(res.Content[0].Text), &sc))
+		} else {
+			require.NoError(t, json.Unmarshal([]byte(res.Content[0].Text), &sc.Result))
+		}
+		res.StructuredContent = sc
+	}
 	return res
 }
 
@@ -151,7 +174,7 @@ func TestDeployAndStatusTools(t *testing.T) {
 	assert.True(t, res.IsError)
 	assert.Equal(t, "partial", res.StructuredContent.ErrorCategory)
 	assert.Equal(t, 7, res.StructuredContent.ExitCode)
-	assert.Contains(t, res.Content[0].Text, `"durationMs":`, "every result reports its duration")
+	assert.NotContains(t, res.Content[0].Text, `"durationMs":`, "the default envelope has no duration")
 	results := res.StructuredContent.Result.(map[string]any)["results"].([]any)
 	assert.Equal(t, "DEPLOYED", results[0].(map[string]any)["status"])
 	assert.Equal(t, "FAILED", results[1].(map[string]any)["status"])
@@ -274,12 +297,13 @@ func TestMessageLogTools(t *testing.T) {
 	assert.Equal(t, "usage", toolResult(t, resp["4"]).StructuredContent.ErrorCategory)
 
 	// lean rows by default, every field with detail=full
-	resp = session(t, mock, t.TempDir(),
+	resp = serveCompact(t, NewServer("cpicli", "test", Instructions, Tools(Config{Exe: mock.Executer(), Root: t.TempDir()})),
 		call(5, "list_message_logs", map[string]any{"artifact_id": "A"}),
 		call(6, "list_message_logs", map[string]any{"artifact_id": "A", "detail": "full"}),
 		call(7, "list_message_logs", map[string]any{"artifact_id": "A", "detail": "lean"}),
 	)
 	lean := toolResult(t, resp["5"]).StructuredContent.Result.(map[string]any)
+	require.Len(t, lean["logs"], 1, "one row stays an object (columns from %d rows)", minColumnRows)
 	row := lean["logs"].([]any)[0].(map[string]any)
 	assert.Equal(t, "Mapping failed at line 3", row["errorText"])
 	assert.NotContains(t, row, "logStart")
@@ -333,7 +357,8 @@ func TestContentTools(t *testing.T) {
 	assert.Contains(t, toolResult(t, resp["7"]).Content[0].Text, `"modelStepId":"Mapping_1"`)
 	assert.Contains(t, toolResult(t, resp["8"]).Content[0].Text, `"text":"<in/>"`, "XML stays readable (no HTML escaping)")
 	entry := toolResult(t, resp["9"]).Content[0].Text
-	assert.Contains(t, entry, `"truncated":true`)
+	assert.Contains(t, entry, `"ref":"c:`, "cut content is stored and referenced")
+	assert.Contains(t, entry, `"cut":"5 of 12 bytes shown`)
 	assert.Equal(t, "usage", toolResult(t, resp["10"]).StructuredContent.ErrorCategory)
 }
 

@@ -25,7 +25,7 @@ var dynamicCore = []string{"help", "doctor", "list_toolsets", "enable_toolset"}
 // Tools that change the tenant come with their toolset (enable_toolset), and
 // with it its instructions.
 var CoreTools = append(slices.Clone(dynamicCore), "list_packages", "list_artifacts", "list_runtime_artifacts",
-	"message_summary", "list_message_logs", "get_message_log", "get_trace_tree")
+	"message_summary", "list_message_logs", "get_message_log", "get_trace_tree", "get_content")
 
 // dynamicState is the toolset state of a server in dynamic mode.
 type dynamicState struct {
@@ -122,6 +122,19 @@ func DynamicInstructions() string {
 func OnDemandInstructions() string {
 	return toolsetInstructions("at the start only the core tools are listed (" + strings.Join(CoreTools, ", ") +
 		"); every other tool, including those that change the tenant or send messages, comes with its toolset.")
+}
+
+// TaskInstructionsIndex replaces the instructions of the toolsets with an
+// index, for a client that has every tool but should not carry every
+// toolset's instructions on each turn: help returns a task's part.
+func TaskInstructionsIndex() string {
+	var b strings.Builder
+	b.WriteString("\n\nInstructions per task: before working on a task, read its part once with " +
+		"help {\"topic\": \"instructions\", \"toolsets\": [\"<toolset>\"]}. Toolsets:")
+	for _, n := range ToolsetNames() {
+		fmt.Fprintf(&b, "\n- %s: %s", n, ToolsetDescriptions[n])
+	}
+	return b.String()
 }
 
 func toolsetInstructions(start string) string {

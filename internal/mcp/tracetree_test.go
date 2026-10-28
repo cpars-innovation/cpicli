@@ -19,7 +19,7 @@ func TestTraceTreeByMessage(t *testing.T) {
 		{Guid: "M1", Artifact: "Orders_In", Status: "COMPLETED", CorrelationID: "C1", Start: t0, End: t0, Headers: map[string]string{"OrderNo": "4711"}},
 		{Guid: "M2", Artifact: "Orders_Route", Status: "FAILED", ErrorText: "boom", CorrelationID: "C1", Predecessor: "M1", Start: t0.Add(time.Second), End: t0.Add(time.Second)},
 	}}
-	byID := session(t, mock, t.TempDir(),
+	byID := serveCompact(t, NewServer("cpicli", "test", Instructions, Tools(Config{Exe: mock.Executer(), Root: t.TempDir()})),
 		call(1, "get_trace_tree", map[string]any{"message_guid": "M2"}),
 		call(2, "get_trace_tree", map[string]any{}),
 		call(3, "get_trace_tree", map[string]any{"message_guid": "M2", "key_headers": []string{"OrderNo"}}),

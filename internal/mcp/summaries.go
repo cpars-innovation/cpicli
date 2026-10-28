@@ -1,5 +1,10 @@
 package mcp
 
+import (
+	"maps"
+	"strings"
+)
+
 // toolSummaries are the descriptions tools/list sends for tools with a long
 // description: what the tool does, what it needs, its side effects and the
 // next step. help {"topic": "<tool>"} returns the full description, so
@@ -83,13 +88,92 @@ var toolSummaries = map[string]string{
 		"stopped) at max_iterations, same_error_limit, wall_clock_minutes or max_deploys. Returns loop_id; finish with loop_end.",
 }
 
-// summarized returns the tools with the summary as description, for
-// tools/list.
+// propSummaries are shorter parameter descriptions for tools/list (the
+// longest schemas); help {"topic": "<tool>"} returns the full schema.
+var propSummaries = map[string]map[string]string{
+	"send_test_message": {
+		"idoc":                   "IDoc XML with an EDI_DC40 control record, instead of body (idoc_template writes one)",
+		"process_direct_address": "ProcessDirect address to reach through the test harness; artifact_id is the flow behind it",
+		"entity_set":             "OData entity set (or $metadata)",
+		"key":                    "OData entity key, e.g. '4711' or OrderNo='4711',Item=10",
+		"odata_method":           "OData request to the flow's OData sender (default GET)",
+		"path":                   "Sub-path and query after the endpoint, for senders that route on the path",
+		"url":                    "Endpoint URL (or below it), when the flow has several endpoints",
+		"trace":                  "Send a traceparent and return traceId for get_trace_tree (default true)",
+		"harness":                "Test harness flow ID (default CPICTL_Test_Harness)",
+	},
+	"set_stub_response": {
+		"when":  "Conditional answers: the first entry whose conditions hold answers instead",
+		"rule":  "Rule: the path segment after /cpictl/stub/",
+		"clear": "Remove the rule's answer (the stub then answers 200 {})",
+	},
+	"list_message_logs": {
+		"since":          "Ended after: RFC 3339 or a duration back (30m, 2h, 1d)",
+		"until":          "Started before (as since)",
+		"wait_seconds":   "Wait until a message matches and all matches are final",
+		"custom_header":  "Only messages with this custom header value",
+		"include_errors": "Error text of failed messages (default true)",
+	},
+	"get_trace_tree": {
+		"since": "Scan window start: RFC 3339 or a duration back",
+	},
+}
+
+// summarized returns the tools as tools/list sends them: the summary as
+// description, shorter parameter descriptions, and none for a parameter
+// whose description only repeats its name.
 func summarized(tools []Tool) []Tool {
 	for i, t := range tools {
 		if s, ok := toolSummaries[t.Name]; ok {
 			tools[i].Description = s
 		}
+		tools[i].InputSchema = shortSchema(t.Name, t.InputSchema)
 	}
 	return tools
+}
+
+// shortSchema copies a schema with the listing's parameter descriptions
+// (the tool keeps its own schema for help and validation).
+func shortSchema(tool string, schema map[string]any) map[string]any {
+	p, ok := schema["properties"].(props)
+	if !ok {
+		return schema
+	}
+	var out props
+	for name, def := range p {
+		d, ok := def.(map[string]any)
+		if !ok {
+			continue
+		}
+		desc, _ := d["description"].(string)
+		short, has := propSummaries[tool][name]
+		if !has && !restatesName(name, desc) {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(p)
+		}
+		nd := maps.Clone(d)
+		if has {
+			nd["description"] = short
+		} else {
+			delete(nd, "description")
+		}
+		out[name] = nd
+	}
+	if out == nil {
+		return schema
+	}
+	s := maps.Clone(schema)
+	s["properties"] = out
+	return s
+}
+
+// restatesName: the description is the parameter name in words
+// ("correlation_id": "Correlation ID").
+func restatesName(name, desc string) bool {
+	norm := func(s string) string {
+		return strings.Join(strings.Fields(strings.ToLower(strings.NewReplacer("_", " ", ".", "", "-", " ").Replace(s))), " ")
+	}
+	return desc != "" && norm(desc) == norm(name)
 }

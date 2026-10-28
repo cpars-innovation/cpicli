@@ -110,6 +110,7 @@ func TestRunTestsTool(t *testing.T) {
 	root := testsRoot(t)
 	m, cfg := testsConfig(t, root)
 	srv := NewServer("cpicli", "test", Instructions, Tools(cfg))
+	srv.FullResults = true
 	msgs := serveLines(t, srv, callWithToken(1, "run_tests", map[string]any{"parallel": 2}, "tok"))
 	progress := progressBefore(t, msgs, "1", `"tok"`)
 	require.Len(t, progress, 5, "one notification per case")
@@ -117,7 +118,7 @@ func TestRunTestsTool(t *testing.T) {
 	var r toolCallResult
 	for _, msg := range msgs {
 		if string(msg.ID) == "1" {
-			require.NoError(t, json.Unmarshal(msg.Result, &r))
+			r = toolResult(t, rpcResp{ID: msg.ID, Result: msg.Result, Error: msg.Error})
 		}
 	}
 	require.False(t, r.IsError, r.Content[0].Text)

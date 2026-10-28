@@ -97,10 +97,12 @@ writing a script, graph_search types ["script"] with words of its purpose: reusa
 are in script collections; call them instead of writing new code. Comment scripts as in
 help {"topic": "script-doc"} (lint checks it).`},
 	{[]string{"build", "test"}, `Autonomous loops: loop_start before changing anything, loop_status, loop_end when done or stopped.`},
-	{nil, `Every result has {ok, errorCategory, exitCode, error, result}; errorCategory: usage (fix the
+	{nil, `A result is its data; an error is {errorCategory, error, exitCode}: usage (fix the
 arguments), auth (stop, ask the user), tenant_http (retry later), failed (the tenant rejected the
 content or the message failed: read error, fix), timeout (check status), partial (see items),
-stopped (a loop limit was reached: stop changing things, call loop_end and report).`},
+stopped (a loop limit was reached: stop changing things, call loop_end and report). Lists of 5 or
+more are {columns, rows}; empty fields are left out. A payload over 16 KB shows its first bytes,
+a ref and cut: get_content {ref} reads the rest (offset, or save_to for a file).`},
 	{[]string{"partner-directory", "promote"}, `Partner Directory: pd_dependencies (which flows read a parameter), get_pd_parameters (tenant
 values), pd_diff (local vs tenant), then pd_deploy keys=["PID:ID"] to change one parameter without
 redeploying flows. pd_deploy is a dry run unless dry_run=false. list_pd_partners lists the partners

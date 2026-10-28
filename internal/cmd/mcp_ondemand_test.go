@@ -100,8 +100,11 @@ func TestMCPToolsOnDemandByDefault(t *testing.T) {
 	// Claude Code loads tool schemas on demand itself: it gets every tool
 	byID, _ = mcpSessionAs(t, "claude-code", nil, listTools)
 	assert.ElementsMatch(t, all, toolNames(t, byID["2"]))
-	assert.Contains(t, byID["1"]["result"].(map[string]any)["instructions"], "Build loop")
-	assert.NotContains(t, byID["1"]["result"].(map[string]any)["instructions"], "Tools on demand")
+	cc := byID["1"]["result"].(map[string]any)["instructions"].(string)
+	assert.NotContains(t, cc, "Tools on demand")
+	assert.NotContains(t, cc, "Build loop", "a task's instructions come from help")
+	assert.Contains(t, cc, `help {"topic": "instructions", "toolsets": ["<toolset>"]}`)
+	assert.Less(t, len(cc), 3500)
 
 	r := runMain(t, "mcp", "--all-tools", "--dynamic-toolsets")
 	assert.Equal(t, 2, r.code, r.stderr)
