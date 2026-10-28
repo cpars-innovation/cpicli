@@ -140,20 +140,14 @@ func HelpTool(info HelpInfo) Tool {
 		available[t.Name] = t
 	}
 	available["help"] = Tool{Name: "help"}
-	overview := func() map[string]any {
-		tools := []map[string]any{}
-		for _, t := range info.Tools {
-			tools = append(tools, map[string]any{"name": t.Name, "title": t.Title, "effect": EffectOf(t.Name), "class": ClassOf(t.Name)})
-		}
-		mode := info.Mode
-		if mode == "" {
-			mode = "none"
-		}
-		// readOnly is the effective state: no available tool changes the
-		// tenant (by --read-only, the mode or the tool filters)
-		readOnly := info.ReadOnly || !slices.ContainsFunc(info.Tools, func(t Tool) bool { return EffectOf(t.Name) == EffectTenant })
-		server := map[string]any{"mode": mode, "readOnly": readOnly, "tools": len(info.Tools), "disabledTools": nonNil(info.Removed),
-			"toolsets": toolsetsFor(available, info.Reasons),
+	readOnly := func() bool {
+		// the effective state: no available tool changes the tenant (by
+		// --read-only, the mode or the tool filters)
+		return info.ReadOnly || !slices.ContainsFunc(info.Tools, func(t Tool) bool { return EffectOf(t.Name) == EffectTenant })
+	}
+	mode := cmp.Or(info.Mode, "none")
+	server := func() map[string]any {
+		server := map[string]any{"mode": mode, "readOnly": readOnly(), "tools": len(info.Tools), "disabledTools": nonNil(info.Removed),
 			"loop": map[string]any{"required": info.Loop.Required, "caps": map[string]any{"maxIterations": info.Loop.Caps.MaxIterations,
 				"sameErrorLimit": info.Loop.Caps.SameErrorLimit, "wallClockMinutes": info.Loop.Caps.WallClockMinutes, "maxDeploys": info.Loop.Caps.MaxDeploys}},
 			"masking": map[string]any{"maskPatterns": nonNil(info.MaskPatterns), "redactPayloads": info.RedactPayloads}}
@@ -165,28 +159,58 @@ func HelpTool(info HelpInfo) Tool {
 		if p := info.BranchPolicy; p != nil {
 			server["branchPolicy"] = map[string]any{"file": p.File, "readonlyBranches": p.ReadonlyBranches, "now": p.Decide()}
 		}
-		return map[string]any{
-			"server":    server,
-			"workflows": workflowsFor(available),
-			"tools":     tools,
-			"toolsets":  toolsetsFor(available, info.Reasons),
-			"skills":    skills.List(),
-			"agents":    skills.Agents(),
-			"cli":       commandSummaries(info.Commands),
-			"topics": `help {"topic": X}: X is a tool name (description and input schema), a skill name (its SKILL.md), ` +
-				`"<skill>/<file>" (a reference file of a skill), a CLI command such as "iflow copy" (usage and flags), ` +
-				`or "tools", "toolsets", "skills", "cli", "workflows"; {"topic": "instructions", "toolsets": [...]} gives the server ` +
-				`instructions for those toolsets only (default: the active ones)`,
-			"docs": docsURL,
+		return server
+	}
+	tools := func() []map[string]any {
+		tools := []map[string]any{}
+		for _, t := range info.Tools {
+			tools = append(tools, map[string]any{"name": t.Name, "title": t.Title, "effect": EffectOf(t.Name), "class": ClassOf(t.Name)})
 		}
+		return tools
+	}
+	// index is help without topic: what an agent needs to pick a tool, skill
+	// or topic, in a few hundred tokens; the details are topics
+	index := func() map[string]any {
+		srv := map[string]any{"mode": mode, "readOnly": readOnly(), "tools": len(info.Tools), "scope": info.Scope != nil}
+		if len(info.Removed) > 0 {
+			srv["disabledTools"] = len(info.Removed)
+		}
+		if info.Loop.Required {
+			srv["loopRequired"] = true
+		}
+		sets := map[string]string{}
+		for _, set := range toolsetsFor(available, info.Reasons) {
+			if t := set["tools"].([]string); len(t) > 0 {
+				sets[set["name"].(string)] = strings.Join(t, " ")
+			}
+		}
+		var flows []string
+		for _, w := range workflowsFor(available) {
+			line := w.Task + ": " + strings.Join(w.Tools, " ")
+			if w.Skill != "" {
+				line += " (skill " + w.Skill + ")"
+			}
+			if len(w.Unavailable) > 0 {
+				line += " (not offered: " + strings.Join(w.Unavailable, " ") + ")"
+			}
+			flows = append(flows, line)
+		}
+		sk := map[string]string{}
+		for _, s := range skills.List() {
+			sk[s.Name] = s.Description
+		}
+		return map[string]any{"server": srv, "toolsets": sets, "workflows": flows, "skills": sk,
+			"more": `help {"topic": X}: X is a tool name (description and input schema), a skill name (its SKILL.md), ` +
+				`"<skill>/<file>", a CLI command such as "iflow copy", or "server", "tools", "toolsets", "workflows", "skills", "agents", "cli"; ` +
+				`{"topic": "instructions", "toolsets": [...]} gives the server instructions for those toolsets. Docs: ` + docsURL}
 	}
 	return Tool{
 		Name: "help", Title: "What this server, the skills and the CLI can do",
-		Description: "Overview of the available tools (after the server's mode and filters), the cpi skills (plan, build, test, review, discover) " +
-			"with their instructions, the cpictl CLI commands, and which tools and skill to use for common tasks. With topic: details of one tool, " +
-			"skill, skill file or CLI command; topic \"instructions\" with toolsets returns the server instructions limited to those toolsets. Use it when unsure which tool or skill fits, or to read a skill in a client that does not load skills. Reads nothing remote.",
+		Description: "Index of the available tools by toolset, the tasks with their tools and skill, and the cpi skills. With topic: one tool's " +
+			"description and input schema, a skill's instructions or file, a CLI command, or a full section (server, tools, toolsets, workflows, cli); " +
+			"topic \"instructions\" with toolsets returns the server instructions for those toolsets. Use it when unsure which tool or skill fits, or to read a skill in a client that does not load skills. Reads nothing remote.",
 		InputSchema: object(props{
-			"topic":    str(`Optional: a tool name, a skill name, "<skill>/<file>", a CLI command ("iflow copy"), or "tools", "toolsets", "skills", "cli", "workflows", "instructions"`),
+			"topic":    str(`Optional: a tool name, a skill name, "<skill>/<file>", a CLI command ("iflow copy"), or "server", "tools", "toolsets", "workflows", "skills", "agents", "cli", "instructions"`),
 			"toolsets": strArray(`With topic "instructions": the toolsets to describe (default: the active toolsets of this server)`),
 		}),
 		Annotations: map[string]any{"readOnlyHint": true, "openWorldHint": false},
@@ -199,12 +223,21 @@ func HelpTool(info HelpInfo) Tool {
 				return nil, err
 			}
 			topic := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(a.Topic), "cpictl "))
-			ov := overview()
 			switch topic {
 			case "":
-				return ov, nil
-			case "tools", "toolsets", "skills", "workflows", "server":
-				return map[string]any{topic: ov[topic]}, nil
+				return index(), nil
+			case "server":
+				return map[string]any{"server": server()}, nil
+			case "tools":
+				return map[string]any{"tools": tools()}, nil
+			case "toolsets":
+				return map[string]any{"toolsets": toolsetsFor(available, info.Reasons)}, nil
+			case "workflows":
+				return map[string]any{"workflows": workflowsFor(available)}, nil
+			case "skills":
+				return map[string]any{"skills": skills.List()}, nil
+			case "agents":
+				return map[string]any{"agents": skills.Agents()}, nil
 			case "cli":
 				return map[string]any{"cli": commandSummaries(info.Commands), "reference": docsURL + "commands.md"}, nil
 			case "instructions":
@@ -323,7 +356,7 @@ func suggest(topic string, tools map[string]Tool, cmds []CommandInfo) string {
 	}
 	slices.Sort(hits)
 	if len(hits) == 0 {
-		return `; call help without topic for the overview`
+		return `; call help without topic for the index`
 	}
 	return "; did you mean: " + strings.Join(hits[:min(len(hits), 10)], ", ")
 }

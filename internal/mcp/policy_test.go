@@ -193,8 +193,10 @@ func TestHelpServerTopic(t *testing.T) {
 	server := got["server"].(map[string]any)
 	assert.Equal(t, true, server["readOnly"], "discover mode is read-only without --read-only")
 	assert.Equal(t, true, server["loop"].(map[string]any)["required"])
+	got, err = callHelp(t, help, "toolsets")
+	require.NoError(t, err)
 	sets := map[string]map[string]any{}
-	for _, s := range server["toolsets"].([]any) {
+	for _, s := range got["toolsets"].([]any) {
 		sets[s.(map[string]any)["name"].(string)] = s.(map[string]any)
 	}
 	require.Contains(t, sets, "inspect")
@@ -214,11 +216,9 @@ func TestHelpServerTopic(t *testing.T) {
 	got, err = callHelp(t, HelpTool(HelpInfo{Tools: full, Mode: "full"}), "")
 	require.NoError(t, err)
 	assert.Equal(t, false, got["server"].(map[string]any)["readOnly"])
-	for _, s := range got["toolsets"].([]any) {
-		if s.(map[string]any)["name"] == OtherToolset {
-			assert.Contains(t, s.(map[string]any)["tools"], "undeploy")
-		}
-	}
+	assert.Contains(t, got["toolsets"].(map[string]any)[OtherToolset], "undeploy")
+	got, err = callHelp(t, HelpTool(HelpInfo{Tools: full, Mode: "full"}), "tools")
+	require.NoError(t, err)
 	for _, tl := range got["tools"].([]any) {
 		assert.NotEmpty(t, tl.(map[string]any)["class"])
 	}

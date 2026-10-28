@@ -18,8 +18,9 @@ type instructionFragment struct {
 // instructionFragments are the server instructions, in order.
 var instructionFragments = []instructionFragment{
 	{nil, `Tools for SAP Cloud Integration (CPI) on one tenant. Unsure which tool or
-skill fits a task? Call help (overview, or a topic: a tool, a skill and its instructions, a CLI
-command; "instructions" with toolsets gives these instructions for those toolsets only). Auth or
+skill fits a task? Call help (index; or a topic: a tool, a skill and its instructions, a CLI
+command; "instructions" with toolsets gives these instructions for those toolsets only); some tool
+descriptions are summaries, help with the tool name gives the full one. Auth or
 403 errors: doctor shows which API areas the credentials can use.`},
 	{[]string{"build", "test"}, `Build loop: drift (local vs tenant: never overwrite tenant-only edits; compare shows per
 artifact what differs between the tenant, a content tree and Git refs, with diffs) -> download_artifact
@@ -131,6 +132,16 @@ func ToolsetInstructions(toolsets []string) string {
 	return joinFragments(func(f instructionFragment) bool {
 		return f.toolsets == nil || slices.ContainsFunc(f.toolsets, func(t string) bool { return slices.Contains(toolsets, t) })
 	})
+}
+
+// addedToolsetInstructions returns the toolset parts of the instructions
+// for toolsets enabled now that were not already given with the toolsets
+// enabled before.
+func addedToolsetInstructions(before, added []string) string {
+	has := func(f instructionFragment, sets []string) bool {
+		return slices.ContainsFunc(f.toolsets, func(t string) bool { return slices.Contains(sets, t) })
+	}
+	return joinFragments(func(f instructionFragment) bool { return f.toolsets != nil && has(f, added) && !has(f, before) })
 }
 
 func joinFragments(keep func(instructionFragment) bool) string {

@@ -272,6 +272,22 @@ func TestMessageLogTools(t *testing.T) {
 	assert.Contains(t, detail.Content[0].Text, `"OrderId"`)
 	assert.Equal(t, "usage", toolResult(t, resp["3"]).StructuredContent.ErrorCategory)
 	assert.Equal(t, "usage", toolResult(t, resp["4"]).StructuredContent.ErrorCategory)
+
+	// lean rows by default, every field with detail=full
+	resp = session(t, mock, t.TempDir(),
+		call(5, "list_message_logs", map[string]any{"artifact_id": "A"}),
+		call(6, "list_message_logs", map[string]any{"artifact_id": "A", "detail": "full"}),
+		call(7, "list_message_logs", map[string]any{"artifact_id": "A", "detail": "lean"}),
+	)
+	lean := toolResult(t, resp["5"]).StructuredContent.Result.(map[string]any)
+	row := lean["logs"].([]any)[0].(map[string]any)
+	assert.Equal(t, "Mapping failed at line 3", row["errorText"])
+	assert.NotContains(t, row, "logStart")
+	assert.Contains(t, lean["detail"], "detail=full")
+	full := toolResult(t, resp["6"]).StructuredContent.Result.(map[string]any)
+	assert.Contains(t, full["logs"].([]any)[0], "logStart")
+	assert.NotContains(t, full, "detail")
+	assert.True(t, toolResult(t, resp["7"]).StructuredContent.OK)
 }
 
 func TestContentTools(t *testing.T) {

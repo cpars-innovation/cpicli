@@ -96,6 +96,15 @@ func TestDynamicToolsetsRespectFilters(t *testing.T) {
 	assert.NotContains(t, names, "deploy", "a read-only server cannot enable deploy through a toolset")
 	assert.NotContains(t, names, "upload_artifact")
 
+	// enabling a toolset brings its instructions, once
+	enable := func(set string) any {
+		res := toolResult(t, serve(t, srv, call(2, "enable_toolset", map[string]any{"toolsets": []string{set}}))["2"])
+		return res.StructuredContent.Result.(map[string]any)["instructions"]
+	}
+	assert.Contains(t, enable("test"), "send_test_message")
+	assert.Nil(t, enable("test"), "already given")
+	assert.Nil(t, enable("build"), "given at the start")
+
 	assert.Error(t, NewServer("x", "t", "", nil).UseDynamicToolsets([]string{"everything"}))
 }
 

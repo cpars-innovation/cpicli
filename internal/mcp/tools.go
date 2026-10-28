@@ -94,6 +94,8 @@ func Tools(cfg Config) []Tool {
 			return inner(ctx, raw)
 		}
 	}
+	withDetail(tools)
+	withSaveTo(tools)
 	return tools
 }
 

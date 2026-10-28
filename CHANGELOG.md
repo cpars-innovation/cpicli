@@ -5,6 +5,44 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+**Fewer tokens for agents (MCP).** Measured against the mock tenant (`--mode full`, ≈3.6 bytes per token):
+
+| What | Before | After |
+|---|---|---|
+| `help` without topic | ≈17,000 tok | ≈2,300 tok |
+| `list_message_logs`, 50 rows | ≈5,200 tok | ≈2,600 tok |
+| Tool list + instructions per turn (98 tools) | ≈28,400 tok | ≈26,000 tok |
+| Start with `--dynamic-toolsets` | ≈3,700 tok | ≈1,200 tok |
+| A 40 KB payload | ≈11,000 tok | ≈4,500 tok inline, or ≈60 tok with `save_to` |
+
+- **`help` is an index:** without a topic it returns the tools per toolset, the workflows, the skills and the
+  topics. The former full overview is split into topics: `server`, `tools`, `toolsets`, `workflows`, `skills`,
+  `agents`, `cli`.
+- **Short tool descriptions:** `tools/list` sends a summary for the 26 tools with the longest descriptions.
+  `help {"topic": "<tool>"}` returns the full description.
+- **Lean message lists:** `list_message_logs` and `find_messages_by_header` leave out package, predecessor,
+  start time, log level, web link and an artifact name equal to the ID. The result says so (`detail`), and
+  `detail: "full"` returns every field. The loop ledger still sees the full rows.
+- **Payloads:**
+  - message payloads are returned inline up to 16 KB by default (was 64 KB); a cut result says `truncated` with
+    the full `size`, and `max_bytes` raises the limit;
+  - `save_to` writes the payload to a file under the root and returns path, size and SHA-256 instead. It is
+    refused with `--redact-payloads`.
+- **Dynamic toolsets:** the instructions start with the general part and the toolsets enabled at the start.
+  `enable_toolset` returns the instructions of the toolsets it enables.
+
+**What to do:**
+- **Agents and skills:** call `help` for the index and `help {"topic": "<tool>"}` before the first use of an
+  unfamiliar tool. Use `save_to` for payloads you only search or compare. Use `detail: "full"` only when you need
+  a field the lean rows leave out.
+- **Clients that put every tool into every request** (most IDE agents): start the server with `--toolset` for
+  the task, or with `--dynamic-toolsets`. The full tool list costs ≈26,000 tokens per turn; `--toolset monitor`
+  costs ≈8,000, and `--dynamic-toolsets` ≈1,200 at the start.
+- **Code that reads `help` without topic** (Studio, gateway): read the topics (`server`, `tools`, `toolsets`,
+  `workflows`, `skills`, `cli`). The index has a different shape.
+- **Code that reads `list_message_logs` rows from MCP:** pass `detail: "full"` for the former rows. The Go API
+  and the CLI are unchanged.
+
 ## 0.33.1
 
 - **Names:** *cpicli* is the project, the repository and the Go module (`github.com/cpars-innovation/cpicli`);

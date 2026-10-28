@@ -331,9 +331,20 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		defer stop()
 	}
 
+	args, full := splitDetail(p.Name, p.Arguments)
+	args, saveTo, err := s.payloadArgs(s.tools[idx], args)
+	if err != nil {
+		return s.result(ToolResult{ExitCode: output.ExitCode(err), ErrorCategory: errorCategory(err), Error: err.Error()})
+	}
 	log.Info().Str("tool", p.Name).Msg("Tool call started")
 	begin := time.Now()
-	value, err := safeCall(callCtx, s.tools[idx], p.Arguments)
+	value, err := safeCall(callCtx, s.tools[idx], args)
+	if shape := leanShapers[p.Name]; shape != nil && err == nil && !full {
+		value = shape(value)
+	}
+	if saveTo != "" && err == nil {
+		value, err = s.savePayloads(value, saveTo)
+	}
 	elapsed := time.Since(begin)
 	code := output.ExitCode(err)
 	stats.Record(p.Name, stats.SourceMCP, code, elapsed)

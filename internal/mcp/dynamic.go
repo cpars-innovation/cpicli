@@ -70,7 +70,7 @@ func DynamicInstructions() string {
 	var b strings.Builder
 	b.WriteString("\n\nDynamic toolsets: at the start only help, doctor, list_toolsets and enable_toolset are listed. " +
 		"Before working on a task, call enable_toolset with the toolset(s) it needs; their tools are then listed " +
-		"(the client is notified). Enable only what the task needs. Toolsets:")
+		"(the client is notified) and the result carries the instructions for them. Enable only what the task needs. Toolsets:")
 	for _, n := range ToolsetNames() {
 		fmt.Fprintf(&b, "\n- %s: %s", n, ToolsetDescriptions[n])
 	}
@@ -80,6 +80,11 @@ func DynamicInstructions() string {
 
 // listedTools returns the tools of tools/list.
 func (s *Server) listedTools() []Tool {
+	return summarized(s.offeredTools())
+}
+
+// offeredTools are the tools the server offers now.
+func (s *Server) offeredTools() []Tool {
 	if s.dynamic == nil {
 		out := []Tool{}
 		for _, t := range s.tools {
@@ -189,14 +194,21 @@ func (s *Server) enableToolsetTool() Tool {
 				before[t.Name] = true
 			}
 			d.mu.Lock()
+			var was []string
+			for n, on := range d.enabled {
+				if on {
+					was = append(was, n)
+				}
+			}
 			for _, n := range p.Toolsets {
 				if _, ok := d.sets[strings.TrimSpace(n)]; !ok {
 					d.mu.Unlock()
 					return nil, output.Usagef("unknown toolset %q (%s)", n, strings.Join(s.toolsetNames(), ", "))
 				}
 			}
-			for _, n := range p.Toolsets {
-				d.enabled[strings.TrimSpace(n)] = true
+			for i, n := range p.Toolsets {
+				p.Toolsets[i] = strings.TrimSpace(n)
+				d.enabled[p.Toolsets[i]] = true
 			}
 			d.mu.Unlock()
 			added := []map[string]any{}
@@ -209,7 +221,11 @@ func (s *Server) enableToolsetTool() Tool {
 				log.Info().Strs("toolsets", p.Toolsets).Msg("Toolsets enabled")
 				s.notify("notifications/tools/list_changed")
 			}
-			return map[string]any{"enabled": p.Toolsets, "addedTools": added}, nil
+			res := map[string]any{"enabled": p.Toolsets, "addedTools": added}
+			if text := addedToolsetInstructions(was, p.Toolsets); text != "" {
+				res["instructions"] = text
+			}
+			return res, nil
 		},
 	}
 }

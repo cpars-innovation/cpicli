@@ -198,7 +198,9 @@ toolsets enabled at the start. Toolsets are not disabled again during a session.
 - A call to a tool the server offers but has not listed yet still works; the listing is guidance,
   the filters are the limit.
 - The server instructions name the toolsets and what they are for, so the agent can enable one
-  without calling `list_toolsets` first.
+  without calling `list_toolsets` first. They hold the general part and the parts of the toolsets
+  enabled at the start; `enable_toolset` returns the parts of the toolsets it enables
+  (`instructions`). This keeps the start at about 1,200 tokens instead of 3,700.
 
 A client with its own agent loop can also select tools itself: start the server normally (all
 tools listed with their schemas), read the toolsets from `help {"topic": "toolsets"}` (only the
@@ -393,8 +395,25 @@ change) in v0.25.0 and removed in v0.27.0. A call to an old name fails with `err
 | `config_diff` | | Configure YAML vs tenant parameters: update / unchanged / unknown_key |
 | `pd_deploy` | Partner Directory, **destructive with full_sync** | Upload Partner Directory parameters; dry run unless `dry_run: false`; `keys: ["PID:ID"]` changes only those parameters |
 
-Content tools (`get_resource`, `get_message_content`) return
-`{size, text | base64, truncated}`; `max_bytes` (default 64 KB, max 1 MB) limits the size.
+Content tools (`get_resource`, `get_message_content`, ...) return
+`{size, text | base64, truncated}`; `max_bytes` (max 1 MB) limits the size. The default is 16 KB
+for message payloads (`get_message_content`, `get_message_trace`, `send_test_message`, data store
+entries, variables) and 64 KB for `get_resource` and `get_pd_parameters`. A cut result says
+`truncated: true` with the full `size`.
+
+**Payloads to a file:** every tool with `max_bytes` also takes `save_to` (a path under `--root`).
+The content (up to 1 MB) is written there and the result has
+`{size, savedTo, savedBytes, sha256, truncated}` instead of the text, so an agent can search the
+file with its own tools instead of reading the payload into its context. A result with several
+contents writes `<name>-2.<ext>`, `<name>-3.<ext>`, ... Refused with `--redact-payloads`.
+
+**Lean message lists:** `list_message_logs` and `find_messages_by_header` return lean rows by
+default (status, IDs, artifact, end time, duration, error text) and say in `detail` what they leave
+out; `detail: "full"` returns every field. About half the tokens per row.
+
+**Short descriptions:** `tools/list` sends a summary for the tools with a long description (what
+the tool does, what it needs, its side effects, the next step). `help {"topic": "<tool>"}` returns
+the full description; the server instructions say so.
 
 Every tool has a JSON schema with `additionalProperties: false`: a misspelt argument is an
 error, never silently ignored. `tools/list` returns the schemas and MCP annotations
@@ -411,13 +430,13 @@ the mode and tool filters, so it reports what is really available on this server
 
 | Call | Returns |
 |------|---------|
-| `help` | Mode, available and disabled tools (each with `effect` and `class`), toolsets, workflows (task -> skill, tools, docs), skills, CLI commands |
+| `help` | A short index (about 2,000 tokens): mode, read-only, scope, tool count, the tools per toolset, the workflows (task: tools, skill, tools not offered), the skills with their description, and the topics. The full sections are topics |
 | `help {"topic": "server"}` | The server's capabilities in one call: mode, effective `readOnly` (no available tool changes the tenant, whether by `--read-only`, the mode or the filters), disabled tools, every toolset with its available tools, each tool's `effect` and `class` (`toolEffects`) and the members the server does not offer with the reason (`notOffered`, e.g. `opt-in: …` or `not offered in mode discover`), an `other` toolset for available tools in no toolset, the loop policy (`loop.required`, `loop.caps`) and the masking options |
 | `help {"topic": "copy_iflow"}` | Description, input schema, effect and class of a tool, or why it is not available here |
 | `help {"topic": "cpi-test"}` | The skill's instructions (`SKILL.md`) and its reference files |
 | `help {"topic": "cpi-plan/brief-template.md"}` | One reference file of a skill |
 | `help {"topic": "iflow copy"}` | Usage, description and flags of a CLI command |
-| `help {"topic": "workflows"}` | Only the task overview (also `tools`, `skills`, `cli`) |
+| `help {"topic": "workflows"}` | The workflows in full (task, skill, tools, unavailable tools, docs); likewise `tools` (each with title, `effect`, `class`), `toolsets` (with `notOffered`), `skills` (with files), `agents`, `cli` |
 | `help {"topic": "instructions", "toolsets": ["build", "test"]}` | The server instructions for these toolsets only: the general part (help, result format, mode, loop policy) plus the sections of the tools in these toolsets (`other`: tools in no toolset, such as `undeploy`). Without `toolsets`: the active ones (the toolsets with tools after mode and filters; with `--dynamic-toolsets` the enabled ones). `toolsetsSource` says which (`requested`, `active`) |
 
 Typical questions it answers: "what can you do on this tenant?", "which tool finds the flows that

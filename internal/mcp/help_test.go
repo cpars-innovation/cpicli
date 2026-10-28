@@ -36,19 +36,33 @@ func TestHelpTool(t *testing.T) {
 	require.NoError(t, err)
 	server := ov["server"].(map[string]any)
 	assert.Equal(t, "discover", server["mode"])
-	assert.Contains(t, server["disabledTools"], "deploy")
+	assert.NotZero(t, server["disabledTools"])
 	assert.Len(t, ov["skills"], 7)
-	assert.Len(t, ov["tools"], len(kept))
-	var newFlow map[string]any
+	assert.Contains(t, ov["toolsets"].(map[string]any)["inspect"], "graph_neighbors")
+	var newFlow string
 	for _, w := range ov["workflows"].([]any) {
-		if strings.HasPrefix(w.(map[string]any)["task"].(string), "Create a new flow") {
-			newFlow = w.(map[string]any)
+		if strings.HasPrefix(w.(string), "Create a new flow") {
+			newFlow = w.(string)
 		}
 	}
-	require.NotNil(t, newFlow)
-	assert.Contains(t, newFlow["tools"], "copy_iflow", "local tools stay in discover mode")
-	assert.Contains(t, newFlow["unavailable"], "deploy")
-	assert.Equal(t, []any{map[string]any{"command": "iflow copy", "short": "Copy"}}, ov["cli"], "the overview has no long texts")
+	assert.Contains(t, newFlow, "copy_iflow", "local tools stay in discover mode")
+	assert.Regexp(t, `\(not offered: [^)]*deploy\)`, newFlow)
+	assert.NotContains(t, ov, "cli", "the index has no command list")
+	data, _ := json.Marshal(ov)
+	assert.Less(t, len(data), 8000, "the index stays small")
+
+	srv, err := callHelp(t, help, "server")
+	require.NoError(t, err)
+	assert.Contains(t, srv["server"].(map[string]any)["disabledTools"], "deploy")
+	all, err := callHelp(t, help, "tools")
+	require.NoError(t, err)
+	assert.Len(t, all["tools"], len(kept))
+	wf, err := callHelp(t, help, "workflows")
+	require.NoError(t, err)
+	assert.Contains(t, wf["workflows"].([]any)[2].(map[string]any)["unavailable"], "deploy")
+	cli, err := callHelp(t, help, "cli")
+	require.NoError(t, err)
+	assert.Equal(t, []any{map[string]any{"command": "iflow copy", "short": "Copy"}}, cli["cli"], "the command list has no long texts")
 
 	sets, err := callHelp(t, help, "toolsets")
 	require.NoError(t, err)

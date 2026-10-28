@@ -186,6 +186,10 @@ CPICTL_* environment variables.`,
 				if readOnly {
 					instructions += " This server is read-only: it cannot change the tenant or send messages; ask the user to make changes."
 				}
+			} else if dynamic {
+				// the parts of the toolsets enabled later come with
+				// enable_toolset's result
+				instructions = mcp.FilteredInstructions(mcp.ToolsetInstructions(toolsets), filter, removed) + help.ServerInstructions
 			} else {
 				instructions = mcp.FilteredInstructions(mcp.Instructions, filter, removed) + help.ServerInstructions
 			}
