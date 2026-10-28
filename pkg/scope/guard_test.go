@@ -1116,3 +1116,26 @@ func TestGuardEndpointReadBacksOff(t *testing.T) {
 	}
 	assert.EqualValues(t, 1, reads.Load())
 }
+
+// A URL whose segment differs from another team's entry point only in its
+// parameters is not decided by a broader entry point; the host is matched
+// in any case; odd foreign entry points are ambiguous (cpicli#57).
+func TestGuardEndpointHardening(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	endpoints(g, `{"d":{"results":[
+		{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/gw/odata/SAP"},{"Url":"https://rt/gw/odata/SAP/OWN;v=1"},{"Url":"https://rt/http/*"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/gw/odata/SAP/SRV;v=2"},{"Url":"https://rt/gw/odata/SAP/OWN;v=2"},
+			{"Url":"https://rt/http/odd/./x"},{"Url":"https://rt/http/q?x=1"},{"Url":"https://rt/http/e//x"}]}}]}}`)
+	send := func(base, path string) error {
+		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: base, Path: path})
+	}
+	for _, v := range []string{";V=2", ";v=02", ";v=2;x=1", ";x=1;v=2", ";v=2;", ";v=%202"} {
+		refused(t, send("https://rt:443", "/gw/odata/SAP/SRV"+v+"/Invoices"))
+	}
+	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/OWN;v=1/Orders"), "the exact parameters still decide")
+	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/Other"), "a name nobody else has")
+	assert.NoError(t, send("https://RT:443", "/http/mine"), "host names are not case-sensitive")
+	for _, p := range []string{"/http/odd/y", "/http/q", "/http/e/x"} {
+		refused(t, send("https://rt:443", p))
+	}
+}

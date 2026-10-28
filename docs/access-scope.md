@@ -116,7 +116,9 @@ whichever command or MCP tool sends it, including tools added later:
   Path parameters (`;…`) count only where the entry point has them: `/http/api/hr;x` is `/http/api/hr`, while
   OData services `…/SRV;v=1` and `…/SRV;v=2` are different services, and `…/SRV/…` reaches neither. Two flows
   equally specific (also two flows listing the same URL), an entry point the guard cannot read that covers the
-  URL, or a list the guard cannot read: refused. After a failed read, the list is not read again for 5 seconds. An endpoint of a flow the scope may not read is refused with the same text as an
+  URL, or a list the guard cannot read: refused. A URL segment with the name of a more specific entry point but
+  other parameters (`SRV;V=2`, `SRV;v=02` against `SRV;v=2`) is refused too, not decided by a broader entry
+  point: the runtime might read them as the same. Host names match in any case. After a failed read, the list is not read again for 5 seconds. An endpoint of a flow the scope may not read is refused with the same text as an
   unknown one.
 
   Limits:
@@ -125,8 +127,11 @@ whichever command or MCP tool sends it, including tools added later:
     learn that the address exists, not whose it is.
   - Paths are compared case-sensitively (`/http/Billing` is not `/http/billing`). If a runtime matched paths
     regardless of case, an address differing only in case from another team's could reach it.
-  - A flow deployed less than 30 seconds ago (plus however long the tenant takes to list it) may not be in the
-    list yet. Inside that window, a wildcard of another flow can still cover its address.
+  - Every decision uses a list up to 30 seconds old (plus however long the tenant takes to list a change). Any
+    change of entry points inside that window is not seen yet: a new flow can still be covered by another flow's
+    wildcard, and two flows that swap addresses are decided by their old ones.
+  - Each guard (one per user and scope in the cpictl gateway) reads the list itself: N users testing mean N reads
+    of `ServiceEndpoints` every 30 seconds, and every 5 seconds while reads fail.
 - **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
   address that belongs to the sender of a flow in the scope; the guard reads those addresses from the allowed flows
   (externalised parameters resolved). The address is read from the flow's designtime content, so the flow must

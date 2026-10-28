@@ -968,16 +968,24 @@ func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (string,
 	defer g.mu.Unlock()
 	// only the tenant-wide list decides: entry points seen in earlier
 	// answers may belong to a flow that has moved since (cpicli#55)
-	best, owners := -1, map[string]bool{}
+	best, owners, variant := -1, map[string]bool{}, -1
 	for _, e := range g.allEndpoints {
-		n := e.path.covers(target)
+		n, differs := e.path.covers(target)
 		switch {
 		case n < 0:
+		case differs:
+			// a segment of the same name with other parameters: the runtime
+			// may read them as the same (";V=2", ";v=02"), so this entry
+			// point makes what it is more specific than ambiguous
+			variant = max(variant, n)
 		case n > best:
 			best, owners = n, map[string]bool{e.flow: true}
 		case n == best:
 			owners[e.flow] = true
 		}
+	}
+	if variant > best {
+		return "", notAnEntryPoint
 	}
 	// two flows equally specific, or an entry point the guard could not
 	// read (flow ""): refused, with the text of an unknown endpoint (the
@@ -1054,6 +1062,7 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 		}()
 		g.mu.Lock()
 		g.epBuilding, g.epErr = nil, err
+		g.epFailedAt = time.Time{}
 		if err != nil {
 			g.epFailedAt = time.Now()
 		}
@@ -1113,12 +1122,18 @@ func parseEndpoint(u string, entry bool) (endpointPath, bool) {
 	rest := u
 	if i := strings.Index(u, "://"); i >= 0 {
 		host, path, _ := strings.Cut(u[i+3:], "/")
-		p.origin, rest = u[:i+3]+host, "/"+path
+		// host names are not case-sensitive
+		p.origin, rest = strings.ToLower(u[:i+3]+host), "/"+path
 		if path == "" && !strings.HasSuffix(u, "/") {
 			rest = ""
 		}
 	}
 	if entry {
+		// an entry point the runtime would not list (no scheme, a query):
+		// unreadable, so ambiguous (rawEndpoint)
+		if p.origin == "" || strings.ContainsAny(rest, "?#") {
+			return p, false
+		}
 		rest = strings.TrimSuffix(rest, "/")
 		if r, ok := strings.CutSuffix(rest, "*"); ok {
 			p.wild, rest = true, r
@@ -1133,8 +1148,14 @@ func parseEndpoint(u string, entry bool) (endpointPath, bool) {
 	if !strings.HasPrefix(rest, "/") {
 		return p, false
 	}
-	for _, raw := range strings.Split(rest[1:], "/") {
+	raws := strings.Split(rest[1:], "/")
+	for i, raw := range raws {
 		name, params, _ := strings.Cut(raw, ";")
+		// in an entry point, a dot segment or an empty one (other than the
+		// prefix of a closing "*") is unreadable too
+		if entry && (name == "." || name == ".." || (raw == "" && !(p.wild && i == len(raws)-1))) {
+			return p, false
+		}
 		n, err1 := url.PathUnescape(name)
 		ps, err2 := url.PathUnescape(params)
 		if err1 != nil || err2 != nil || strings.ContainsAny(n, "/\\;*") || strings.ContainsAny(ps, "/\\*") ||
@@ -1149,13 +1170,19 @@ func parseEndpoint(u string, entry bool) (endpointPath, bool) {
 	return p, true
 }
 
-// rawEndpoint is an entry point the guard cannot read: its segments up to
-// the first unreadable one, as a wildcard from there. With flow "" it makes
-// the URLs it might cover ambiguous (refused) where nothing more specific
-// decides them.
+// rawEndpoint is an entry point the guard cannot read: its readable
+// segments (before a query, up to the first unreadable one), then any
+// segment; a path readable to its end (only the query was odd) covers its
+// last segment as a prefix. With flow "" it makes the URLs it might cover ambiguous
+// (refused) where nothing more specific decides them.
 func rawEndpoint(u string) endpointPath {
-	p, _ := parseEndpoint(u, false) // the segments before the unreadable one
-	p.segs = append(p.segs, endpointSeg{})
+	u, _, _ = strings.Cut(u, "?")
+	u, _, _ = strings.Cut(u, "#")
+	p, ok := parseEndpoint(u, true) // the readable segments
+	if !ok || len(p.segs) == 0 {
+		// an unreadable segment follows: any segment there
+		p.segs = append(p.segs, endpointSeg{})
+	}
 	p.wild = true
 	return p
 }
@@ -1165,21 +1192,27 @@ func rawEndpoint(u string) endpointPath {
 // segment matches by its name, and by its parameters when the entry point's
 // segment has some: ";v=1" and ";v=2" are different OData services
 // (cpicli#56), while "billing;x" is "billing" to a servlet container.
-func (e endpointPath) covers(t endpointPath) int {
+//
+// differs reports a covering by name only: some segment of the entry point
+// has parameters the URL's segment does not have exactly. Such an entry point
+// does not own the URL, but nothing less specific may decide it either
+// (cpicli#57).
+func (e endpointPath) covers(t endpointPath) (n int, differs bool) {
 	if e.origin != t.origin || len(t.segs) < len(e.segs) {
-		return -1
+		return -1, false
 	}
-	n := 0
 	for i, es := range e.segs {
 		ts := t.segs[i]
 		last := i == len(e.segs)-1
 		switch {
 		case last && e.wild:
 			if !strings.HasPrefix(ts.name, es.name) {
-				return -1
+				return -1, false
 			}
-		case es.name != ts.name || (es.params != "" && es.params != ts.params):
-			return -1
+		case es.name != ts.name:
+			return -1, false
+		case es.params != "" && es.params != ts.params:
+			differs = true
 		}
 		n += 1 + len(es.name)
 		if es.params != "" {
@@ -1188,11 +1221,11 @@ func (e endpointPath) covers(t endpointPath) int {
 	}
 	switch {
 	case e.wild:
-		return n
+		return n, differs
 	case len(t.segs) == len(e.segs):
-		return 1 << 20
+		return 1 << 20, differs
 	}
-	return n + 1
+	return n + 1, differs
 }
 
 // processDirectFlow returns the allowed flow whose ProcessDirect sender

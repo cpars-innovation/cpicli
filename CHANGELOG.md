@@ -5,6 +5,22 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.9
+
+Hardening from the cpictl gateway's verification of 0.35.8 (cpicli#57; no S1 found, nothing here is exploitable
+in a setup CPI produces):
+
+- A URL segment that has the name of another flow's entry point but other parameters (`SRV;V=2`, `;v=02`,
+  `;v=2;x=1` against `SRV;v=2`) is refused, instead of being decided by a broader entry point of the caller's
+  flow. The exact parameters still decide (`;v=1` next to `;v=2`).
+- Entry points with dot or empty segments, a query, or no scheme are treated like other unreadable ones:
+  ambiguous where they might apply, instead of skipped.
+- Host names are matched in any case.
+- `docs/access-scope.md`: every endpoint change (not only a new flow) is seen up to 30 seconds late, and each
+  guard reads the endpoint list itself.
+
+**What to do:** nothing urgent; update to 0.35.9 with your next release.
+
 ## 0.35.8
 
 From the cpictl gateway's verification of 0.35.7 (cpicli#56):
