@@ -118,12 +118,17 @@ func NewWithOptions(o Options) *HTTPExecuter {
 	base := o.HTTPClient
 	if base == nil {
 		base = NewDefaultClient()
+	} else {
+		// a copy: the caller's client keeps its own redirect policy
+		c := *base
+		c.CheckRedirect = noRedirects
+		base = &c
 	}
 	if o.BearerTokenSource != nil {
 		// oauth2's transport attaches the bearer and refreshes it per
 		// request; e.bearer stays empty so Exec does not also set the header.
 		client := oauth2.NewClient(context.WithValue(context.Background(), oauth2.HTTPClient, base), o.BearerTokenSource)
-		client.Timeout, client.Jar = base.Timeout, base.Jar
+		client.Timeout, client.Jar, client.CheckRedirect = base.Timeout, base.Jar, noRedirects
 		e.httpClient, e.AuthType = client, "BEARER"
 		return e
 	}
@@ -144,7 +149,7 @@ func NewWithOptions(o Options) *HTTPExecuter {
 		// the token requests go through base (and its timeout); so do the
 		// API requests, which carry the token
 		client := conf.Client(context.WithValue(context.Background(), oauth2.HTTPClient, base))
-		client.Timeout, client.Jar = base.Timeout, base.Jar
+		client.Timeout, client.Jar, client.CheckRedirect = base.Timeout, base.Jar, noRedirects
 		e.httpClient = client
 		e.AuthType = "OAUTH"
 	} else {
@@ -312,9 +317,17 @@ var MaxResponseBytes int64 = 1 << 30
 // NewDefaultClient returns the client the executer uses when none is given:
 // DefaultTimeout per request and secureTransport. Other HTTP calls of cpictl
 // (the gateway sign-in and its token refresh) use it too, so they cannot hang.
+//
+// It does not follow redirects (the 3xx answer is returned as it is): a
+// redirect would skip the access scope's check of the request it leads to,
+// and a refreshing token transport would send its token to the redirect's
+// host.
 func NewDefaultClient() *http.Client {
-	return &http.Client{Timeout: DefaultTimeout, Transport: secureTransport()}
+	return &http.Client{Timeout: DefaultTimeout, Transport: secureTransport(), CheckRedirect: noRedirects}
 }
+
+// noRedirects is the redirect policy of every client of the executer.
+func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 func secureTransport() http.RoundTripper {
 	base, ok := http.DefaultTransport.(*http.Transport)

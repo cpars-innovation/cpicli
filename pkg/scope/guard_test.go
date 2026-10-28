@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/stretchr/testify/assert"
@@ -673,4 +674,29 @@ func TestGuardPayloadIDsAreNotRecorded(t *testing.T) {
 	c, err := g.Check(list)
 	require.NoError(t, err)
 	assert.True(t, c.ReadsAnswer, "SAP's lists are still recorded")
+}
+
+// A known artifact keeps the access of its package only while the map is
+// fresh: after it moved to another team's package, a stale entry must not
+// still allow deploying it (security review of 0.35.1, finding 4).
+func TestGuardKnownArtifactExpires(t *testing.T) {
+	g := testGuard(t, sdRW)
+	deploy := req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='SD_A'&Version='active'", "")
+	require.NoError(t, g.Before(deploy))
+
+	inner := g.Fetch
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		switch {
+		case strings.HasPrefix(path, "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts"):
+			return []byte(`{"d":{"results":[]}}`), nil
+		case strings.HasPrefix(path, "/api/v1/IntegrationPackages('FI_Billing')/IntegrationDesigntimeArtifacts"):
+			return []byte(`{"d":{"results":[{"Id":"FI_B"},{"Id":"SD_A"}]}}`), nil
+		}
+		return inner(ctx, path)
+	}
+	assert.NoError(t, g.Before(deploy), "within the refresh time the known owner stands")
+	g.mu.Lock()
+	g.builtAt = g.builtAt.Add(-time.Hour)
+	g.mu.Unlock()
+	refused(t, g.Before(deploy))
 }

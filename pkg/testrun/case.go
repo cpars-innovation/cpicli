@@ -41,6 +41,9 @@ type Case struct {
 	// from (body_file and idoc_file are relative to its folder).
 	Name string `yaml:"-" json:"name"`
 	File string `yaml:"-" json:"file,omitempty"`
+	// Root, when set, confines the files the case references to this
+	// directory (see refPath); an MCP server sets its root.
+	Root string `yaml:"-" json:"-"`
 	// Flow is the integration flow ID; default the folder name.
 	Flow        string   `yaml:"flow,omitempty" json:"flow"`
 	Description string   `yaml:"description,omitempty" json:"description,omitempty"`
@@ -403,17 +406,10 @@ func (c *Case) validate() error {
 	return nil
 }
 
-// readFile reads a file of the request relative to the case file.
+// readFile reads a file of the request relative to the case file (inside
+// Root when set).
 func (c Case) readFile(name string) ([]byte, error) {
-	p := name
-	if !filepath.IsAbs(p) && c.File != "" {
-		p = filepath.Join(filepath.Dir(c.File), name)
-	}
-	b, err := os.ReadFile(p)
-	if err != nil {
-		return nil, output.Usage(err)
-	}
-	return b, nil
+	return readRef(c.File, name, c.Root)
 }
 
 // loadConfig reads a flow's config.yaml: parameter key -> value, and in

@@ -40,6 +40,9 @@ type XSLTCase struct {
 	ID   string `yaml:"-" json:"id"`
 	Name string `yaml:"-" json:"name"`
 	File string `yaml:"-" json:"file"`
+	// Root, when set, confines the files the case references to this
+	// directory (see refPath).
+	Root string `yaml:"-" json:"-"`
 
 	Description string   `yaml:"description" json:"description,omitempty"`
 	Tags        []string `yaml:"tags" json:"tags,omitempty"`
@@ -281,7 +284,7 @@ func RunXSLT(ctx context.Context, cases []XSLTCase, o XSLTOptions) (*Result, err
 // stylesheet is the case's XSLT file.
 func (c XSLTCase) stylesheet(pdDir string) (string, error) {
 	if c.XSLT != "" {
-		return filepath.Join(filepath.Dir(c.File), c.XSLT), nil
+		return refPath(c.File, c.XSLT, c.Root)
 	}
 	for _, ext := range []string{".xsl", ".xslt"} {
 		p := filepath.Join(pdDir, c.PID, "Binary", c.ID+ext)
@@ -316,8 +319,8 @@ func runXSLTCase(ctx context.Context, c XSLTCase, o XSLTOptions) CaseResult {
 	}
 	input := []byte(c.Input)
 	if c.InputFile != "" {
-		if input, err = os.ReadFile(filepath.Join(filepath.Dir(c.File), c.InputFile)); err != nil {
-			return errResult(output.Usage(err))
+		if input, err = readRef(c.File, c.InputFile, c.Root); err != nil {
+			return errResult(err)
 		}
 	}
 	if o.Online {
@@ -500,9 +503,9 @@ func checkXSLT(c XSLTCase, result []byte, errText string, failed bool) ([]Failur
 	text := string(result)
 	want := e.Output
 	if e.OutputFile != "" {
-		b, err := os.ReadFile(filepath.Join(filepath.Dir(c.File), e.OutputFile))
+		b, err := readRef(c.File, e.OutputFile, c.Root)
 		if err != nil {
-			return nil, output.Usage(err)
+			return nil, err
 		}
 		want = string(b)
 	}

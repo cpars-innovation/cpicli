@@ -128,3 +128,42 @@ func TestPayloadInlineSaveAndRedaction(t *testing.T) {
 	_, err := os.Stat(filepath.Join(srv.Root, ".cpi", "cache"))
 	assert.True(t, os.IsNotExist(err))
 }
+
+// The content store reads only its own entries: not through a symbolic
+// link, not when the content no longer matches its hash, and not when the
+// store folder itself links outside the root (security review of 0.35.1,
+// finding 5).
+func TestContentStoreStaysInRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	secret := filepath.Join(parent, "secret")
+	require.NoError(t, os.WriteFile(secret, []byte("made-up-outside-root-secret"), 0o600))
+
+	store := newRootStore(root)
+	ref, _, err := store.Put([]byte("payload"))
+	require.NoError(t, err)
+	entry := filepath.Join(root, ".cpi", "cache", "content", ref[2:])
+
+	require.NoError(t, os.WriteFile(entry, []byte("changed"), 0o600))
+	_, err = store.Get(ref)
+	assert.ErrorContains(t, err, "does not match its reference")
+
+	require.NoError(t, os.Remove(entry))
+	if os.Symlink(secret, entry) == nil {
+		_, err = store.Get(ref)
+		assert.ErrorContains(t, err, "not a regular file")
+	}
+
+	linked := filepath.Join(parent, "linked")
+	require.NoError(t, os.MkdirAll(linked, 0o755))
+	outside := filepath.Join(parent, "outside")
+	require.NoError(t, os.MkdirAll(outside, 0o755))
+	if os.Symlink(outside, filepath.Join(linked, ".cpi")) == nil {
+		_, _, err = newRootStore(linked).Put([]byte("payload"))
+		assert.ErrorContains(t, err, "outside the server root")
+	}
+
+	rootless := newRootStore("")
+	assert.NotContains(t, rootless.dir, os.TempDir()+string(filepath.Separator)+"cpictl-content", "no shared temp folder")
+}

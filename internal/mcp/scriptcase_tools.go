@@ -57,6 +57,9 @@ func scriptCaseTools(cfg Config, endpoints ops.EndpointExecuterFunc) []Tool {
 			if err != nil {
 				return nil, err
 			}
+			for i := range cases {
+				cases[i].Root = cmpRoot(cfg.Root) // referenced files stay under the root
+			}
 			if len(cases) == 0 {
 				return nil, output.Usagef("no script case matches (write them as %s/<FlowId>/scripts/<script>/<case>.yaml or %s/collections/<CollectionId>/<case>.yaml)", testrun.DefaultDir, testrun.DefaultDir)
 			}
@@ -117,6 +120,9 @@ func scriptCaseTools(cfg Config, endpoints ops.EndpointExecuterFunc) []Tool {
 			cases, err := testrun.LoadScriptCases(dir, filterOf(a.Flow, a.Case, a.Tags))
 			if err != nil {
 				return nil, err
+			}
+			for i := range cases {
+				cases[i].Root = cmpRoot(cfg.Root) // referenced files stay under the root
 			}
 			if len(cases) == 0 {
 				return nil, output.Usagef("no script case matches (write them as %s/<FlowId>/scripts/<script>/<case>.yaml or %s/collections/<CollectionId>/<case>.yaml)", testrun.DefaultDir, testrun.DefaultDir)

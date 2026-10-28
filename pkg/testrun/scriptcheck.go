@@ -3,8 +3,6 @@ package testrun
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -109,7 +107,7 @@ func CheckScript(c ScriptCase, o ScriptOutcome) []Failure {
 		body = *o.Body
 	}
 	if e.BodyEqualsFile != "" {
-		want, err := os.ReadFile(filepath.Join(filepath.Dir(c.File), e.BodyEqualsFile))
+		want, err := readRef(c.File, e.BodyEqualsFile, c.Root)
 		switch {
 		case err != nil:
 			fail("body_equals_file", e.BodyEqualsFile, "", err.Error())

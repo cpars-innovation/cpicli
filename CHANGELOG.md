@@ -5,6 +5,33 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.2
+
+Fixes from an independent security review of 0.35.1 (an agent that had not seen the code, working on the mock
+tenant only). All five findings were reproduced, fixed, and covered by tests that fail on 0.35.1.
+
+- **Redirects are no longer followed (high).** Go's HTTP client followed redirects inside one request. A response
+  from an allowed flow endpoint could redirect a scoped client to a path the access scope refuses, and get its data.
+  A refreshing bearer transport (gateway sign-in, OAuth) also sent its token to the redirect's host. Every client of
+  the executer now returns a 3xx answer as it is: the default client, a copy of a caller's own client, and the OAuth
+  and token clients.
+- **Test case files stay inside `--root` (high).** `run_tests` read `body_file` / `idoc_file` relative to the case
+  file without a boundary, so a case with `../../secret` (or a symbolic link) sent a file from outside the root to
+  the tenant. Under `cpictl mcp` every file a case references must be inside the root, links resolved: test
+  cases, script cases (`input.body_file`, `body_equals_file`) and XSLT cases. The CLI is unchanged.
+- **A known artifact's package expires (medium).** The scope guard kept a known artifact's package for the life of
+  the process, so access stayed after the artifact moved to another team's package. The map is now trusted for 30
+  seconds for known IDs too (`Refresh`), and a known ProcessDirect address for 5 minutes.
+- **The content store stays in the root (medium).** It read an entry through a symbolic link without checking
+  it. Now:
+  - an entry is read only as a regular file whose content matches its SHA-256 reference;
+  - a store folder that resolves outside `--root` is refused;
+  - without a root, the store is in the user's cache directory, not a shared temp folder.
+
+**What to do:** update to 0.35.2 wherever an access scope or `cpictl mcp` is used (the cpictl gateway, Studio's
+backend, MCP servers). A program that passes its own `http.Client` and relied on following redirects gets the 3xx
+answer now.
+
 ## 0.35.1
 
 - **Security (access scope, #52):** reading a payload (`MessageProcessingLogAttachments(…)/$value`,

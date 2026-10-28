@@ -243,10 +243,13 @@ var designtimeTypes = []string{"Integration", "ValueMapping", "MessageMapping", 
 // every package; an unknown ID rebuilds the map at most every Refresh.
 func (g *Guard) packageOf(ctx context.Context, id string) string {
 	g.mu.Lock()
-	pkg, ok := g.artifacts[id]
+	pkg := g.artifacts[id]
 	stale := g.artifacts == nil || time.Since(g.builtAt) > cmpDuration(g.Refresh, 30*time.Second)
 	g.mu.Unlock()
-	if ok || !stale || g.Fetch == nil {
+	// a known artifact is trusted only while the map is fresh: an artifact
+	// that moved to another package (or was deleted and created again
+	// elsewhere) must not keep the access its old package gave
+	if !stale || g.Fetch == nil {
 		return pkg
 	}
 	m := g.buildArtifactMap(ctx)
@@ -256,6 +259,10 @@ func (g *Guard) packageOf(ctx context.Context, id string) string {
 	g.mu.Unlock()
 	return pkg
 }
+
+// pdMaxAge is how long a known ProcessDirect address is trusted without a
+// rebuild of the address map.
+const pdMaxAge = 5 * time.Minute
 
 func cmpDuration(d, def time.Duration) time.Duration {
 	if d > 0 {
@@ -835,10 +842,14 @@ func (g *Guard) processDirectFlow(ctx context.Context, addr string) string {
 	}
 	g.mu.Lock()
 	flow := g.pdFlows[addr]
-	fresh := g.pdFlows != nil && time.Since(g.pdBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
+	age := time.Since(g.pdBuiltAt)
+	fresh := g.pdFlows != nil && age < cmpDuration(g.Refresh, 30*time.Second)
 	g.mu.Unlock()
-	if flow != "" || fresh {
-		return flow // known, or rebuilt a moment ago: no new downloads
+	// a known address is trusted for pdMaxAge (a rebuild downloads every
+	// allowed flow); then the map is rebuilt, so an address that moved to
+	// another team's flow is decided anew
+	if fresh || (flow != "" && age < max(pdMaxAge, g.Refresh)) {
+		return flow
 	}
 	// (re)build from the allowed flows, with the guard's own lookups
 	ictx := internal(ctx)

@@ -29,6 +29,9 @@ func testTools(cfg Config, endpoints ops.EndpointExecuterFunc) []Tool {
 		if err != nil {
 			return nil, err
 		}
+		for i := range cases {
+			cases[i].Root = cmpRoot(cfg.Root) // referenced files stay under the root
+		}
 		return cases, nil
 	}
 	rel := func(file string) string {

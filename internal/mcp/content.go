@@ -47,7 +47,9 @@ var reContentRef = regexp.MustCompile(`^c:[0-9a-f]{20}$`)
 // (<root>/.cpi/cache/content). by-message/<guid> names the test response of
 // a message (response_of).
 type ContentStore struct {
-	dir     string
+	dir string
+	// root, when set, must contain dir once symbolic links are resolved
+	root    string
 	once    sync.Once
 	initErr error
 }
@@ -55,19 +57,31 @@ type ContentStore struct {
 // NewContentStore returns the store in dir.
 func NewContentStore(dir string) *ContentStore { return &ContentStore{dir: dir} }
 
-// contentDir is the store directory for a server root: .cpi/cache/content
-// below it, or a directory in the system temp folder without a root.
-func contentDir(root string) string {
+// newRootStore returns the store of a server root: .cpi/cache/content below
+// it, which must stay inside the root; without a root, the user's own
+// cache directory (not a shared temp folder).
+func newRootStore(root string) *ContentStore {
 	if root == "" {
-		return filepath.Join(os.TempDir(), "cpictl-content")
+		dir, err := os.UserCacheDir()
+		if err != nil {
+			dir = filepath.Join(os.TempDir(), fmt.Sprintf("cpictl-%d", os.Getuid()))
+		}
+		return &ContentStore{dir: filepath.Join(dir, "cpictl", "content")}
 	}
-	return filepath.Join(root, ".cpi", "cache", "content")
+	return &ContentStore{dir: filepath.Join(root, ".cpi", "cache", "content"), root: root}
 }
 
 func (c *ContentStore) init() error {
 	c.once.Do(func() {
 		if c.initErr = os.MkdirAll(filepath.Join(c.dir, "by-message"), 0o700); c.initErr != nil {
 			return
+		}
+		if c.root != "" {
+			// a .cpi or cache folder that links elsewhere would put payloads
+			// (and reads) outside the root
+			if c.initErr = insideRoot(c.root, c.dir); c.initErr != nil {
+				return
+			}
 		}
 		// keep the cache out of Git: .cpi/cache/.gitignore
 		if filepath.Base(filepath.Dir(c.dir)) == "cache" {
@@ -164,11 +178,50 @@ func (c *ContentStore) Get(ref string) ([]byte, error) {
 	if err := c.init(); err != nil {
 		return nil, err
 	}
-	b, err := os.ReadFile(filepath.Join(c.dir, strings.TrimPrefix(ref, "c:")))
+	b, err := readRegular(filepath.Join(c.dir, strings.TrimPrefix(ref, "c:")))
 	if os.IsNotExist(err) {
 		return nil, output.Usagef("content %s is not in the store (%s; entries are removed after 7 days): read it from the tenant again", ref, c.dir)
 	}
-	return b, err
+	if err != nil {
+		return nil, err
+	}
+	// the name is the content's hash: anything else was put there by
+	// someone else
+	if sum := sha256.Sum256(b); "c:"+hex.EncodeToString(sum[:])[:20] != ref {
+		return nil, output.Usagef("content %s does not match its reference: the store entry was changed, read it from the tenant again", ref)
+	}
+	return b, nil
+}
+
+// readRegular reads a regular file, never through a symbolic link.
+func readRegular(p string) ([]byte, error) {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, output.Usagef("%s is not a regular file", filepath.Base(p))
+	}
+	return os.ReadFile(p)
+}
+
+// insideRoot checks that dir, symbolic links resolved, is inside root.
+func insideRoot(root, dir string) error {
+	r, err := filepath.EvalSymlinks(cmpRoot(root))
+	if err != nil {
+		return err
+	}
+	r, _ = filepath.Abs(r)
+	d, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return err
+	}
+	d, _ = filepath.Abs(d)
+	rel, err := filepath.Rel(r, d)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return output.Usagef("the content store %s is outside the server root (a linked .cpi or cache folder)", dir)
+	}
+	return nil
 }
 
 // name records that a message's test response has a reference.
@@ -187,7 +240,7 @@ func (c *ContentStore) responseOf(guid string) (string, error) {
 	if err := c.init(); err != nil {
 		return "", err
 	}
-	b, err := os.ReadFile(filepath.Join(c.dir, "by-message", guid))
+	b, err := readRegular(filepath.Join(c.dir, "by-message", guid))
 	if err != nil {
 		return "", output.Usagef("no stored response of message %s: only responses of send_test_message from this server root are kept (7 days)", guid)
 	}
@@ -198,7 +251,7 @@ func (c *ContentStore) responseOf(guid string) (string, error) {
 func (s *Server) contentStore() *ContentStore {
 	s.contentOnce.Do(func() {
 		if s.Content == nil {
-			s.Content = NewContentStore(contentDir(s.Root))
+			s.Content = newRootStore(s.Root)
 		}
 	})
 	return s.Content

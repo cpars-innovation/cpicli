@@ -192,7 +192,7 @@ func planFor(c testrun.ScriptCase, artifacts map[string]ops.LocalArtifact) (plan
 	}
 	switch {
 	case c.Input.BodyFile != "":
-		data, err := os.ReadFile(filepath.Join(filepath.Dir(c.File), c.Input.BodyFile))
+		data, err := c.InputBody()
 		if err != nil {
 			return planCase{}, err
 		}

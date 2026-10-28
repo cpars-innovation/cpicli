@@ -448,6 +448,12 @@ the Go API and the loop ledger see the result before it, unchanged.
   the response of a `send_test_message` without sending it again.
 - **`--redact-payloads`:** nothing is stored; `save_to`, `get_content` and `response_of` are
   refused.
+- **Staying in the root:** the store must resolve inside `--root` (a `.cpi` or `cache` folder that
+  links elsewhere is refused). An entry is read only as a regular file whose content matches its
+  hash. Without a root the store is in the user's cache directory. Files a test case references
+  (`body_file`, `idoc_file`, `body_equals_file`, ...) must be inside `--root` too, links resolved.
+  `run_script_cases` runs the repository's Gradle build: only point the server at repositories you
+  trust.
 - **Lean results** (`detail: "full"` for every field):
   - `list_message_logs`, `find_messages_by_header`: the triage fields of each row;
   - `get_trace_tree`: the error text once (`firstFailure`), the link kind on each node instead of

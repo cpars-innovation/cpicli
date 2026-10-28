@@ -45,6 +45,9 @@ type ScriptCase struct {
 	Script string `yaml:"-" json:"script,omitempty"`
 	Name   string `yaml:"-" json:"name"`
 	File   string `yaml:"-" json:"file"`
+	// Root, when set, confines the files the case references to this
+	// directory (see refPath); an MCP server sets its root.
+	Root string `yaml:"-" json:"-"`
 
 	Description string     `yaml:"description" json:"description,omitempty"`
 	Tags        []string   `yaml:"tags" json:"tags,omitempty"`

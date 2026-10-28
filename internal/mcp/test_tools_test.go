@@ -232,3 +232,29 @@ func jsonID(n int) string {
 	b, _ := json.Marshal(n)
 	return string(b)
 }
+
+// Files a test case references stay inside the server root, also through a
+// symbolic link: a case in a repository cannot make run_tests send a file
+// from elsewhere to the tenant (security review of 0.35.1, finding 3).
+func TestRunTestsCaseFilesStayInRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".cpi", "tests", "Orders_In"), 0o755))
+	secret := filepath.Join(parent, "secret")
+	require.NoError(t, os.WriteFile(secret, []byte("made-up-outside-root-secret"), 0o600))
+	dir := filepath.Join(root, ".cpi", "tests", "Orders_In")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "escape.yaml"), []byte("request: {body_file: ../../../../secret}\n"), 0o644))
+	if err := os.Symlink(secret, filepath.Join(dir, "link.txt")); err == nil {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "linked.yaml"), []byte("request: {body_file: link.txt}\n"), 0o644))
+	}
+	m, cfg := testsConfig(t, root)
+	resp := sessionWith(t, cfg,
+		call(1, "run_tests", map[string]any{"flow": "Orders_In", "case": "escape"}),
+		call(2, "run_tests", map[string]any{"flow": "Orders_In", "case": "linked"}))
+	for _, id := range []string{"1", "2"} {
+		assert.Contains(t, toolResult(t, resp[id]).Content[0].Text, "outside the server root", id)
+	}
+	for _, r := range m.Requests() {
+		assert.NotContains(t, r, "/http/", "no message was sent: the case is refused before")
+	}
+}

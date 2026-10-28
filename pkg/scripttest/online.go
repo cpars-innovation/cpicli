@@ -351,7 +351,7 @@ func runOnlineCase(ctx context.Context, exe *httpclnt.HTTPExecuter, newExe ops.E
 	cr := testrun.CaseResult{Flow: c.Suite(), Case: c.Name, File: c.File, Description: c.Description}
 	body := []byte(c.Input.Body)
 	if c.Input.BodyFile != "" {
-		data, err := os.ReadFile(filepath.Join(filepath.Dir(c.File), c.Input.BodyFile))
+		data, err := c.InputBody()
 		if err != nil {
 			cr.Status, cr.Error, cr.ErrorCategory = testrun.StatusError, err.Error(), "usage"
 			return cr
