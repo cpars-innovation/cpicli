@@ -86,13 +86,13 @@ type Guard struct {
 	noTarget     map[string]time.Time // correlation ID -> until when "no allowed flow" holds
 	correlations map[string]string    // tooling message GUID -> correlation ID ("": not looked up)
 	// allEndpoints are the entry points of every flow of the tenant (the
-	// guard's own lookup, and every endpoint list seen before filtering), so
-	// that an allowed flow's entry point does not cover another team's below
-	// it
-	allEndpoints map[string]string
+	// guard's own lookup, replaced on each refresh), so that an allowed
+	// flow's entry point does not cover another team's below it
+	allEndpoints []endpointEntry
 	epBuiltAt    time.Time
 	epBuilding   chan struct{}     // closed when the running refresh ends
 	epErr        error             // the last refresh's error
+	epFailedAt   time.Time         // the last failed refresh (zero after a success)
 	pdFlows      map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
 	pdBuiltAt    time.Time
 	tenant       string // scheme://host:port of the tenant API
@@ -885,8 +885,8 @@ func (g *Guard) classifyOperations(r *httpclnt.GuardRequest, cmd string) (decisi
 }
 
 // classifyEndpoint decides a request to a flow's runtime endpoint: allowed
-// at or below an entry point the guard has seen for an allowed flow, with
-// "test". A call through the test harness must name a ProcessDirect address
+// with "test" on the flow whose entry point covers it most specifically,
+// among the entry points of every flow of the tenant. A call through the test harness must name a ProcessDirect address
 // of an allowed flow.
 func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 	if !g.Scope.Grants(ActionTest) {
@@ -901,13 +901,13 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 		}
 	}
 	written, _, _ := strings.Cut(withoutDefaultPort(r.Base)+r.Path, "?")
-	target, ok := endpointKey(written)
+	target, ok := parseEndpoint(written, false)
 	if !ok {
 		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint})
 	}
 	flow, why := g.endpointOwner(r.Ctx, target)
 	if flow == "" {
-		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " " + why})
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + why})
 	}
 	if flow == testtools.HarnessID {
 		addr := ""
@@ -930,7 +930,7 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 	// (cpicli#54). With grants, read on a package does not mean test on it.
 	// A flow the scope may read is named (the caller sees it anyway).
 	if !g.mayTest(r.Ctx, flow) && !g.mayRead(r.Ctx, flow) {
-		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + target + " " + notAnEntryPoint})
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint})
 	}
 	return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: flow}, action: ActionTest}}}, nil
 }
@@ -956,8 +956,9 @@ func (g *Guard) mayOnFlow(ctx context.Context, id, action string) bool {
 // specific entry point that covers it, among the entry points of every flow
 // of the tenant (an exact entry point before a longer prefix before a
 // shorter one). The caller's need on that flow decides. Two flows equally
-// specific, or none: "" with the reason.
-func (g *Guard) endpointOwner(ctx context.Context, target string) (string, string) {
+// specific (also two flows listing the same URL), an entry point that could
+// not be read, or none: "" with the reason.
+func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (string, string) {
 	// the reason stays generic: the error would show the caller the
 	// tenant's API path and answer
 	if err := g.refreshEndpoints(ctx); err != nil {
@@ -968,40 +969,26 @@ func (g *Guard) endpointOwner(ctx context.Context, target string) (string, strin
 	// only the tenant-wide list decides: entry points seen in earlier
 	// answers may belong to a flow that has moved since (cpicli#55)
 	best, owners := -1, map[string]bool{}
-	for ep, f := range g.allEndpoints {
-		if !endpointCovers(ep, target) {
-			continue
-		}
-		n := endpointSpecificity(ep, target)
+	for _, e := range g.allEndpoints {
+		n := e.path.covers(target)
 		switch {
+		case n < 0:
 		case n > best:
-			best, owners = n, map[string]bool{f: true}
+			best, owners = n, map[string]bool{e.flow: true}
 		case n == best:
-			owners[f] = true
+			owners[e.flow] = true
 		}
 	}
-	// two flows equally specific: refused, with the text of an unknown
-	// endpoint (the caller learns nothing about the other flow)
-	if best < 0 || len(owners) > 1 {
+	// two flows equally specific, or an entry point the guard could not
+	// read (flow ""): refused, with the text of an unknown endpoint (the
+	// caller learns nothing about the other flow)
+	if best < 0 || len(owners) > 1 || owners[""] {
 		return "", notAnEntryPoint
 	}
 	for f := range owners {
 		return f, ""
 	}
 	return "", ""
-}
-
-// endpointSpecificity ranks an entry point that covers target: the exact
-// one highest, then by the length of the prefix it fixes.
-func endpointSpecificity(ep, target string) int {
-	if prefix, ok := strings.CutSuffix(ep, "*"); ok {
-		return len(prefix)
-	}
-	ep = strings.TrimSuffix(ep, "/")
-	if ep == target {
-		return 1 << 20
-	}
-	return len(ep) + 1
 }
 
 // refreshEndpoints reads the entry points of every flow of the tenant (the
@@ -1018,6 +1005,10 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 		case fresh:
 			g.mu.Unlock()
 			return nil
+		case ch == nil && lastErr != nil && time.Since(g.epFailedAt) < mapRetry:
+			// a failed read is not repeated for every message in an outage
+			g.mu.Unlock()
+			return lastErr
 		case g.Fetch == nil:
 			g.mu.Unlock()
 			return errors.New("the guard has no Fetch")
@@ -1055,7 +1046,7 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			eps := mergeEndpoints(nil, body)
+			eps := mergeEndpoints(body)
 			g.mu.Lock()
 			g.allEndpoints, g.epBuiltAt = eps, time.Now()
 			g.mu.Unlock()
@@ -1063,70 +1054,145 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 		}()
 		g.mu.Lock()
 		g.epBuilding, g.epErr = nil, err
+		if err != nil {
+			g.epFailedAt = time.Now()
+		}
 		g.mu.Unlock()
 		close(ch)
 		return err
 	}
 }
 
-// mergeEndpoints adds the entry points of an endpoint list to m.
-func mergeEndpoints(m map[string]string, body []byte) map[string]string {
-	if m == nil {
-		m = map[string]string{}
-	}
+// endpointEntry is one entry point of a flow; flow "" marks an entry point
+// the guard could not read, which makes every URL it might cover ambiguous.
+type endpointEntry struct {
+	path endpointPath
+	flow string
+}
+
+// mergeEndpoints lists the entry points of an endpoint list.
+func mergeEndpoints(body []byte) []endpointEntry {
+	var out []endpointEntry
 	for _, e := range results(body) {
 		eps, _ := e["EntryPoints"].(map[string]any)
 		list, _ := eps["results"].([]any)
 		for _, x := range list {
 			if ep, ok := x.(map[string]any); ok {
 				if u := str(ep, "Url"); u != "" {
-					if n, ok := endpointKey(withoutDefaultPort(u)); ok {
-						m[n] = str(e, "Name")
+					p, ok := parseEndpoint(withoutDefaultPort(u), true)
+					if !ok {
+						out = append(out, endpointEntry{path: rawEndpoint(withoutDefaultPort(u))})
+						continue
 					}
+					out = append(out, endpointEntry{path: p, flow: str(e, "Name")})
 				}
 			}
 		}
 	}
-	return m
+	return out
 }
 
-// endpointKey is a runtime URL (or an entry point) the way the runtime
-// routes it: each path segment decoded, and path parameters (";…") dropped,
-// as servlet containers match paths. Matching the URL as written would let
-// "/http/shared/bill%69ng" or "/http/shared/billing;x" pass as below
+// endpointPath is a runtime URL or an entry point the way the runtime routes
+// it: per path segment the decoded name and its decoded parameters (";…").
+// Matching URLs as written would let "/http/shared/bill%69ng" pass as below
 // "/http/shared" while the tenant delivers it to "/http/shared/billing"
-// (cpicli#55). A segment that cannot be decoded, or that decodes to a
-// separator, gives false.
-func endpointKey(u string) (string, bool) {
-	start := 0
-	if i := strings.Index(u, "://"); i >= 0 {
-		start = i + 3
-		if j := strings.IndexByte(u[start:], '/'); j >= 0 {
-			start += j
-		} else {
-			return u, true
-		}
-	}
-	segs := strings.Split(u[start:], "/")
-	for i, seg := range segs {
-		name, _, _ := strings.Cut(seg, ";")
-		dec, err := url.PathUnescape(name)
-		if err != nil || strings.ContainsAny(dec, "/\\;") {
-			return "", false
-		}
-		segs[i] = dec
-	}
-	return u[:start] + strings.Join(segs, "/"), true
+// (cpicli#55).
+type endpointPath struct {
+	origin string // scheme://host
+	segs   []endpointSeg
+	// wild: an entry point ending in "*"; the last segment's name is a prefix
+	wild bool
 }
 
-// endpointCovers reports whether target is the entry point ep or below it
-// ("/..."); an entry point ending in "*" covers everything after its prefix.
-func endpointCovers(ep, target string) bool {
-	if prefix, ok := strings.CutSuffix(ep, "*"); ok {
-		return strings.HasPrefix(target, prefix)
+type endpointSeg struct{ name, params string }
+
+// parseEndpoint reads a runtime URL (entry false) or an entry point. A
+// segment that cannot be decoded, or decodes to a separator, gives false.
+func parseEndpoint(u string, entry bool) (endpointPath, bool) {
+	var p endpointPath
+	rest := u
+	if i := strings.Index(u, "://"); i >= 0 {
+		host, path, _ := strings.Cut(u[i+3:], "/")
+		p.origin, rest = u[:i+3]+host, "/"+path
+		if path == "" && !strings.HasSuffix(u, "/") {
+			rest = ""
+		}
 	}
-	ep = strings.TrimSuffix(ep, "/")
-	return target == ep || strings.HasPrefix(target, ep+"/")
+	if entry {
+		rest = strings.TrimSuffix(rest, "/")
+		if r, ok := strings.CutSuffix(rest, "*"); ok {
+			p.wild, rest = true, r
+		}
+	}
+	if rest == "" {
+		if p.wild {
+			p.segs = []endpointSeg{{}}
+		}
+		return p, true
+	}
+	if !strings.HasPrefix(rest, "/") {
+		return p, false
+	}
+	for _, raw := range strings.Split(rest[1:], "/") {
+		name, params, _ := strings.Cut(raw, ";")
+		n, err1 := url.PathUnescape(name)
+		ps, err2 := url.PathUnescape(params)
+		if err1 != nil || err2 != nil || strings.ContainsAny(n, "/\\;*") || strings.ContainsAny(ps, "/\\*") ||
+			strings.Count(ps, ";") != strings.Count(params, ";") {
+			return p, false
+		}
+		p.segs = append(p.segs, endpointSeg{n, ps})
+	}
+	if p.wild && p.segs[len(p.segs)-1].params != "" {
+		return p, false // "…;v=1*": what it covers is unclear
+	}
+	return p, true
+}
+
+// rawEndpoint is an entry point the guard cannot read: its segments up to
+// the first unreadable one, as a wildcard from there. With flow "" it makes
+// the URLs it might cover ambiguous (refused) where nothing more specific
+// decides them.
+func rawEndpoint(u string) endpointPath {
+	p, _ := parseEndpoint(u, false) // the segments before the unreadable one
+	p.segs = append(p.segs, endpointSeg{})
+	p.wild = true
+	return p
+}
+
+// covers returns how specifically the entry point e covers the URL t, or -1:
+// an exact entry point the highest, then by the length of what it fixes. A
+// segment matches by its name, and by its parameters when the entry point's
+// segment has some: ";v=1" and ";v=2" are different OData services
+// (cpicli#56), while "billing;x" is "billing" to a servlet container.
+func (e endpointPath) covers(t endpointPath) int {
+	if e.origin != t.origin || len(t.segs) < len(e.segs) {
+		return -1
+	}
+	n := 0
+	for i, es := range e.segs {
+		ts := t.segs[i]
+		last := i == len(e.segs)-1
+		switch {
+		case last && e.wild:
+			if !strings.HasPrefix(ts.name, es.name) {
+				return -1
+			}
+		case es.name != ts.name || (es.params != "" && es.params != ts.params):
+			return -1
+		}
+		n += 1 + len(es.name)
+		if es.params != "" {
+			n += 1 + len(es.params)
+		}
+	}
+	switch {
+	case e.wild:
+		return n
+	case len(t.segs) == len(e.segs):
+		return 1 << 20
+	}
+	return n + 1
 }
 
 // processDirectFlow returns the allowed flow whose ProcessDirect sender

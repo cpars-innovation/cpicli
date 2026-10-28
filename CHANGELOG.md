@@ -5,6 +5,22 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.35.8
+
+From the cpictl gateway's verification of 0.35.7 (cpicli#56):
+
+- **OData services that differ only in `;v=` are told apart again (S1).** 0.35.7 dropped path parameters from the
+  tenant's entry points as well as from the URL. So `…/SRV;v=1` (one team) and `…/SRV;v=2` (another) became one
+  entry, and the flow listed last owned both. Now an entry point keeps its parameters, and a URL segment matches
+  it only with the same ones. Where the entry point has none, the URL's are ignored as before (`billing;x` is
+  `billing`). Two flows listing the same URL, and entry points the guard cannot read, make the URLs they cover
+  ambiguous: refused.
+- A failed read of the endpoint list is not repeated for every message: the guard waits 5 seconds before the next
+  try and refuses in between.
+- `docs/access-scope.md`: paths are compared case-sensitively, which is unverified against a real runtime.
+
+**What to do:** update to 0.35.8 where an access scope is used (skip 0.35.7).
+
 ## 0.35.7
 
 From the cpictl gateway's verification of 0.35.6 (cpicli#55). Both S1 findings get past the endpoint routing of

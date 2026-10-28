@@ -1057,3 +1057,62 @@ func TestGuardRefreshesOnceAndSurvivesAPanic(t *testing.T) {
 		t.Fatal("the guard waits for a rebuild that ended in a panic")
 	}
 }
+
+// OData services that differ only in ";v=" are different services: each
+// version belongs to its own flow, in either list order; two flows listing
+// the same URL, or an entry point the guard cannot read, make the URLs they
+// cover ambiguous (cpicli#56).
+func TestGuardEndpointParametersOfEntryPoints(t *testing.T) {
+	sd := `{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/gw/odata/SAP/SRV;v=1"},{"Url":"https://rt/http/shared/*"}]}}`
+	fi := `{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/gw/odata/SAP/SRV;v=2"}]}}`
+	for _, list := range []string{sd + "," + fi, fi + "," + sd} {
+		g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+		endpoints(g, `{"d":{"results":[`+list+`]}}`)
+		send := func(path string) error {
+			return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path})
+		}
+		assert.NoError(t, send("/gw/odata/SAP/SRV;v=1/Orders"), list)
+		assert.NoError(t, send("/gw/odata/SAP/SRV;v=1"), list)
+		for _, p := range []string{"/gw/odata/SAP/SRV;v=2/Invoices", "/gw/odata/SAP/SRV%3Bv=2/Invoices", "/gw/odata/SAP/SRV/Invoices",
+			"/gw/odata/SAP/SRV;v=1;v=2/Invoices"} {
+			r := refused(t, send(p))
+			assert.NotContains(t, r.Error(), "FI_B", p)
+		}
+	}
+
+	// two flows list the same URL: neither owns it
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	endpoints(g, `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/same"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/same"}]}}]}}`)
+	refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/same"}))
+
+	// an entry point the guard cannot read covers what it might cover
+	g = testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	endpoints(g, `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/shared/*"},{"Url":"https://rt/http/shared/own"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/shared/a%2Fb"}]}}]}}`)
+	send := func(path string) error {
+		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path})
+	}
+	refused(t, send("/http/shared/other"))
+	assert.NoError(t, send("/http/shared/own"), "a more specific entry point still decides")
+}
+
+// A failed read of the endpoint list is not repeated for every message
+// (cpicli#56).
+func TestGuardEndpointReadBacksOff(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	var reads atomic.Int32
+	inner := g.Fetch
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if strings.HasPrefix(path, "/api/v1/ServiceEndpoints") {
+			reads.Add(1)
+			return nil, fmt.Errorf("HTTP 503")
+		}
+		return inner(ctx, path)
+	}
+	send := &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd"}
+	for range 5 {
+		refused(t, g.Before(send))
+	}
+	assert.EqualValues(t, 1, reads.Load())
+}

@@ -112,15 +112,19 @@ whichever command or MCP tool sends it, including tools added later:
   most specific entry point that covers it, among the entry points of every flow of the tenant: the guard reads
   them itself (`ServiceEndpoints`, cached for 30 seconds); only that list decides, not entry points seen in
   earlier answers. So `/http/api/*` of an allowed flow does not open `/http/api/hr` of another team's flow. URLs
-  are matched the way the runtime routes them: each path segment decoded, path parameters (`;…`) dropped, so
-  `/http/api/h%72` and `/http/api/hr;x` are `/http/api/hr`. Two flows equally specific, or a list the guard
-  cannot read: refused. An endpoint of a flow the scope may not read is refused with the same text as an
+  are matched the way the runtime routes them: each path segment decoded, so `/http/api/h%72` is `/http/api/hr`.
+  Path parameters (`;…`) count only where the entry point has them: `/http/api/hr;x` is `/http/api/hr`, while
+  OData services `…/SRV;v=1` and `…/SRV;v=2` are different services, and `…/SRV/…` reaches neither. Two flows
+  equally specific (also two flows listing the same URL), an entry point the guard cannot read that covers the
+  URL, or a list the guard cannot read: refused. After a failed read, the list is not read again for 5 seconds. An endpoint of a flow the scope may not read is refused with the same text as an
   unknown one.
 
   Limits:
   - Within your own wildcard range (`/http/api/*`), an address of another team's flow is refused, while an
     address nobody listens on is passed on and gets the tenant's 404. A caller can tell the two apart and so
     learn that the address exists, not whose it is.
+  - Paths are compared case-sensitively (`/http/Billing` is not `/http/billing`). If a runtime matched paths
+    regardless of case, an address differing only in case from another team's could reach it.
   - A flow deployed less than 30 seconds ago (plus however long the tenant takes to list it) may not be in the
     list yet. Inside that window, a wildcard of another flow can still cover its address.
 - **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
