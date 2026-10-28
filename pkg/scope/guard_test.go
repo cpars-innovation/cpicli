@@ -829,6 +829,30 @@ func TestGuardEndpointOfAnotherTeamBelowAnAllowedOne(t *testing.T) {
 	}
 }
 
+// Another team's wildcard entry point does not capture a deeper entry point
+// of an allowed flow, and the issue's own case (cpicli#53): /http/shared of
+// an allowed flow does not reach /http/shared/billing of another team.
+func TestGuardEndpointMostSpecificWins(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	all := `{"d":{"results":[{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/*"},{"Url":"https://rt/http/shared/billing"}]}},
+		{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd/orders"},{"Url":"https://rt/http/shared"}]}}]}}`
+	inner := g.Fetch
+	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
+		if strings.HasPrefix(path, "/api/v1/ServiceEndpoints") {
+			return []byte(all), nil
+		}
+		return inner(ctx, path)
+	}
+	send := func(path string) error {
+		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path})
+	}
+	assert.NoError(t, send("/http/sd/orders"))
+	assert.NoError(t, send("/http/sd/orders/x"))
+	assert.NoError(t, send("/http/shared"))
+	refused(t, send("/http/shared/billing"))
+	refused(t, send("/http/sd/other")) // FI_B's wildcard
+}
+
 // A guard without Fetch cannot read every flow's entry points or a flow's
 // runtime state: test messages are refused, not decided on partial data.
 func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
