@@ -1258,3 +1258,13 @@ func TestEndpointCacheInvalidatedOnEveryRead(t *testing.T) {
 	assert.ErrorContains(t, err, "changed during each read")
 	assert.EqualValues(t, maxDiscardedReads, reads.Load())
 }
+
+// Without ProcessDirectAddresses (cpictl without --scope-harness, the
+// gateway) every harness call is refused, and says why (cpicli#65).
+func TestGuardHarnessOff(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	endpoints(g, `{"d":{"results":[{"Name":"CPICTL_Test_Harness","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test"}]}}]}}`)
+	r := refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/cpictl/test",
+		Header: map[string]string{"CpictlTargetAddress": "/sd/in"}}))
+	assert.Contains(t, r.Error(), "test harness (ProcessDirect tests) is off under this scope")
+}

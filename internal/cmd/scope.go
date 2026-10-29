@@ -53,6 +53,7 @@ func addScopeFlags(c *cobra.Command) {
 	f.StringSlice("scope-partners", nil, "Access scope without a file: Partner Directory partner patterns")
 	f.StringSlice("scope-tenant", nil, "Access scope without a file: tenant-wide grants (<area>:read|write, e.g. variables:read)")
 	f.StringSlice("scope-actions", nil, "Access scope without a file: actions (read, download, upload, deploy, configure, test, log-level, delete, pd-write)")
+	f.Bool("scope-harness", false, "Under a scope, allow test messages through the test harness to ProcessDirect addresses of flows in the scope (off by default until checked on a tenant, docs/access-scope.md)")
 }
 
 // loadScope builds the scope from the flags only: a config file (which an
@@ -133,14 +134,19 @@ func installScope(cmd *cobra.Command) error {
 			}
 			return body, err
 		},
-		ProcessDirectAddresses: func(fctx context.Context, id string) ([]string, error) {
-			return ops.ProcessDirectAddresses(cpi.InitHTTPExecuter(serviceDetails(cmd)).WithContext(fctx), id)
-		},
+		// the harness decision stays off unless --scope-harness: without
+		// ProcessDirectAddresses the guard refuses every harness call
+
 		OnRefuse: func(r *scope.Refusal) {
 			lastRefusal.Store(r)
 			log.Warn().Str("action", r.Action).Str("resource", r.Resource.String()).Msg(r.Error())
 			output.Emit(ctx, "scope.refused", map[string]any{"action": r.Action, "kind": r.Resource.Kind, "id": r.Resource.ID, "reason": r.Reason})
 		},
+	}
+	if on, _ := cmd.Flags().GetBool("scope-harness"); on {
+		g.ProcessDirectAddresses = func(fctx context.Context, id string) ([]string, error) {
+			return ops.ProcessDirectAddresses(cpi.InitHTTPExecuter(serviceDetails(cmd)).WithContext(fctx), id)
+		}
 	}
 	httpclnt.SetGuard(g)
 	log.Debug().Msgf("Access scope active (sha256 %s)", s.Hash())

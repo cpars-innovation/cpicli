@@ -215,6 +215,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
       --scope-actions strings       Access scope without a file: actions (read, download, upload, deploy, configure, test, log-level, delete, pd-write)
       --scope-artifacts strings     Access scope without a file: artifact patterns (!X excludes)
       --scope-file string           Access scope (JSON or YAML): packages, artifacts, partners, tenant areas and actions this process may use; everything else is refused or hidden. Fixed for the process; not read from config files
+      --scope-harness               Under a scope, allow test messages through the test harness to ProcessDirect addresses of flows in the scope (off by default until checked on a tenant, docs/access-scope.md)
       --scope-packages strings      Access scope without a file: package patterns (with --scope-actions)
       --scope-partners strings      Access scope without a file: Partner Directory partner patterns
       --scope-tenant strings        Access scope without a file: tenant-wide grants (<area>:read|write, e.g. variables:read)

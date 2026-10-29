@@ -122,24 +122,62 @@ func TestProcessDirectSendersOnlyAtTheirPlace(t *testing.T) {
 	assert.Empty(t, read(model(spoofedIfl)))
 }
 
-// Only the flow's model counts: a decoy model elsewhere in the archive, two
-// models, a repeated entry or no model are refused or ignored (#65, re-check).
+// Only the flow's model counts, and an archive a loader could read
+// differently is refused: another .iflw anywhere, two models, a repeated
+// entry, a name that is not a plain path, or a local header that names
+// another entry (#65, re-checks).
 func TestFromArchiveReadsOnlyTheModel(t *testing.T) {
 	const dir = "src/main/resources/scenarioflows/integrationflow/"
-	got, err := FromArchive(zipOf(t, map[string]string{
-		dir + "F.iflw":                  model(sender("ProcessDirect", "/sd/in")),
-		"src/main/resources/decoy.iflw": model(sender("ProcessDirect", "/fi/decoy")),
-		dir + "sub/G.iflw":              model(sender("ProcessDirect", "/fi/sub")),
-	}))
+	good := model(sender("ProcessDirect", "/sd/in"))
+	got, err := FromArchive(zipOf(t, map[string]string{dir + "F.iflw": good, "src/main/resources/script/a.groovy": "x"}))
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/sd/in"}, got)
 
-	_, err = FromArchive(zipOf(t, map[string]string{dir + "F.iflw": model(""), dir + "G.iflw": model("")}))
-	assert.ErrorContains(t, err, "more than one model")
-	_, err = FromArchive(zipOf(t, map[string]string{dir + "F.iflw": model(sender("ProcessDirect", "/sd/in"))}, dir+"F.iflw"))
+	for name, files := range map[string]map[string]string{
+		"decoy elsewhere":    {dir + "F.iflw": good, "src/main/resources/decoy.iflw": good},
+		"decoy below":        {dir + "F.iflw": good, dir + "sub/G.iflw": good},
+		"two models":         {dir + "F.iflw": good, dir + "G.iflw": good},
+		"other case":         {dir + "F.iflw": good, dir + "G.IFLW": good},
+		"folder named iflw":  {dir + "F.iflw": good, dir + "A.iflw/x": "x"},
+		"dot segment":        {dir + "F.iflw": good, "src/./x": "x"},
+		"dot dot":            {dir + "F.iflw": good, "src/../x": "x"},
+		"empty segment":      {dir + "F.iflw": good, "src//x": "x"},
+		"backslash":          {dir + "F.iflw": good, "src\\x": "x"},
+		"absolute":           {dir + "F.iflw": good, "/x": "x"},
+		"no model":           {"src/main/resources/x.groovy": "x"},
+		"model in other dir": {"src/main/resources/x.iflw": good},
+	} {
+		_, err := FromArchive(zipOf(t, files))
+		assert.Error(t, err, name)
+	}
+	_, err = FromArchive(zipOf(t, map[string]string{dir + "F.iflw": good}, dir+"F.iflw"))
 	assert.ErrorContains(t, err, "repeated")
-	_, err = FromArchive(zipOf(t, map[string]string{"src/main/resources/x.iflw": model(sender("ProcessDirect", "/fi/x"))}))
-	assert.ErrorContains(t, err, "without a model")
+
+	// the central directory names the model, the local header a decoy of
+	// the same length
+	zipped := zipOf(t, map[string]string{dir + "F.iflw": good})
+	i := bytes.Index(zipped, []byte(dir+"F.iflw"))
+	require.Positive(t, i)
+	bad := append([]byte{}, zipped...)
+	copy(bad[i:], dir+"G.iflw") // the first occurrence is the local header
+	_, err = FromArchive(bad)
+	assert.ErrorContains(t, err, "local header")
+}
+
+// One key and one value per property, one root, one collaboration (#65,
+// re-check).
+func TestProcessDirectSendersStructure(t *testing.T) {
+	read := func(m string) error { _, err := ProcessDirectSenders([]byte(m)); return err }
+	two := strings.Replace(sender("ProcessDirect", "/sd/in"), "<value>/sd/in</value>", "<value>/fi/</value><value>x</value>", 1)
+	assert.ErrorContains(t, read(model(two)), "more than one value")
+	keys := strings.Replace(sender("ProcessDirect", "/sd/in"), "<key>address</key>", "<key>add</key><key>ress</key>", 1)
+	assert.ErrorContains(t, read(model(keys)), "more than one key")
+	none := strings.Replace(sender("ProcessDirect", "/sd/in"), "<value>/sd/in</value>", "", 1)
+	assert.ErrorContains(t, read(model(none)), "exactly one")
+	assert.ErrorContains(t, read(model(sender("ProcessDirect", "/sd/in"))+model("")), "more than one root")
+	collab := strings.Replace(model(sender("ProcessDirect", "/sd/in")), "</bpmn2:definitions>",
+		"<bpmn2:collaboration>"+sender("ProcessDirect", "/fi/x")+"</bpmn2:collaboration></bpmn2:definitions>", 1)
+	assert.ErrorContains(t, read(collab), "more than one collaboration")
 }
 
 // The package is for embedders of pkg/scope: the standard library only.

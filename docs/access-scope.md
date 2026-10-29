@@ -140,7 +140,11 @@ whichever command or MCP tool sends it, including tools added later:
   - Each guard (one per user and scope in the cpictl gateway) reads the list itself, unless guards share an
     `EndpointCache` (Go: `Guard.Endpoints`). Share one only among guards whose `Fetch` uses the same API key: the
     list must be the tenant's whole list, as that key sees it.
-- **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
+- **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Under a scope it is **off by
+  default**: every harness call is refused ("the test harness (ProcessDirect tests) is off under this scope"), in
+  cpictl and in the cpictl gateway. Reading which address a flow listens on means reading its archive the way SAP's
+  loader does, and that is not yet checked on a tenant. `cpictl --scope-harness` turns it on, with these rules
+  (Go: set `Guard.ProcessDirectAddresses`, e.g. with `pdaddress.Reader`). Calls to it need `test` and a target
   address that belongs to the sender of a flow in the scope. The guard reads those addresses from the allowed
   flows' designtime content: only the flow's model (the one `.iflw` in
   `src/main/resources/scenarioflows/integrationflow/`), parsed as XML, properties only at their place. An archive

@@ -926,6 +926,9 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 				addr = v
 			}
 		}
+		if g.ProcessDirectAddresses == nil {
+			return decision{}, g.refuse(&Refusal{Reason: "the test harness (ProcessDirect tests) is off under this scope"})
+		}
 		to := g.processDirectFlow(r.Ctx, addr)
 		if to == "" {
 			return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call ProcessDirect addresses of flows in the scope (%q is not one)", addr)})

@@ -93,14 +93,31 @@ func FromArchive(zipped []byte) ([]string, error) {
 	names := map[string]bool{}
 	var model *zip.File
 	for _, f := range zr.File {
-		name := strings.TrimPrefix(f.Name, "/")
-		if names[name] {
+		name := f.Name
+		// names a loader could read differently are refused, not skipped
+		// (cpicli#65): ./, .., //, \, a leading /, and a name in the zip's
+		// central directory that its local header does not repeat
+		if !canonicalEntry(name) {
+			return nil, fmt.Errorf("archive entry %q is not a plain path", name)
+		}
+		if err := sameLocalName(zipped, f); err != nil {
+			return nil, err
+		}
+		key := strings.ToLower(strings.TrimSuffix(name, "/"))
+		if names[key] {
 			return nil, fmt.Errorf("archive entry %s repeated", name)
 		}
-		names[name] = true
-		dir, file := path.Split(name)
-		if dir != modelDir || !strings.HasSuffix(file, ".iflw") {
+		names[key] = true
+		lower := strings.ToLower(name)
+		if !strings.Contains(lower, ".iflw") {
 			continue
+		}
+		// a model counts only directly in modelDir, spelled exactly so; any
+		// other .iflw (another folder, another case, a folder named *.iflw)
+		// makes the archive ambiguous
+		dir, file := path.Split(name)
+		if dir != modelDir || !strings.HasSuffix(file, ".iflw") || strings.Count(lower, ".iflw") != 1 {
+			return nil, fmt.Errorf("archive entry %q: a model outside %s", name, modelDir)
 		}
 		if model != nil {
 			return nil, fmt.Errorf("archive with more than one model in %s", modelDir)
@@ -128,6 +145,46 @@ func FromArchive(zipped []byte) ([]string, error) {
 	return ProcessDirectSenders(data)
 }
 
+// canonicalEntry: a relative path without empty, . or .. segments and
+// without backslashes (a directory entry ends in one /).
+func canonicalEntry(name string) bool {
+	if name == "" || strings.ContainsAny(name, "\\\x00") || strings.HasPrefix(name, "/") {
+		return false
+	}
+	for _, seg := range strings.Split(strings.TrimSuffix(name, "/"), "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+// sameLocalName checks that the local file header of f carries the name the
+// central directory gives: a loader that reads local headers must see the
+// same entry.
+func sameLocalName(zipped []byte, f *zip.File) error {
+	data, err := f.DataOffset()
+	if err != nil {
+		return err
+	}
+	n := len(f.Name)
+	le16 := func(p int) int { return int(zipped[p]) | int(zipped[p+1])<<8 }
+	for extra := 0; extra <= 0xffff; extra++ {
+		p := int(data) - 30 - n - extra
+		if p < 0 {
+			break
+		}
+		if zipped[p] == 'P' && zipped[p+1] == 'K' && zipped[p+2] == 3 && zipped[p+3] == 4 &&
+			le16(p+26) == n && le16(p+28) == extra {
+			if string(zipped[p+30:p+30+n]) != f.Name {
+				break
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("archive entry %q: the local header names another entry", f.Name)
+}
+
 const (
 	modelDir   = "src/main/resources/scenarioflows/integrationflow/"
 	maxArchive = 256 << 20
@@ -153,11 +210,13 @@ func ProcessDirectSenders(model []byte) ([]string, error) {
 	want := []xml.Name{{Space: nsBPMN, Local: "definitions"}, {Space: nsBPMN, Local: "collaboration"},
 		{Space: nsBPMN, Local: "messageFlow"}, {Space: nsBPMN, Local: "extensionElements"}, {Space: nsIFL, Local: "property"}}
 	var (
-		stack    []xml.Name
-		out      []string
-		props    map[string]string
-		key, val strings.Builder
-		field    *strings.Builder
+		stack          []xml.Name
+		out            []string
+		props          map[string]string
+		key, val       strings.Builder
+		field          *strings.Builder
+		keys, vals     int // per property
+		roots, collabs int
 	)
 	at := func(n int) bool { // the stack is the first n names of want
 		if len(stack) != n {
@@ -185,14 +244,29 @@ func ProcessDirectSenders(model []byte) ([]string, error) {
 			}
 			stack = append(stack, t.Name)
 			switch {
+			case len(stack) == 1:
+				if roots++; roots > 1 {
+					return nil, fmt.Errorf("more than one root element")
+				}
+			case at(2):
+				if collabs++; collabs > 1 {
+					return nil, fmt.Errorf("more than one collaboration")
+				}
 			case at(3):
 				props = map[string]string{}
 			case at(5):
 				key.Reset()
 				val.Reset()
+				keys, vals = 0, 0
 			case len(stack) == 6 && at5(stack, want) && t.Name == (xml.Name{Local: "key"}):
+				if keys++; keys > 1 {
+					return nil, fmt.Errorf("a property with more than one key")
+				}
 				field = &key
 			case len(stack) == 6 && at5(stack, want) && t.Name == (xml.Name{Local: "value"}):
+				if vals++; vals > 1 {
+					return nil, fmt.Errorf("a property with more than one value")
+				}
 				field = &val
 			}
 		case xml.CharData:
@@ -208,6 +282,9 @@ func ProcessDirectSenders(model []byte) ([]string, error) {
 			case field != nil:
 				field = nil
 			case at(5):
+				if keys != 1 || vals != 1 {
+					return nil, fmt.Errorf("a property without exactly one key and one value")
+				}
 				if _, dup := props[key.String()]; dup {
 					return nil, fmt.Errorf("property %s repeated in a message flow", key.String())
 				}

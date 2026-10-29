@@ -32,6 +32,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
     - **Encoded parameters prove nothing.** URL parameters that are percent-encoded as written (`;v%3D1`, `;v=%32`,
       `;%76=2`) neither prove a different OData version nor match exactly.
     - **Repeated invalidation is refused.** A lookup whose read is discarded by `Invalidate` three times is refused.
+  - **From the second re-check:**
+    - **The ProcessDirect test harness is off under a scope by default.** Each review round found another way the
+      address reader could differ from SAP's archive loader. Until the reader is checked on a tenant, cpictl
+      refuses harness calls under a scope ("the test harness (ProcessDirect tests) is off under this scope"), as
+      the cpictl gateway does. `--scope-harness` turns it on. Tests of flows started by HTTPS, SOAP, OData or IDoc
+      are unaffected.
+    - **A stricter archive reader for `--scope-harness`.** `pdaddress` now refuses:
+      - a property with more than one key or value;
+      - a second root element or a second collaboration;
+      - archive entries that are not plain paths (`./`, `..`, `//`, `\`, a leading `/`);
+      - any `.iflw` other than the one model, including other cases and folders named `*.iflw`;
+      - an entry whose local header names a different file than the central directory.
   - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
     harness) follow the deployed content, not later designtime or configuration changes.
   - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.
