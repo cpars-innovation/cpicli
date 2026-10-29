@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Runtime routing is fuzzed (#58).** A new test generates random endpoint lists and URLs, and checks every URL
+  the access scope allows against a model of how the runtime might route it. The model covers parameter variants
+  and entry points decoded as a whole. It runs 3,000 cases in every `go test`, and CI fuzzes it for a minute on
+  every push. Run on the guards of 0.35.5 to 0.35.8, it finds each of their bypasses. On 0.35.9 it found two
+  more, in setups CPI does not produce; both are fixed:
+  - two entry points whose parameters a runtime might read as the same (`;v= 2` and `;v=02`) no longer let the
+    exact one win: the URL is refused;
+  - an entry point that can't be read (a `*` after parameters, `%2F`, dot segments) is read as a runtime might
+    (decoded as a whole) instead of by its readable prefix, so it refuses what it might cover, and no more.
+
 ## 0.35.9
 
 Hardening from the cpictl gateway's verification of 0.35.8 (cpicli#57; no S1 found, nothing here is exploitable

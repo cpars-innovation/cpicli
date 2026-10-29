@@ -13,6 +13,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -974,9 +975,9 @@ func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (string,
 		switch {
 		case n < 0:
 		case differs:
-			// a segment of the same name with other parameters: the runtime
-			// may read them as the same (";V=2", ";v=02"), so this entry
-			// point makes what it is more specific than ambiguous
+			// a segment of the same name with parameters the runtime may
+			// read as the entry point's (";V=2", ";v=02"): this entry point
+			// makes what it is as specific as ambiguous
 			variant = max(variant, n)
 		case n > best:
 			best, owners = n, map[string]bool{e.flow: true}
@@ -984,7 +985,7 @@ func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (string,
 			owners[e.flow] = true
 		}
 	}
-	if variant > best {
+	if variant >= best {
 		return "", notAnEntryPoint
 	}
 	// two flows equally specific, or an entry point the guard could not
@@ -1170,18 +1171,36 @@ func parseEndpoint(u string, entry bool) (endpointPath, bool) {
 	return p, true
 }
 
-// rawEndpoint is an entry point the guard cannot read: its readable
-// segments (before a query, up to the first unreadable one), then any
-// segment; a path readable to its end (only the query was odd) covers its
-// last segment as a prefix. With flow "" it makes the URLs it might cover ambiguous
-// (refused) where nothing more specific decides them.
+// rawEndpoint is an entry point the guard cannot read, as a runtime might
+// read it: the whole path decoded, dot segments resolved, the query dropped.
+// If even that fails: its readable segments, then any segment. It owns
+// nothing (flow ""), so wherever it covers a URL as specifically as an
+// owner, the URL is refused.
 func rawEndpoint(u string) endpointPath {
 	u, _, _ = strings.Cut(u, "?")
 	u, _, _ = strings.Cut(u, "#")
-	p, ok := parseEndpoint(u, true) // the readable segments
-	if !ok || len(p.segs) == 0 {
-		// an unreadable segment follows: any segment there
-		p.segs = append(p.segs, endpointSeg{})
+	origin, rest := u, ""
+	if i := strings.Index(u, "://"); i >= 0 {
+		host, path, _ := strings.Cut(u[i+3:], "/")
+		origin, rest = strings.ToLower(u[:i+3]+host), "/"+path
+	}
+	if dec, err := url.PathUnescape(rest); err == nil && strings.HasPrefix(dec, "/") {
+		p := endpointPath{origin: origin}
+		p.wild = strings.HasSuffix(dec, "*")
+		clean := path.Clean(strings.TrimSuffix(dec, "*"))
+		if p.wild && strings.HasSuffix(strings.TrimSuffix(dec, "*"), "/") && clean != "/" {
+			clean += "/"
+		}
+		for _, raw := range strings.Split(strings.TrimPrefix(clean, "/"), "/") {
+			name, params, _ := strings.Cut(raw, ";")
+			p.segs = append(p.segs, endpointSeg{name, params})
+		}
+		return p
+	}
+	p, _ := parseEndpoint(u, true) // the readable segments
+	p.segs = append(p.segs, endpointSeg{})
+	for i := range p.segs {
+		p.segs[i].params = ""
 	}
 	p.wild = true
 	return p
@@ -1194,9 +1213,9 @@ func rawEndpoint(u string) endpointPath {
 // (cpicli#56), while "billing;x" is "billing" to a servlet container.
 //
 // differs reports a covering by name only: some segment of the entry point
-// has parameters the URL's segment does not have exactly. Such an entry point
-// does not own the URL, but nothing less specific may decide it either
-// (cpicli#57).
+// has parameters the URL's segment does not have exactly, but may be read as
+// having (paramsMayMatch). Such an entry point does not own the URL, but
+// nothing as specific or less may decide it either (cpicli#57, #58).
 func (e endpointPath) covers(t endpointPath) (n int, differs bool) {
 	if e.origin != t.origin || len(t.segs) < len(e.segs) {
 		return -1, false
@@ -1212,6 +1231,9 @@ func (e endpointPath) covers(t endpointPath) (n int, differs bool) {
 		case es.name != ts.name:
 			return -1, false
 		case es.params != "" && es.params != ts.params:
+			if !paramsMayMatch(es.params, ts.params) {
+				return -1, false
+			}
 			differs = true
 		}
 		n += 1 + len(es.name)
@@ -1226,6 +1248,34 @@ func (e endpointPath) covers(t endpointPath) (n int, differs bool) {
 		return 1 << 20, differs
 	}
 	return n + 1, differs
+}
+
+// paramsMayMatch reports whether a runtime may read the URL segment's
+// parameters as the entry point's: with case, spaces and leading zeros of
+// numbers ignored, and extra parameters dropped. ";v=1" never matches
+// ";v=2"; ";V=02;x=1" may match ";v=2".
+func paramsMayMatch(entry, url string) bool {
+	norm := func(s string) map[string]bool {
+		m := map[string]bool{}
+		for _, p := range strings.Split(s, ";") {
+			k, v, _ := strings.Cut(strings.ToLower(strings.Join(strings.Fields(p), "")), "=")
+			if k == "" {
+				continue
+			}
+			if t := strings.TrimLeft(v, "0"); t != v && strings.Trim(t, "0123456789") == "" {
+				v = cmp.Or(t, "0")
+			}
+			m[k+"="+v] = true
+		}
+		return m
+	}
+	have := norm(url)
+	for k := range norm(entry) {
+		if !have[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // processDirectFlow returns the allowed flow whose ProcessDirect sender

@@ -37,6 +37,11 @@ jobs:
       - name: test
         run: go test -race ./...
 
+      # Runtime routing of the access scope against a model of the runtime
+      # (cpicli#58): a minute of new inputs on every push
+      - name: fuzz routing
+        run: go test ./pkg/scope -run '^$' -fuzz FuzzRouting -fuzztime 60s
+
       # Cross-package coverage of the offline suite; fails below the floor
       - name: coverage
         run: |

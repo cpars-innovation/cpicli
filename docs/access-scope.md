@@ -116,9 +116,12 @@ whichever command or MCP tool sends it, including tools added later:
   Path parameters (`;…`) count only where the entry point has them: `/http/api/hr;x` is `/http/api/hr`, while
   OData services `…/SRV;v=1` and `…/SRV;v=2` are different services, and `…/SRV/…` reaches neither. Two flows
   equally specific (also two flows listing the same URL), an entry point the guard cannot read that covers the
-  URL, or a list the guard cannot read: refused. A URL segment with the name of a more specific entry point but
-  other parameters (`SRV;V=2`, `SRV;v=02` against `SRV;v=2`) is refused too, not decided by a broader entry
-  point: the runtime might read them as the same. Host names match in any case. After a failed read, the list is not read again for 5 seconds. An endpoint of a flow the scope may not read is refused with the same text as an
+  URL, or a list the guard cannot read: refused. A URL segment with the name of an entry point and parameters the
+  runtime might read as its (`SRV;V=2`, `SRV;v=02`, `SRV;v=2;x=1` against `SRV;v=2`) is refused too, unless an
+  entry point that is more specific decides it; `;v=1` and `;v=2` are never read as the same. An entry point the
+  guard cannot read is taken as a runtime might read it (decoded as a whole, dot segments resolved): it owns
+  nothing, so the URLs it covers are refused. Host names match in any case. A test checks these decisions
+  against a model of the runtime with random endpoint lists and URLs, and CI fuzzes it on every push. After a failed read, the list is not read again for 5 seconds. An endpoint of a flow the scope may not read is refused with the same text as an
   unknown one.
 
   Limits:

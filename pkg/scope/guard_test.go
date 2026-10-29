@@ -1093,7 +1093,9 @@ func TestGuardEndpointParametersOfEntryPoints(t *testing.T) {
 	send := func(path string) error {
 		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path})
 	}
-	refused(t, send("/http/shared/other"))
+	refused(t, send("/http/shared/a/b"))
+	refused(t, send("/http/shared/a/b/c"))
+	assert.NoError(t, send("/http/shared/other"), "no reading of a%2Fb covers it")
 	assert.NoError(t, send("/http/shared/own"), "a more specific entry point still decides")
 }
 
@@ -1135,7 +1137,8 @@ func TestGuardEndpointHardening(t *testing.T) {
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/OWN;v=1/Orders"), "the exact parameters still decide")
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/Other"), "a name nobody else has")
 	assert.NoError(t, send("https://RT:443", "/http/mine"), "host names are not case-sensitive")
-	for _, p := range []string{"/http/odd/y", "/http/q", "/http/e/x"} {
+	for _, p := range []string{"/http/odd/x", "/http/q", "/http/e/x"} {
 		refused(t, send("https://rt:443", p))
 	}
+	assert.NoError(t, send("https://rt:443", "/http/odd/y"), "no reading of /http/odd/./x covers it")
 }
