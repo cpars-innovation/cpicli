@@ -5,6 +5,21 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Runtime conformance suite (#59).** `internal/conformance` probes the behaviour the access scope and the mock
+  tenant assume:
+  - path case;
+  - encoded segments;
+  - `;` path parameters;
+  - OData version variants;
+  - whether a configuration change moves `ModifiedAt`;
+  - how long a new deployment takes to be listed.
+
+  It runs against the mock tenant in every `go test`, and against a development tenant with
+  `go test -tags e2e -run TestConformance` (docs/e2e.md). That run writes a report which, committed as
+  `internal/conformance/testdata/tenant.json`, the mock must then match. Fixes to the mock found by the suite:
+  - an endpoint is reached with `;…` path parameters it does not have, as on a servlet container;
+  - an uploaded flow, like a seeded one, moves `ModifiedAt` on a parameter write.
+
 - **Security process (#60):** `SECURITY.md` says how to report a vulnerability (privately, through GitHub) and
   how fixes are released. The release workflow now refuses a release whose changes since the last tag touch the
   access scope, the HTTP client, sign-in, the MCP server or credential handling, unless it is started with

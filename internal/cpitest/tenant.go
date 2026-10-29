@@ -813,6 +813,12 @@ func (m *Tenant) handlePD(w http.ResponseWriter, r *http.Request) {
 func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 	in, rest := m.inboundFor(r.URL.Path)
 	if in == nil {
+		// like a servlet container, the runtime drops ";…" path parameters
+		// an endpoint does not have (/http/orders;x=1 is /http/orders);
+		// OData's ";v=1" is part of a service root and matches as given
+		in, rest = m.inboundFor(withoutPathParams(r.URL.Path))
+	}
+	if in == nil {
 		notFound(w)
 		return
 	}
@@ -877,6 +883,15 @@ func (m *Tenant) handleInbound(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeFixedResponse(w, in)
 	}
+}
+
+// withoutPathParams drops the ";…" part of every path segment.
+func withoutPathParams(p string) string {
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		segs[i], _, _ = strings.Cut(s, ";")
+	}
+	return strings.Join(segs, "/")
 }
 
 // writeFixedResponse answers with the endpoint's configured response.
@@ -1752,6 +1767,9 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		a.applyContent(tenantSerialised(zipData))
 		a.Uploads++
 		a.ModifiedAt, a.ModifiedBy = time.Now(), m.modifiedBy(r) // as on every save on a tenant
+		// like the seeded landscapes: a parameter write is a change too (the
+		// runtime conformance suite checks this against a tenant, cpicli#59)
+		a.ConfigBumpsModified = true
 		w.WriteHeader(http.StatusCreated)
 
 	case r.Method == http.MethodPut && reDesign.MatchString(path):
