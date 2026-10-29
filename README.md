@@ -49,8 +49,18 @@ cpictl doctor          # after the configuration below: connection, authenticati
 ```
 
 The binary lands in `$(go env GOPATH)/bin` (usually `~/go/bin`), which must be on your `PATH`.
-While the repository is private, tell Go to fetch it directly with your Git credentials:
-`go env -w GOPRIVATE=github.com/cpars-innovation/*`.
+
+Release downloads are signed: each archive and `SHA256SUMS` carries a build provenance attestation, and
+`SHA256SUMS` a keyless Sigstore signature (`SHA256SUMS.sigstore.json`). Check that a download was built by this
+repository's release workflow:
+
+```bash
+gh attestation verify cpictl_<version>_linux_amd64.tar.gz --repo cpars-innovation/cpicli
+cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/cpars-innovation/cpicli/.github/workflows/release.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+sha256sum -c SHA256SUMS --ignore-missing
+```
 
 From source:
 

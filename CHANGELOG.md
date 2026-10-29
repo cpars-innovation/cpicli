@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Signed releases (#61).** Every archive and `SHA256SUMS` gets a GitHub build provenance attestation
+  (`gh attestation verify <file> --repo cpars-innovation/cpicli`), and `SHA256SUMS` a keyless cosign signature
+  (`SHA256SUMS.sigstore.json`, a new release asset). The release notes and the README show how to verify both.
+
 - **`cpictl auth status` shows where the token comes from (#64):** the sign-in of a profile (the token file, and
   whether the refresh token is in the OS keychain, with its entry, or in the file), or `CPICTL_GATEWAY_TOKEN`.
   JSON: `tokenStore`. Never the token itself.
