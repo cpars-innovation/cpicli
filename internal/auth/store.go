@@ -250,3 +250,40 @@ func (p *persistingSource) Token() (*oauth2.Token, error) {
 	}
 	return tok, nil
 }
+
+// Location says where the token of key is stored, without the token: the
+// file, and where its refresh token is ("OS keychain", "file" or "").
+type Location struct {
+	File string `json:"file"`
+	// Refresh is where the refresh token is: "OS keychain" (entry
+	// KeychainEntry of service KeyringService), "file", or "" (none).
+	Refresh       string `json:"refreshToken,omitempty"`
+	KeychainEntry string `json:"keychainEntry,omitempty"`
+}
+
+// Location returns where the token of key is stored, or ErrNotLoggedIn.
+func (s *Store) Location(key string) (*Location, error) {
+	p, err := s.path(key)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNotLoggedIn
+	}
+	if err != nil {
+		return nil, err
+	}
+	var ft fileToken
+	if err := json.Unmarshal(b, &ft); err != nil {
+		return nil, fmt.Errorf("reading stored token %s: %w", p, err)
+	}
+	loc := &Location{File: p}
+	switch {
+	case ft.RefreshInKeychain:
+		loc.Refresh, loc.KeychainEntry = "OS keychain", keyringUser(key)
+	case ft.RefreshToken != "":
+		loc.Refresh = "file"
+	}
+	return loc, nil
+}

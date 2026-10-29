@@ -435,7 +435,10 @@ the Go API and the loop ledger see the result before it, unchanged.
 
 - **Payloads** (message bodies, attachments, persisted messages, trace payloads, data store
   entries, variables, resources) are read whole and stored in the content store
-  (`<root>/.cpi/cache/content`, kept out of Git, entries removed after 7 days or beyond 500 MB).
+  (`<root>/.cpi/cache/content`, kept out of Git, entries removed after 7 days or beyond 500 MB). When the root,
+  or a store in it, belongs to another user (a shared folder on a shared host), each user's store is in their own
+  cache directory instead (`<user cache>/cpictl/content/roots/<hash of the root>`), so one user's payloads never
+  reach another's `get_content`.
   Above the inline limit the result shows `{ref, size, cut, text | base64}`: the first bytes, and
   in `cut` how to get the rest. `max_bytes` sets the inline limit (default 16 KB, 64 KB for
   `get_resource` and `get_pd_parameters`; at most 1 MB).

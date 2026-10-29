@@ -1,5 +1,29 @@
 {
   "$defs": {
+    "cmd.TokenStore": {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "keychainEntry": {
+          "type": "string"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "refreshToken": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "source"
+      ],
+      "type": "object"
+    },
     "cmd.WhoAmI": {
       "properties": {
         "expires": {
@@ -30,6 +54,9 @@
               "type": "null"
             }
           ]
+        },
+        "tokenStore": {
+          "$ref": "#/$defs/cmd.TokenStore"
         },
         "user": {
           "type": "string"

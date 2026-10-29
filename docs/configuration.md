@@ -257,7 +257,9 @@ cpictl --profile dev packages
 - A project `cpictl.yaml` must not set `gateway` or `login` (they choose where your token is sent and where you
   sign in): set them in the profile or `$HOME/cpictl.yaml`.
 - `cpictl auth status` (short: `cpictl whoami`) shows who the gateway takes you for, your roles, when
-  your token expires, and your scope per SAP tenant.
+  your token expires, your scope per SAP tenant, and where the token comes from: the sign-in of a profile (the
+  token file, and whether the refresh token is in the OS keychain and under which entry) or
+  `CPICTL_GATEWAY_TOKEN`. Never the token itself.
 - `cpictl auth` is only for gateway mode. Profiles that talk to SAP directly keep their service key in
   the profile and need no sign-in.
 - Test messages (`send`, `send_test_message`, `run_tests`) also go through the gateway: to its runtime proxy

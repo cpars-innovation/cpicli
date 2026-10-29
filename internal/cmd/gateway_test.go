@@ -155,6 +155,7 @@ func TestGatewayMode(t *testing.T) {
 			assert.Equal(t, 0, code, "%v: %s", args, stderr)
 			assert.Contains(t, stderr, "anna@contoso.com (oid-anna) in contoso")
 			assert.Contains(t, stderr, "SAP tenant dev (via SAP key sd): read,deploy on SD_*")
+			assert.Contains(t, stderr, "token from CPICTL_GATEWAY_TOKEN")
 			assert.NotContains(t, stderr, "user-token")
 		}
 

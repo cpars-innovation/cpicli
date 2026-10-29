@@ -61,14 +61,25 @@ func NewContentStore(dir string) *ContentStore { return &ContentStore{dir: dir} 
 // it, which must stay inside the root; without a root, the user's own
 // cache directory (not a shared temp folder).
 func newRootStore(root string) *ContentStore {
-	if root == "" {
+	userDir := func() string {
 		dir, err := os.UserCacheDir()
 		if err != nil {
 			dir = filepath.Join(os.TempDir(), fmt.Sprintf("cpictl-%d", os.Getuid()))
 		}
-		return &ContentStore{dir: filepath.Join(dir, "cpictl", "content")}
+		return filepath.Join(dir, "cpictl", "content")
 	}
-	return &ContentStore{dir: filepath.Join(root, ".cpi", "cache", "content"), root: root}
+	if root == "" {
+		return &ContentStore{dir: userDir()}
+	}
+	dir := filepath.Join(root, ".cpi", "cache", "content")
+	// a root (or store) of another user is shared: keep this user's payloads
+	// in their own cache, one store per root (cpicli#64)
+	if ownedByOther(root) || ownedByOther(dir) {
+		abs, _ := filepath.Abs(root)
+		sum := sha256.Sum256([]byte(abs))
+		return &ContentStore{dir: filepath.Join(userDir(), "roots", hex.EncodeToString(sum[:8]))}
+	}
+	return &ContentStore{dir: dir, root: root}
 }
 
 func (c *ContentStore) init() error {

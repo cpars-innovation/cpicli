@@ -347,3 +347,25 @@ func TestFileOnlyLogoutClearsKeychain(t *testing.T) {
 	_, err := withKeychain.Load("dev")
 	assert.ErrorIs(t, err, ErrNotLoggedIn)
 }
+
+// Location says where a token is, never what it is (cpicli#64).
+func TestStoreLocation(t *testing.T) {
+	tok := &oauth2.Token{AccessToken: "acc", RefreshToken: "long-lived-refresh", Expiry: time.Now().Add(time.Hour)}
+	kc := &Store{Dir: t.TempDir(), Keyring: &fakeKeyring{m: map[string]string{}}}
+	require.NoError(t, kc.Save("dev", tok))
+	loc, err := kc.Location("dev")
+	require.NoError(t, err)
+	assert.Equal(t, &Location{File: filepath.Join(kc.Dir, "dev.json"), Refresh: "OS keychain", KeychainEntry: "gateway-refresh-token:dev"}, loc)
+
+	file := &Store{Dir: t.TempDir()}
+	require.NoError(t, file.Save("ci", tok))
+	loc, err = file.Location("ci")
+	require.NoError(t, err)
+	assert.Equal(t, "file", loc.Refresh)
+	b, _ := json.Marshal(loc)
+	assert.NotContains(t, string(b), "long-lived-refresh")
+	assert.NotContains(t, string(b), "acc\"")
+
+	_, err = file.Location("nobody")
+	assert.ErrorIs(t, err, ErrNotLoggedIn)
+}

@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"os"
+
 	"encoding/json"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/internal/auth"
 	"sort"
 	"strings"
 	"time"
@@ -24,6 +27,17 @@ type WhoAmI struct {
 	Roles   []string               `json:"roles,omitempty"`
 	Expires time.Time              `json:"expires"`
 	Tenants map[string]WhoAmIScope `json:"sapTenants"`
+	// TokenStore is where cpictl took the gateway token from (filled by
+	// cpictl, not the gateway): never the token itself.
+	TokenStore *TokenStore `json:"tokenStore,omitempty"`
+}
+
+// TokenStore says where the gateway token comes from: the sign-in of a
+// profile (its file, and where the refresh token is), or CPICTL_GATEWAY_TOKEN.
+type TokenStore struct {
+	Source  string `json:"source"` // "login" or "environment"
+	Profile string `json:"profile,omitempty"`
+	*auth.Location
 }
 
 // WhoAmIScope is the caller's scope on one SAP tenant.
@@ -61,9 +75,13 @@ user (cpictl auth login) and what an agent working for you can do.`,
 			if err != nil {
 				return err
 			}
+			who.TokenStore = tokenStore(cmd)
 			output.SetResult(cmd.Context(), who)
 			log.Info().Msgf("%s (%s) in %s, roles %s; token valid until %s", who.Name, who.User, who.Org,
 				strings.Join(who.Roles, ", "), who.Expires.Local().Format(time.RFC3339))
+			if ts := who.TokenStore; ts != nil {
+				log.Info().Msg(ts.describe())
+			}
 			names := make([]string, 0, len(who.Tenants))
 			for n := range who.Tenants {
 				names = append(names, n)
@@ -83,6 +101,41 @@ user (cpictl auth login) and what an agent working for you can do.`,
 			return nil
 		},
 	}
+}
+
+// tokenStore says where serviceDetails takes the gateway token from: the
+// profile's sign-in (as gatewayTokenSource reads it), else the environment.
+func tokenStore(cmd *cobra.Command) *TokenStore {
+	if gatewayTokenSource(cmd) != nil {
+		_, profile, _ := resolveConfigSource(config.GetString(cmd, "config"), config.GetString(cmd, "profile"))
+		if store, err := auth.DefaultStore(); err == nil {
+			if loc, err := store.Location(profile); err == nil {
+				return &TokenStore{Source: "login", Profile: profile, Location: loc}
+			}
+		}
+		return &TokenStore{Source: "login", Profile: profile}
+	}
+	if os.Getenv(gatewayTokenEnv) != "" {
+		return &TokenStore{Source: "environment"}
+	}
+	return nil
+}
+
+func (ts *TokenStore) describe() string {
+	if ts.Source == "environment" {
+		return "token from " + gatewayTokenEnv
+	}
+	s := "token from the sign-in of profile " + ts.Profile
+	if ts.Location != nil {
+		s += ", in " + ts.File
+		switch ts.Refresh {
+		case "OS keychain":
+			s += "; refresh token in the OS keychain (" + auth.KeyringService + " / " + ts.KeychainEntry + ")"
+		case "file":
+			s += "; refresh token in that file (no OS keychain, or CPICTL_TOKEN_STORE=file)"
+		}
+	}
+	return s
 }
 
 // fetchWhoAmI asks the gateway who it takes the caller for. /whoami is at

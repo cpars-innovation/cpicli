@@ -5,6 +5,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`cpictl auth status` shows where the token comes from (#64):** the sign-in of a profile (the token file, and
+  whether the refresh token is in the OS keychain, with its entry, or in the file), or `CPICTL_GATEWAY_TOKEN`.
+  JSON: `tokenStore`. Never the token itself.
+- **`cpictl mcp` keeps payloads per user on shared hosts (#64):** when `--root`, or the content store in it, belongs
+  to another user, the store is in the current user's cache directory, one per root.
+
 - **Guard API for servers (#63):**
   - `Refusal.Audit` says what decided where the refusal text stays generic (which other flow owns a URL, two flows
     on one URL, a parameter variant, an unreadable entry point, a failed endpoint read). It is not part of
