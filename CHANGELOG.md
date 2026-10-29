@@ -5,6 +5,35 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.36.0
+
+The security release from the cpictl gateway's review (cpicli#58 to #65): endpoint routing is checked against a
+fuzzed model of the runtime, releases that touch security code need an independent verification, release assets
+are signed, and the ProcessDirect test harness is off under an access scope by default. Verified by the cpictl
+gateway's verifier on the mock tenant before the tag.
+
+**What to do:**
+
+- **Under an access scope (`--scope-file` or `--scope-*`), ProcessDirect tests through the test harness are now
+  refused** ("the test harness (ProcessDirect tests) is off under this scope"). If you rely on them, add
+  `--scope-harness`, or test those flows through their HTTPS/SOAP/OData/IDoc senders. Without a scope nothing
+  changes.
+- **Under a scope, only the test tooling's own flows are exempt** (`CPICTL_Test_Harness`, `_Stub`, `_XSLT`).
+  A harness installed under another ID (`--harness <ID>`) is refused; use the default ID. Install or update the
+  tooling without a scope (`cpictl test tools install`), and check that `CPICTL_Test_Harness`, `_Stub` and
+  `_XSLT` on your tenants are the ones you installed (in `CPICTLTesting`, or the package you chose).
+- **Update now if you run cpictl or the gateway with access scopes:** 0.35.x lets a team with `test` call a copy of
+  the harness under another ID, and a team with `upload` create the tooling or nested artifacts the guard never
+  saw. Under a scope, write bodies must now be one flat JSON object (cpictl's own are).
+- **Embedding `pkg/mocktenant`:** import `github.com/cpars-innovation/cpicli/pkg/mocktenant/sshkeys` if your mock
+  must accept SSH key uploads; without it they are answered with 501. Drop any build tag you used to keep
+  `golang.org/x/crypto/ssh` out.
+- **Embedding `pkg/scope` (servers):** share one `EndpointCache` through `Guard.Endpoints` among the guards of one
+  tenant and API key, call `Invalidate` after a deploy, log `Refusal.Audit` server-side only, and set
+  `Guard.ProcessDirectAddresses` (`pdaddress.Reader`) only if you want the harness on.
+- **Verify downloads:** `gh attestation verify <archive> --repo cpars-innovation/cpicli`, and
+  `cosign verify-blob` for `SHA256SUMS` with `SHA256SUMS.sigstore.json` (README, Install).
+
 - **Fixes from the verification of the 0.36.0 candidate (#65):**
   - **OData versions are compared strictly.** A URL segment named like another flow's versioned service is now
     refused unless its version provably differs: both are plain integers, as in `;v=1` against `;v=2`. Before, the
