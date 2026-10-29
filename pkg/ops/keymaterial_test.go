@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	_ "github.com/cpars-innovation/cpicli/pkg/mocktenant/sshkeys" // the mock reads uploaded SSH keys
 	"os"
 	"path/filepath"
 	"testing"

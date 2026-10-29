@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	_ "github.com/cpars-innovation/cpicli/pkg/mocktenant/sshkeys" // the mock reads uploaded SSH keys
 	"math/big"
 	"net"
 	"os"

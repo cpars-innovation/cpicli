@@ -471,6 +471,10 @@ are allowed). `Tenant` and the other types are aliases of internal types: beside
 rely only on fields such as `Artifacts`, `URL()` and `Executer()`; the test-scripting fields
 (`AfterDeploy`, `StatusOverride`, ...) may change.
 
+The library does not link `golang.org/x/crypto/ssh`. An SSH key upload (`SSHKeyGenerationRequests` with an
+`SSHFile`) is answered with 501 unless the program imports `pkg/mocktenant/sshkeys` for its side effect;
+`cpictl mock-tenant` does.
+
 ```go
 m := mocktenant.Start() // live, Basic Auth with CSRF and OAuth, on a free loopback port
 defer m.Close()

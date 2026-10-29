@@ -5,6 +5,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Smaller library packages (#62).** `pkg/mocktenant` no longer links `golang.org/x/crypto/ssh`. The mock reads
+  uploaded SSH keys only when the program imports `pkg/mocktenant/sshkeys` (`cpictl mock-tenant` does);
+  otherwise an SSH key upload is answered with 501. Embedders such as the cpictl gateway can drop their build tag.
+  `pkg/scope` and `pkg/httpclnt` list their allowed dependencies in a test (`internal/depcheck`), so a new one
+  fails until it is reviewed.
+
 - **Runtime routing is fuzzed (#58).** A new test generates random endpoint lists and URLs, and checks every URL
   the access scope allows against a model of how the runtime might route it. The model covers parameter variants
   and entry points decoded as a whole. It runs 3,000 cases in every `go test`, and CI fuzzes it for a minute on

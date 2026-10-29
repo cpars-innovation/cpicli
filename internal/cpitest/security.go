@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/crypto/ssh"
 )
 
 // SecurityMaterial is the security content of the mock tenant beyond
@@ -264,19 +262,21 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 			if f, _ := body["SSHFile"].(string); f != "" {
 				// like the tenant: the key file only as base64
 				key, err := base64.StdEncoding.DecodeString(f)
-				var signer ssh.Signer
+				if SSHPublicKey == nil {
+					odataError(w, http.StatusNotImplemented, "Not Implemented",
+						"this mock tenant reads no SSH keys: import github.com/cpars-innovation/cpicli/pkg/mocktenant/sshkeys")
+					return true
+				}
+				var pub string
 				if err == nil {
-					if pw, _ := body["Password"].(string); pw != "" {
-						signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(pw))
-					} else {
-						signer, err = ssh.ParsePrivateKey(key)
-					}
+					pw, _ := body["Password"].(string)
+					pub, err = SSHPublicKey(key, pw)
 				}
 				if err != nil {
 					odataError(w, http.StatusInternalServerError, "Internal Server Error", "SSHKeyConversionException: cannot load key: ")
 					return true
 				}
-				e.SSHPublic = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(signer.PublicKey())))
+				e.SSHPublic = pub
 			}
 			rec := map[string]any{}
 			for k, v := range body {
@@ -630,3 +630,10 @@ func (m *Tenant) AddKeyPair(alias, commonName string, notAfter time.Time) error 
 	m.Keystore = append(m.Keystore, e)
 	return nil
 }
+
+// SSHPublicKey reads an uploaded SSH private key (OpenSSH or PEM, optionally
+// with a passphrase) and returns its public key in authorized_keys form.
+// It is set by importing pkg/mocktenant/sshkeys, so that programs embedding
+// the mock without SSH keys do not link golang.org/x/crypto/ssh (cpicli#62).
+// Unset, an SSH key upload is answered with 501.
+var SSHPublicKey func(key []byte, passphrase string) (string, error)
