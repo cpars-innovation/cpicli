@@ -7,26 +7,18 @@ import (
 )
 
 // ProcessDirectAddresses returns the ProcessDirect sender addresses of an
-// integration flow on the tenant, with {{parameters}} resolved to their
-// configured values. Used by the access scope to decide which flow a test
-// harness call reaches. Programs without the API client use
-// pdaddress.Reader.
+// integration flow on the tenant, for the access scope to decide which flow
+// a test harness call reaches. Addresses set by a configuration parameter
+// are left out (see pdaddress.Reader); an ambiguous model is an error.
+// Programs without the API client use pdaddress.Reader.
 func ProcessDirectAddresses(exe *httpclnt.HTTPExecuter, id string) ([]string, error) {
 	zipped, err := cpi.DownloadArtifact(exe, "Integration", id, "active")
 	if err != nil {
 		return nil, err
 	}
 	raw, err := pdaddress.FromArchive(zipped)
-	if err != nil || len(raw) == 0 {
+	if err != nil {
 		return nil, err
 	}
-	return pdaddress.Resolve(raw, func() map[string]string {
-		params := map[string]string{}
-		if cfg, err := cpi.NewConfiguration(exe).Get(id, "active"); err == nil {
-			for _, p := range cfg.Root.Results {
-				params[p.ParameterKey] = p.ParameterValue
-			}
-		}
-		return params
-	}), nil
+	return pdaddress.Fixed(raw), nil
 }

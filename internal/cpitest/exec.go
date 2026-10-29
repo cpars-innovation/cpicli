@@ -167,17 +167,36 @@ func (x *executor) flowBySender(adapter, address string) (string, *Artifact) {
 		if !a.running() {
 			continue
 		}
-		fi := a.info()
-		if fi == nil {
-			continue
-		}
-		for _, s := range fi.fm.Senders {
-			if s.Adapter == adapter && resolve(s.Address, a.Parameters) == address {
+		for _, s := range a.runningSenders() {
+			if s.Adapter == adapter && s.Address == address {
 				return id, a
 			}
 		}
 	}
 	return "", nil
+}
+
+// deployedSenders are the sender addresses of a's current content and
+// configuration, as a deployment records them.
+func deployedSenders(a *Artifact) []DeployedSender {
+	fi := a.info()
+	if fi == nil {
+		return []DeployedSender{}
+	}
+	out := []DeployedSender{}
+	for _, s := range fi.fm.Senders {
+		out = append(out, DeployedSender{s.Adapter, resolve(s.Address, a.Parameters)})
+	}
+	return out
+}
+
+// runningSenders are the sender addresses a running artifact listens on:
+// those recorded at its deployment, else (seeded content) its current ones.
+func (a *Artifact) runningSenders() []DeployedSender {
+	if a.Runtime != nil && a.Runtime.Senders != nil {
+		return a.Runtime.Senders
+	}
+	return deployedSenders(a)
 }
 
 // noConsumer is the error of a ProcessDirect call nobody consumes; the mock
@@ -187,10 +206,10 @@ func (x *executor) noConsumer(address string) string {
 	var running []string
 	for _, id := range sortedKeys(x.m.Artifacts) {
 		a := x.m.Artifacts[id]
-		if fi := a.info(); a.running() && fi != nil {
-			for _, s := range fi.fm.Senders {
+		if a.running() {
+			for _, s := range a.runningSenders() {
 				if s.Adapter == "ProcessDirect" {
-					running = append(running, resolve(s.Address, a.Parameters)+" ("+id+")")
+					running = append(running, s.Address+" ("+id+")")
 				}
 			}
 		}

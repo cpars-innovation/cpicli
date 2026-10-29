@@ -887,7 +887,8 @@ func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
 	g.endpointCache().Invalidate()
 	r := refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd/orders"}))
 	assert.Contains(t, r.Error(), "could not be read")
-	assert.Contains(t, g.runsAsRead(context.Background(), "SD_A"), "no Fetch")
+	why, _ := g.runsAsRead(context.Background(), "SD_A")
+	assert.Contains(t, why, "no Fetch")
 }
 
 // The artifact map stays available when a rebuild fails or its request is
@@ -1114,9 +1115,12 @@ func TestGuardEndpointHardening(t *testing.T) {
 	send := func(base, path string) error {
 		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: base, Path: path})
 	}
-	for _, v := range []string{";V=2", ";v=02", ";v=2;x=1", ";x=1;v=2", ";v=2;", ";v=%202"} {
+	// and what a runtime might also read as v=2 (cpicli#65)
+	for _, v := range []string{";V=2", ";v=02", ";v=2;x=1", ";x=1;v=2", ";v=2;", ";v=%202",
+		"", ";v=", ";v=%2B2", ";v=2.0", ";v='2'", ";v=%EF%BC%92", ";v=1;v=2", "; v=1"} {
 		refused(t, send("https://rt:443", "/gw/odata/SAP/SRV"+v+"/Invoices"))
 	}
+	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/SRV;v=3/Invoices"), "a version that provably differs")
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/OWN;v=1/Orders"), "the exact parameters still decide")
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/Other"), "a name nobody else has")
 	assert.NoError(t, send("https://RT:443", "/http/mine"), "host names are not case-sensitive")
@@ -1167,4 +1171,73 @@ func TestGuardSharedEndpointCache(t *testing.T) {
 	g.Endpoints = cache
 	assert.NoError(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd"}))
 	assert.EqualValues(t, 2, reads.Load())
+}
+
+// Invalidate during a running read: the read's (older) list is not stored,
+// and its callers read again (cpicli#65).
+func TestEndpointCacheInvalidateDuringRead(t *testing.T) {
+	var reads atomic.Int32
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var cache *EndpointCache
+	cache = &EndpointCache{Fetch: func(_ context.Context, path string) ([]byte, error) {
+		if reads.Add(1) == 1 {
+			started <- struct{}{}
+			<-release // the deploy happens while this read runs
+			return []byte(`{"d":{"results":[{"Name":"OLD","EntryPoints":{"results":[{"Url":"https://rt/http/x"}]}}]}}`), nil
+		}
+		return []byte(`{"d":{"results":[{"Name":"NEW","EntryPoints":{"results":[{"Url":"https://rt/http/x"}]}}]}}`), nil
+	}}
+	done := make(chan []endpointEntry)
+	go func() {
+		e, err := cache.get(context.Background())
+		assert.NoError(t, err)
+		done <- e
+	}()
+	<-started
+	cache.Invalidate()
+	close(release)
+	got := <-done
+	require.Len(t, got, 1)
+	assert.Equal(t, "NEW", got[0].flow)
+	again, err := cache.get(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "NEW", again[0].flow)
+	assert.EqualValues(t, 2, reads.Load())
+}
+
+// The harness address map is read from designtime content: a flow that
+// changed (and was deployed) after the map was built is read again, so its
+// old address no longer reaches it (cpicli#65).
+func TestGuardHarnessMapFollowsTheContent(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	addr := atomic.Value{}
+	addr.Store("/sd/in")
+	g.ProcessDirectAddresses = func(_ context.Context, id string) ([]string, error) {
+		if id == "SD_A" {
+			return []string{addr.Load().(string)}, nil
+		}
+		return nil, nil
+	}
+	ms := func(t time.Time) string { return fmt.Sprintf("/Date(%d)/", t.UnixMilli()) }
+	old := time.Now().Add(-time.Hour)
+	set := func(modified, deployed time.Time) {
+		runs(g, map[string]string{"SD_A": `{"d":{"Id":"SD_A","Status":"STARTED","Version":"1.0.1","DeployedOn":"` + ms(deployed) + `"}}`},
+			map[string]string{"SD_A": `{"d":{"Version":"1.0.1","ModifiedAt":"` + ms(modified) + `"}}`})
+	}
+	set(old, old.Add(time.Second))
+	endpoints(g, `{"d":{"results":[{"Name":"CPICTL_Test_Harness","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test"}]}}]}}`)
+	call := func(a string) error {
+		return g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/cpictl/test",
+			Header: map[string]string{"CpictlTargetAddress": a}})
+	}
+	require.NoError(t, call("/sd/in"))
+
+	// SD_A now listens on /sd/new: changed and deployed after the map
+	addr.Store("/sd/new")
+	now := time.Now().Add(time.Second)
+	set(now, now.Add(time.Second))
+	r := refused(t, call("/sd/in"))
+	assert.Contains(t, r.Audit, "no longer listens")
+	assert.NoError(t, call("/sd/new"))
 }

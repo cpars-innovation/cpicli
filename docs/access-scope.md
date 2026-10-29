@@ -107,22 +107,26 @@ whichever command or MCP tool sends it, including tools added later:
   has not checked (and, with a token transport, the token to another host).
 - **Message details** (errors, attachments, store entries, runs, traces) are allowed for messages of flows in the
   scope. Their child IDs are only accepted when they came with an allowed answer.
-- **Test messages** go only to entry points of flows in the scope, and only with `test`. An endpoint covers its own
-  path and paths below it, not siblings (`/sd/order` does not cover `/sd/orders`). A URL goes to the flow with the
-  most specific entry point that covers it, among the entry points of every flow of the tenant: the guard reads
-  them itself (`ServiceEndpoints`, cached for 30 seconds); only that list decides, not entry points seen in
-  earlier answers. So `/http/api/*` of an allowed flow does not open `/http/api/hr` of another team's flow. URLs
-  are matched the way the runtime routes them: each path segment decoded, so `/http/api/h%72` is `/http/api/hr`.
-  Path parameters (`;…`) count only where the entry point has them: `/http/api/hr;x` is `/http/api/hr`, while
-  OData services `…/SRV;v=1` and `…/SRV;v=2` are different services, and `…/SRV/…` reaches neither. Two flows
-  equally specific (also two flows listing the same URL), an entry point the guard cannot read that covers the
-  URL, or a list the guard cannot read: refused. A URL segment with the name of an entry point and parameters the
-  runtime might read as its (`SRV;V=2`, `SRV;v=02`, `SRV;v=2;x=1` against `SRV;v=2`) is refused too, unless an
-  entry point that is more specific decides it; `;v=1` and `;v=2` are never read as the same. An entry point the
-  guard cannot read is taken as a runtime might read it (decoded as a whole, dot segments resolved): it owns
-  nothing, so the URLs it covers are refused. Host names match in any case. A test checks these decisions
-  against a model of the runtime with random endpoint lists and URLs, and CI fuzzes it on every push. After a failed read, the list is not read again for 5 seconds. An endpoint of a flow the scope may not read is refused with the same text as an
-  unknown one.
+- **Test messages** go only to entry points of flows in the scope, and only with `test`. How a URL is decided:
+  - **Most specific entry point.** A URL goes to the flow with the most specific entry point that covers it, among
+    the entry points of every flow of the tenant. The guard reads them itself (`ServiceEndpoints`, cached for
+    30 seconds); entry points seen in earlier answers don't count. An entry point covers its own path and the
+    paths below it, not siblings (`/sd/order` does not cover `/sd/orders`). So `/http/api/*` of an allowed flow does
+    not open `/http/api/hr` of another team's flow.
+  - **As the runtime routes it.** Each path segment is decoded (`/http/api/h%72` is `/http/api/hr`), and host names
+    match in any case. Path parameters (`;…`) count only where the entry point has them: `/http/api/hr;x` is
+    `/http/api/hr`.
+  - **OData versions.** `…/SRV;v=1` and `…/SRV;v=2` are different services. A URL segment named like another flow's
+    versioned service is refused unless its version provably differs, meaning both are plain integers
+    (`;v=1` against `;v=2`). `SRV` without a version, `;v=`, `;V=2`, `;v=02`, `;v=+2`, `;v=2.0` or `;v=2;x=1` might
+    be read as `;v=2`, so they are refused unless a more specific entry point decides them.
+  - **Refused:** two flows equally specific (also two flows listing the same URL), an entry point the guard cannot
+    read (it is taken as a runtime might read it: decoded as a whole, dot segments resolved), and a list the
+    guard cannot read (not read again for 5 seconds after a failure).
+  - **Same answer as unknown.** An endpoint of a flow the scope may not read is refused with the same text as an
+    unknown one. `Refusal.Audit` says which flow it was, for server logs only.
+  - **Tested.** These decisions are checked against a model of the runtime with random endpoint lists and URLs,
+    and CI fuzzes the check on every push.
 
   Limits:
   - Within your own wildcard range (`/http/api/*`), an address of another team's flow is refused, while an
@@ -133,13 +137,20 @@ whichever command or MCP tool sends it, including tools added later:
   - Every decision uses a list up to 30 seconds old (plus however long the tenant takes to list a change). Any
     change of entry points inside that window is not seen yet: a new flow can still be covered by another flow's
     wildcard, and two flows that swap addresses are decided by their old ones.
-  - Each guard (one per user and scope in the cpictl gateway) reads the list itself: N users testing mean N reads
-    of `ServiceEndpoints` every 30 seconds, and every 5 seconds while reads fail.
+  - Each guard (one per user and scope in the cpictl gateway) reads the list itself, unless guards share an
+    `EndpointCache` (Go: `Guard.Endpoints`). Share one only among guards whose `Fetch` uses the same API key: the
+    list must be the tenant's whole list, as that key sees it.
 - **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
-  address that belongs to the sender of a flow in the scope; the guard reads those addresses from the allowed flows
-  (externalised parameters resolved). The address is read from the flow's designtime content, so the flow must
-  run that content: deployed and started, the same version, and not changed after its deployment. Otherwise
-  (also when the tenant does not report the times) the call is refused: deploy the flow first.
+  address that belongs to the sender of a flow in the scope. The guard reads those addresses from the allowed
+  flows' designtime content, parsed as XML (an archive with a repeated or ambiguous address is not used).
+  - **Configured addresses are not used.** An address set by a configuration parameter (`{{…}}`) is not used: a
+    configuration change takes effect only with the next deployment, and nothing tells which value the running
+    flow has. Test such a flow through its other senders, or give it a fixed ProcessDirect address.
+  - **The flow must run what was read.** It must be deployed and started, at the same version, and not changed
+    after its deployment. Otherwise (also when the tenant does not report the times) the call is refused: deploy
+    the flow first.
+  - **A changed flow is read again.** When a flow changed after the address map was built, the map is read again
+    before its address decides.
 - **The test tooling** is exempt only by exact name: flows starting with `CPICTL_Test_`, and the Partner Directory
   partners `CPICTL_Test` and `CPICTL_Stub`. Teams share these partners, so their parameters (stub rules,
   stylesheets under test) are decided by their ID: it must start with an owner and a dot, where the owner is a flow

@@ -334,6 +334,10 @@ const (
 // rebuild of the address map.
 const pdMaxAge = 5 * time.Minute
 
+// pdClockSkew allows for the tenant's clock being behind the guard's when
+// ModifiedAt is compared with the address map's build time.
+const pdClockSkew = time.Minute
+
 func cmpDuration(d, def time.Duration) time.Duration {
 	if d > 0 {
 		return d
@@ -922,8 +926,25 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 		if to == "" {
 			return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call ProcessDirect addresses of flows in the scope (%q is not one)", addr)})
 		}
-		if why := g.runsAsRead(r.Ctx, to); why != "" {
+		why, modified := g.runsAsRead(r.Ctx, to)
+		if why != "" {
 			return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call %q while flow %s runs the content the address was read from: %s", addr, to, why)})
+		}
+		// the address map is read from designtime content: when the flow
+		// changed after the map was built (allowing for clock skew), read it
+		// again, so a new address of the flow is not decided by its old one
+		// (cpicli#65)
+		g.mu.Lock()
+		built := g.pdBuiltAt
+		g.mu.Unlock()
+		if modified.After(built.Add(-pdClockSkew)) {
+			g.mu.Lock()
+			g.pdFlows = nil
+			g.mu.Unlock()
+			if again := g.processDirectFlow(r.Ctx, addr); again != to {
+				return decision{}, g.refuse(&Refusal{Reason: fmt.Sprintf("the test harness may only call ProcessDirect addresses of flows in the scope (%q is not one)", addr),
+					Audit: "flow " + to + " changed since the address map was built and no longer listens on it"})
+			}
 		}
 		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: to}, action: ActionTest}}}, nil
 	}
@@ -1036,7 +1057,9 @@ func (g *Guard) endpointCache() *EndpointCache {
 // between). Guards of the same tenant can share one through Guard.Endpoints,
 // so that N users mean one read per Refresh, not N (cpicli#63). Without it,
 // each guard keeps its own. Fetch must read the tenant directly (not through
-// a guard).
+// a guard). Share a cache only among guards whose Fetch uses the same API
+// key: the list must be the tenant's whole list as that key sees it, never a
+// union or a part of other keys' lists.
 type EndpointCache struct {
 	Fetch   func(ctx context.Context, path string) ([]byte, error)
 	Refresh time.Duration
@@ -1047,13 +1070,19 @@ type EndpointCache struct {
 	building chan struct{} // closed when the running read ends
 	err      error         // the last read's error
 	failedAt time.Time     // the last failed read (zero after a success)
+	gen      uint64        // raised by Invalidate: an older read is not stored
 }
 
 // Invalidate makes the next decision read the list anew (after a deploy, for
 // example).
+//
+// A read that is running when Invalidate is called may carry the list from
+// before the change: it is not stored, and its callers read again
+// (cpicli#65).
 func (c *EndpointCache) Invalidate() {
 	c.mu.Lock()
 	c.builtAt, c.failedAt, c.err = time.Time{}, time.Time{}, nil
+	c.gen++
 	c.mu.Unlock()
 }
 
@@ -1098,8 +1127,10 @@ func (c *EndpointCache) get(ctx context.Context) ([]endpointEntry, error) {
 		}
 		ch = make(chan struct{})
 		c.building = ch
+		gen := c.gen
 		c.mu.Unlock()
 
+		stale := false
 		err := func() (err error) {
 			defer func() {
 				if p := recover(); p != nil {
@@ -1114,7 +1145,11 @@ func (c *EndpointCache) get(ctx context.Context) ([]endpointEntry, error) {
 			}
 			eps := mergeEndpoints(body)
 			c.mu.Lock()
-			c.entries, c.builtAt = eps, time.Now()
+			if c.gen == gen {
+				c.entries, c.builtAt = eps, time.Now()
+			} else {
+				stale = true // invalidated while it ran
+			}
 			c.mu.Unlock()
 			return nil
 		}()
@@ -1126,8 +1161,11 @@ func (c *EndpointCache) get(ctx context.Context) ([]endpointEntry, error) {
 		entries := c.entries
 		c.mu.Unlock()
 		close(ch)
-		if err != nil {
+		switch {
+		case err != nil:
 			return nil, err
+		case stale:
+			continue
 		}
 		return entries, nil
 	}
@@ -1312,31 +1350,60 @@ func (e endpointPath) covers(t endpointPath) (n int, differs bool) {
 }
 
 // paramsMayMatch reports whether a runtime may read the URL segment's
-// parameters as the entry point's: with case, spaces and leading zeros of
-// numbers ignored, and extra parameters dropped. ";v=1" never matches
-// ";v=2"; ";V=02;x=1" may match ";v=2".
+// parameters as the entry point's. Only a difference the guard can prove
+// rules that out: the entry point has a parameter k with a canonical integer
+// value (0 or no leading zero, ASCII digits only), and the URL has k, spelled
+// exactly so, only with other canonical integers. ";v=1" never matches
+// ";v=2"; anything else may (";V=2", ";v=02", ";v=+2", ";v=2.0", ";v=",
+// no ";v=" at all, full-width digits), because a runtime might read it as
+// the entry point's version (cpicli#57, #65).
 func paramsMayMatch(entry, url string) bool {
-	norm := func(s string) map[string]bool {
-		m := map[string]bool{}
-		for _, p := range strings.Split(s, ";") {
-			k, v, _ := strings.Cut(strings.ToLower(strings.Join(strings.Fields(p), "")), "=")
-			if k == "" {
-				continue
-			}
-			if t := strings.TrimLeft(v, "0"); t != v && strings.Trim(t, "0123456789") == "" {
-				v = cmp.Or(t, "0")
-			}
-			m[k+"="+v] = true
-		}
-		return m
-	}
-	have := norm(url)
-	for k := range norm(entry) {
-		if !have[k] {
+	return !paramsDiffer(entry, url)
+}
+
+func paramsDiffer(entry, url string) bool {
+	canonical := func(v string) bool {
+		if v == "" || (len(v) > 1 && v[0] == '0') {
 			return false
 		}
+		for i := 0; i < len(v); i++ {
+			if v[i] < '0' || v[i] > '9' {
+				return false
+			}
+		}
+		return true
 	}
-	return true
+	split := func(s string) [][2]string {
+		var out [][2]string
+		for _, p := range strings.Split(s, ";") {
+			k, v, _ := strings.Cut(p, "=")
+			out = append(out, [2]string{k, v})
+		}
+		return out
+	}
+	urlParams := split(url)
+	for _, e := range split(entry) {
+		if e[0] == "" || !canonical(e[1]) {
+			continue
+		}
+		found, differ := false, true
+		for _, u := range urlParams {
+			switch {
+			case u[0] == e[0]:
+				found = true
+				if !canonical(u[1]) || u[1] == e[1] {
+					differ = false
+				}
+			case strings.EqualFold(strings.TrimSpace(u[0]), e[0]):
+				// another spelling of the key: a runtime may read it as k
+				differ = false
+			}
+		}
+		if found && differ {
+			return true
+		}
+	}
+	return false
 }
 
 // processDirectFlow returns the allowed flow whose ProcessDirect sender
@@ -1388,9 +1455,9 @@ func (g *Guard) processDirectFlow(ctx context.Context, addr string) string {
 // from designtime content; a flow that is not deployed, or runs an older
 // version, may not listen on the address at all, and another team's flow
 // might.
-func (g *Guard) runsAsRead(ctx context.Context, flow string) string {
+func (g *Guard) runsAsRead(ctx context.Context, flow string) (string, time.Time) {
 	if g.Fetch == nil {
-		return "the guard has no Fetch to read it"
+		return "the guard has no Fetch to read it", time.Time{}
 	}
 	ictx := internal(ctx)
 	entity := func(path string) map[string]any {
@@ -1408,27 +1475,27 @@ func (g *Guard) runsAsRead(ctx context.Context, flow string) string {
 	}
 	rt := entity("/api/v1/IntegrationRuntimeArtifacts(" + httpKey(flow) + ")")
 	if rt == nil || str(rt, "Id") != flow {
-		return "it is not deployed"
+		return "it is not deployed", time.Time{}
 	}
 	if st := str(rt, "Status"); st != "STARTED" {
-		return "it is not running (status " + cmp.Or(st, "unknown") + ")"
+		return "it is not running (status " + cmp.Or(st, "unknown") + ")", time.Time{}
 	}
 	dt := entity("/api/v1/IntegrationDesigntimeArtifacts(Id=" + httpKey(flow) + ",Version='active')")
 	if dt == nil {
-		return "its designtime artifact could not be read"
+		return "its designtime artifact could not be read", time.Time{}
 	}
 	if rv, dv := str(rt, "Version"), str(dt, "Version"); rv == "" || rv != dv {
-		return fmt.Sprintf("it runs version %q, the designtime artifact is version %q; deploy it first", rv, dv)
+		return fmt.Sprintf("it runs version %q, the designtime artifact is version %q; deploy it first", rv, dv), time.Time{}
 	}
 	deployed, err1 := odatatime.Parse(str(rt, "DeployedOn"))
 	modified, err2 := odatatime.Parse(str(dt, "ModifiedAt"))
 	switch {
 	case err1 != nil || err2 != nil || deployed.IsZero() || modified.IsZero():
-		return "the tenant does not report when it was deployed and last changed"
+		return "the tenant does not report when it was deployed and last changed", time.Time{}
 	case modified.After(deployed):
-		return "it was changed after its deployment; deploy it first"
+		return "it was changed after its deployment; deploy it first", time.Time{}
 	}
-	return ""
+	return "", modified
 }
 
 // withoutDefaultPort drops :443 from https and :80 from http URLs: the

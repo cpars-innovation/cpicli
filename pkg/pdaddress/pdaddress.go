@@ -9,7 +9,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -75,13 +76,17 @@ func XMLUnescape(s string) string {
 }
 
 // FromArchive returns the ProcessDirect sender addresses of an integration
-// flow archive as written ({{parameter}} not resolved).
+// flow archive as written ({{parameter}} not resolved). The models are read
+// as XML (comments and other markup are not properties), and a sender with
+// a repeated or ambiguous address property makes the archive unreadable:
+// the access scope must not guess which address a flow listens on
+// (cpicli#65).
 func FromArchive(zipped []byte) ([]string, error) {
 	zr, err := zip.NewReader(bytes.NewReader(zipped), int64(len(zipped)))
 	if err != nil {
 		return nil, err
 	}
-	var raw []string
+	var out []string
 	for _, f := range zr.File {
 		if !strings.HasSuffix(f.Name, ".iflw") || f.UncompressedSize64 > 64<<20 {
 			continue
@@ -95,13 +100,111 @@ func FromArchive(zipped []byte) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, s := range Senders(string(model)) {
-			if s.Adapter == "ProcessDirect" {
-				raw = append(raw, s.Value)
+		addrs, err := ProcessDirectSenders(model)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f.Name, err)
+		}
+		out = append(out, addrs...)
+	}
+	return out, nil
+}
+
+// ProcessDirectSenders reads a model (.iflw) as XML and returns the address
+// of each ProcessDirect sender. A property repeated within one message flow,
+// or a sender with more than one address property, is an error.
+func ProcessDirectSenders(model []byte) ([]string, error) {
+	dec := xml.NewDecoder(bytes.NewReader(model))
+	dec.Strict = true
+	var (
+		out      []string
+		inFlow   bool
+		props    map[string]string
+		key, val *strings.Builder
+		field    *strings.Builder
+		inProp   bool
+	)
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch {
+			case t.Name.Local == "messageFlow":
+				if inFlow {
+					return nil, errors.New("nested messageFlow")
+				}
+				inFlow, props = true, map[string]string{}
+			case inFlow && t.Name.Local == "property":
+				inProp, key, val = true, &strings.Builder{}, &strings.Builder{}
+			case inProp && t.Name.Local == "key":
+				field = key
+			case inProp && t.Name.Local == "value":
+				field = val
+			}
+		case xml.CharData:
+			if field != nil {
+				field.Write(t)
+			}
+		case xml.EndElement:
+			switch {
+			case t.Name.Local == "key" || t.Name.Local == "value":
+				field = nil
+			case inProp && t.Name.Local == "property":
+				inProp = false
+				if _, dup := props[key.String()]; dup {
+					return nil, fmt.Errorf("property %s repeated in a message flow", key.String())
+				}
+				props[key.String()] = val.String()
+			case inFlow && t.Name.Local == "messageFlow":
+				inFlow = false
+				addr, err := processDirectAddress(props)
+				if err != nil {
+					return nil, err
+				}
+				if addr != "" {
+					out = append(out, addr)
+				}
 			}
 		}
 	}
-	return raw, nil
+	return out, nil
+}
+
+// processDirectAddress is the address of a ProcessDirect sender ("" for
+// other message flows).
+func processDirectAddress(props map[string]string) (string, error) {
+	if props["direction"] != "Sender" {
+		return "", nil
+	}
+	adapter := props["ComponentType"]
+	if adapter == "" {
+		for part := range strings.SplitSeq(props["cmdVariantUri"], "/") {
+			if v, ok := strings.CutPrefix(part, "cname::"); ok {
+				adapter = strings.TrimPrefix(v, "sap:")
+			}
+		}
+	}
+	if adapter != "ProcessDirect" {
+		return "", nil
+	}
+	var addrs []string
+	for _, k := range AddressKeys {
+		if v := strings.TrimSpace(props[k]); v != "" {
+			addrs = append(addrs, v)
+		}
+	}
+	switch len(addrs) {
+	case 0:
+		return "", nil
+	case 1:
+		return addrs[0], nil
+	}
+	return "", fmt.Errorf("a ProcessDirect sender with %d address properties", len(addrs))
 }
 
 // Resolve replaces addresses that are a whole {{parameter}} by the
@@ -128,42 +231,34 @@ func Resolve(raw []string, params func() map[string]string) []string {
 type Fetch func(ctx context.Context, path string) ([]byte, error)
 
 // Reader returns a function for scope.Guard.ProcessDirectAddresses that reads
-// a flow's active designtime archive and configuration through fetch.
+// a flow's active designtime archive through fetch. An address set by a
+// configuration parameter ({{...}}) is left out: a configuration change
+// takes effect only when the flow is deployed again, and nothing tells which
+// value the running flow uses, so the access scope must not rely on it
+// (cpicli#65). A flow whose archive is ambiguous is an error.
 func Reader(fetch Fetch) func(ctx context.Context, id string) ([]string, error) {
 	return func(ctx context.Context, id string) ([]string, error) {
-		art := "/api/v1/IntegrationDesigntimeArtifacts(Id=" + key(id) + ",Version='active')"
-		zipped, err := fetch(ctx, art+"/$value")
+		zipped, err := fetch(ctx, "/api/v1/IntegrationDesigntimeArtifacts(Id="+key(id)+",Version='active')/$value")
 		if err != nil {
 			return nil, err
 		}
 		raw, err := FromArchive(zipped)
-		if err != nil || len(raw) == 0 {
+		if err != nil {
 			return nil, err
 		}
-		var perr error
-		out := Resolve(raw, func() map[string]string {
-			m := map[string]string{}
-			b, err := fetch(ctx, art+"/Configurations")
-			if err != nil {
-				perr = err
-				return m
-			}
-			var v struct {
-				D struct {
-					Results []struct{ ParameterKey, ParameterValue string } `json:"results"`
-				} `json:"d"`
-			}
-			if err := json.Unmarshal(b, &v); err != nil {
-				perr = fmt.Errorf("reading the configuration of %s: %w", id, err)
-				return m
-			}
-			for _, r := range v.D.Results {
-				m[r.ParameterKey] = r.ParameterValue
-			}
-			return m
-		})
-		return out, perr
+		return Fixed(raw), nil
 	}
+}
+
+// Fixed keeps the addresses that contain no {{parameter}}.
+func Fixed(raw []string) []string {
+	var out []string
+	for _, a := range raw {
+		if a != "" && !strings.Contains(a, "{{") {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func key(s string) string { return "'" + url.PathEscape(strings.ReplaceAll(s, "'", "''")) + "'" }

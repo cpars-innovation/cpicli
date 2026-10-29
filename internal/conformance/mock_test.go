@@ -24,6 +24,8 @@ var mockAnswers = map[string]bool{
 	"odata-case":            false,
 	"odata-zero":            false,
 	"odata-extra":           false,
+	"odata-none":            false,
+	"odata-empty":           false,
 	"modified-on-configure": true,
 }
 

@@ -5,6 +5,28 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Fixes from the verification of the 0.36.0 candidate (#65):**
+  - **OData versions are compared strictly.** A URL segment named like another flow's versioned service is now
+    refused unless its version provably differs: both are plain integers, as in `;v=1` against `;v=2`. Before, the
+    guard read variants like `;v=+2`, `;v=2.0`, `;v='2'`, full-width digits, `;v=` or no version at all as "cannot
+    match", so a broader entry point of the caller could decide them. The fuzz test's model makes the same, stricter
+    assumption.
+  - **`EndpointCache.Invalidate` during a running read.** The read's older list is no longer stored; its callers
+    read again (a generation counter).
+  - **ProcessDirect addresses are read as XML.** An address inside an XML comment no longer counts. A sender with a
+    repeated or ambiguous address property makes the flow's archive unusable for the guard.
+  - **Configured ProcessDirect addresses are not used under a scope.** For a `{{parameter}}` address, nothing tells
+    which value the running flow uses until it is deployed again, so the test harness no longer relies on it.
+    `pdaddress.Reader` and `ops.ProcessDirectAddresses` leave such addresses out; `pdaddress.Fixed` does the
+    filtering.
+  - **The harness address map follows the content.** When a flow changed after the map was built, the map is read
+    again before the flow's address decides.
+  - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
+    harness) follow the deployed content, not later designtime or configuration changes.
+  - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.
+  - **Docs:** `docs/access-scope.md` describes the routing as it is now, and says to share an `EndpointCache` only
+    among guards that use the same API key.
+
 - **Runtime conformance suite (#59).** `internal/conformance` probes the behaviour the access scope and the mock
   tenant assume:
   - path case;

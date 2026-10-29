@@ -184,13 +184,14 @@ func odataFacts(ctx context.Context, t Target, root string) ([]Fact, error) {
 	base, version := root[:i], strings.TrimPrefix(root[i+1:], "v=")
 	var facts []Fact
 	for _, v := range []struct{ id, params string }{
-		{"odata-case", "V=" + version}, {"odata-zero", "v=0" + version}, {"odata-extra", "v=" + version + ";x=1"},
+		{"odata-case", ";V=" + version}, {"odata-zero", ";v=0" + version}, {"odata-extra", ";v=" + version + ";x=1"},
+		{"odata-none", ""}, {"odata-empty", ";v="},
 	} {
-		got, err := reached(ctx, t, http.MethodGet, base+";"+v.params+"/$metadata")
+		got, err := reached(ctx, t, http.MethodGet, base+v.params+"/$metadata")
 		if err != nil {
 			return nil, err
 		}
-		facts = append(facts, Fact{ID: v.id, Text: fmt.Sprintf("the OData service ;v=%s answers as ;%s", version, v.params), Got: got,
+		facts = append(facts, Fact{ID: v.id, Text: fmt.Sprintf("the OData service ;v=%s answers as %q", version, v.params), Got: got,
 			Note: "the guard refuses such variants unless an exact entry point decides"})
 	}
 	return facts, nil

@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"net/url"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -251,26 +252,35 @@ func (p mPath) matches(req []mSeg) (spec int, certain, ok bool) {
 }
 
 // paramsMaySatisfy: the request's parameters may be read as the entry
-// point's (case, spaces and leading zeros ignored, extra parameters
-// dropped).
+// point's unless they provably differ: the same key, spelled exactly, with
+// distinct canonical integer values, and no other spelling of that key.
 func paramsMaySatisfy(entry, req string) bool {
-	norm := func(s string) map[string]bool {
-		m := map[string]bool{}
-		for _, p := range strings.Split(s, ";") {
-			k, v, _ := strings.Cut(strings.ToLower(strings.ReplaceAll(p, " ", "")), "=")
-			if k == "" {
-				continue
-			}
-			if t := strings.TrimLeft(v, "0"); t != v && (t == "" || strings.Trim(t, "0123456789") == "") {
-				v = cmpOr(t, "0")
-			}
-			m[k+"="+v] = true
+	canon := regexp.MustCompile(`^(0|[1-9][0-9]*)$`)
+	for _, ep := range strings.Split(entry, ";") {
+		k, ev, ok := strings.Cut(ep, "=")
+		if !ok || k == "" || !canon.MatchString(ev) {
+			continue
 		}
-		return m
-	}
-	have := norm(req)
-	for k := range norm(entry) {
-		if !have[k] {
+		var vals []string
+		other := false
+		for _, rp := range strings.Split(req, ";") {
+			rk, rv, _ := strings.Cut(rp, "=")
+			if rk == k {
+				vals = append(vals, rv)
+			} else if strings.EqualFold(strings.TrimSpace(rk), k) {
+				other = true
+			}
+		}
+		if len(vals) == 0 || other {
+			continue
+		}
+		differ := true
+		for _, v := range vals {
+			if !canon.MatchString(v) || v == ev {
+				differ = false
+			}
+		}
+		if differ {
 			return false
 		}
 	}
@@ -303,7 +313,8 @@ func (c *choices) n(k int) int {
 
 var (
 	fzNames  = []string{"http", "cxf", "gw", "odata", "api", "shared", "billing", "bill", "a", "b", "SRV", "srv", "x"}
-	fzParams = []string{"v=1", "v=2", "V=2", "v=02", "x=1", "v=2;x=1", "x=1;v=2", "jsessionid=1", "", "v= 2"}
+	fzParams = []string{"v=1", "v=2", "V=2", "v=02", "x=1", "v=2;x=1", "x=1;v=2", "jsessionid=1", "", "v= 2",
+		"v=+2", "v=2.0", "v='2'", "v=２", "v=", "v=1;v=2", " v=1", "v=3"}
 )
 
 // encode writes a name with some characters percent-encoded (either hex

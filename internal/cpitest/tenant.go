@@ -44,7 +44,16 @@ type Runtime struct {
 	// tenant, the public IntegrationRuntimeArtifacts lists only Cloud
 	// Integration; the Web UI's runtime list shows the others.
 	Location string
+	// Senders are the sender addresses (adapter and resolved address) the
+	// deployed content listens on, recorded at the deployment: a later
+	// change of the designtime artifact or its configuration takes effect
+	// only with the next deployment, as on a tenant. Nil (seeded content):
+	// the current designtime artifact's.
+	Senders []DeployedSender
 }
+
+// DeployedSender is a sender address of deployed content.
+type DeployedSender struct{ Adapter, Address string }
 
 // otherLocation reports whether rt runs on a runtime the public API does
 // not report (an integration cell).
@@ -1883,7 +1892,8 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 				odataError(w, status, "Internal Server Error", problem)
 				return
 			}
-			a.Runtime, a.undeployed = &Runtime{Version: version, Status: "STARTED", DeployedOn: time.Now(), Location: a.RuntimeLocation}, false
+			a.Runtime, a.undeployed = &Runtime{Version: version, Status: "STARTED", DeployedOn: time.Now(), Location: a.RuntimeLocation,
+				Senders: deployedSenders(a)}, false
 			a.ErrorInfo = ""
 			if problem != "" {
 				a.Runtime.Status, a.ErrorInfo = "ERROR", problem
