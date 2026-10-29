@@ -50,6 +50,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
     `test` and reached any ProcessDirect address, without the harness check; a `CPICTL_Test_*` flow in another
     team's package was readable too. Such flows are now decided by their package, and their endpoints are refused
     (generated script test flows, `CPICTL_Test_Script_*`, excepted). Also in 0.35.8 and 0.35.9.
+  - **From the fourth re-check:** a scope may no longer create, change, deploy, configure or delete a flow with
+    a tooling ID (or another `CPICTL_Test_*` ID except `CPICTL_Test_Script_*`). On a tenant without the tooling,
+    a team with `upload` could create its own `CPICTL_Test_Stub` in its package, and every other team's tests
+    would trust it. Installing the tooling (`cpictl test tools install`) now needs a run without a scope.
   - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
     harness) follow the deployed content, not later designtime or configuration changes.
   - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.

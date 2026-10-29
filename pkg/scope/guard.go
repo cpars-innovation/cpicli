@@ -228,6 +228,13 @@ func (g *Guard) check(ctx context.Context, n need) error {
 		if toolingFlow(res.ID) && (n.action == ActionRead || n.action == ActionTest) && g.Scope.Grants(ActionTest) {
 			return nil
 		}
+		// the tooling is trusted by every team's tests: a scope may not
+		// create, change, deploy or delete a flow of it, nor one named like
+		// it, so that installing it needs an unscoped run (cpicli#65)
+		if (toolingFlow(res.ID) || toolingCopy(res.ID)) && n.action != ActionRead && n.action != ActionTest && n.action != ActionDownload {
+			return g.refuse(&Refusal{Resource: Resource{Kind: KindArtifact, ID: n.res.ID, Package: n.res.Package}, Action: n.action,
+				Reason: "cpictl's test tooling (" + ToolingPrefix + "*) is installed and changed without a scope (cpictl test tools install)"})
+		}
 		if res.Package == "" {
 			res.Package = g.packageOf(ctx, res.ID)
 		}

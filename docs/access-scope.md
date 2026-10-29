@@ -161,7 +161,10 @@ whichever command or MCP tool sends it, including tools added later:
   `CPICTL_Test_XSLT`, and the Partner Directory partners `CPICTL_Test` and `CPICTL_Stub`. Any other flow whose ID
   starts with `CPICTL_Test_` is decided by its package like any flow, and its endpoints are refused, except those
   of generated script test flows (`CPICTL_Test_Script_*`): a copy of the harness under another ID would reach any
-  ProcessDirect address without the harness check. So under a scope, `--harness` with another ID is refused. Teams share these partners, so their parameters (stub rules,
+  ProcessDirect address without the harness check. So under a scope, `--harness` with another ID is refused.
+  A scope may not create, change, deploy, configure or delete a flow with one of the three IDs, or another
+  `CPICTL_Test_*` ID except `CPICTL_Test_Script_*`: every team's tests trust the tooling, so it is installed
+  without a scope (`cpictl test tools install`). IDs are case-sensitive. Teams share these partners, so their parameters (stub rules,
   stylesheets under test) are decided by their ID: it must start with an owner and a dot, where the owner is a flow
   the scope grants `test` on (stub rules, e.g. `Orders_Route.erp`) or a partner it may read (stylesheets: cpictl
   names them `<partner>.<parameter>`). With `test`, those may be read and written; others are hidden and refused,

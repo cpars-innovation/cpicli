@@ -177,6 +177,26 @@ func TestGuardToolingCopies(t *testing.T) {
 	assert.Contains(t, r.Audit, "CPICTL_Test_Harness_v2")
 	refused(t, g.Before(send("/http/cpictl/script/0011223344")))
 	assert.NoError(t, g.Before(send("/http/cpictl/stub/SD_A.billing")), "the stub")
+	// creating the tooling under a scope (on a tenant without it) would make
+	// a team's own flow trusted by every other team's tests
+	up := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","upload","deploy","configure","delete","test"]}`)
+	for _, id := range []string{"CPICTL_Test_Stub", "CPICTL_Test_Harness", "CPICTL_Test_XSLT", "CPICTL_Test_Harness_v2"} {
+		for _, r := range []*httpclnt.GuardRequest{
+			req("POST", "/api/v1/IntegrationDesigntimeArtifacts", `{"Id":"`+id+`","PackageId":"SD_Orders"}`),
+			req("POST", "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts", `{"Id":"`+id+`"}`),
+			req("POST", "/api/v1/ValueMappingDesigntimeArtifacts", `{"Id":"`+id+`","PackageId":"SD_Orders"}`),
+			req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='"+id+"',Version='active')", `{}`),
+			req("POST", "/api/v1/DeployIntegrationDesigntimeArtifact?Id='"+id+"'&Version='active'", ""),
+			req("DELETE", "/api/v1/IntegrationDesigntimeArtifacts(Id='"+id+"',Version='active')", ""),
+		} {
+			assert.Contains(t, refused(t, up.Before(r)).Error(), "without a scope", "%s %s", r.Method, r.Path)
+		}
+	}
+	assert.NoError(t, up.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", `{"Id":"CPICTL_Test_Script_0011223344","PackageId":"SD_Orders"}`)),
+		"a script test flow is the caller's own flow")
+	assert.NoError(t, up.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", `{"Id":"cpictl_test_stub","PackageId":"SD_Orders"}`)),
+		"IDs are case-sensitive: another flow")
+
 	for _, id := range []string{"CPICTL_Test_Harness_v2", "CPICTL_Test_Script_0011223344", "CPICTL_Test_X"} {
 		refused(t, g.Before(req("GET", "/api/v1/IntegrationDesigntimeArtifacts(Id='"+id+"',Version='active')", "")))
 	}
