@@ -468,7 +468,23 @@ func TestGuardRefusesAmbiguousRequests(t *testing.T) {
 	} {
 		refused(t, g.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", body)))
 	}
-	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", `{"Id":"SD_New","PackageId":"SD_Orders","Nested":{"Id":"x","id":"y"}}`)))
+	// nested entities (an OData deep insert) and an Id other than the URL's
+	// (cpicli#65)
+	for _, r := range []*httpclnt.GuardRequest{
+		req("POST", "/api/v1/IntegrationDesigntimeArtifacts", `{"Id":"SD_New","PackageId":"SD_Orders","Nested":{"Id":"x","id":"y"}}`),
+		req("POST", "/api/v1/IntegrationPackages", `{"Id":"SD_New","IntegrationDesigntimeArtifacts":{"results":[{"Id":"CPICTL_Test_Stub"}]}}`),
+		req("POST", "/api/v1/IntegrationPackages", `{"Id":"SD_New","IntegrationDesigntimeArtifacts":[{"Id":"CPICTL_Test_Stub"}]}`),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"d":{"Id":"SD_Orders","IntegrationDesigntimeArtifacts":{"results":[{"Id":"CPICTL_Test_Stub"}]}}}`),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"Id":"FI_Billing"}`),
+		req("POST", "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts", `{"Id":"SD_New","Configurations":[{"Id":"x"}]}`),
+		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":"CPICTL_Test_Stub","Name":"x"}`),
+		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"id":"FI_B"}`),
+	} {
+		refused(t, g.Before(r))
+	}
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"d":{"Id":"SD_Orders","Name":"Orders","ShortText":"x"}}`)), "cpictl's package update")
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":"SD_A","Name":"A","ArtifactContent":"UEs="}`)))
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Name":"A","ArtifactContent":"UEs="}`)))
 
 	// inside a $batch: paths and the operations' own headers
 	refused(t, g.Before(batchReq("PUT /api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')/../../IntegrationPackages('FI_Billing') HTTP/1.1")))

@@ -54,6 +54,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
     a tooling ID (or another `CPICTL_Test_*` ID except `CPICTL_Test_Script_*`). On a tenant without the tooling,
     a team with `upload` could create its own `CPICTL_Test_Stub` in its package, and every other team's tests
     would trust it. Installing the tooling (`cpictl test tools install`) now needs a run without a scope.
+  - **From the fifth re-check:** under a scope, a write body must be one flat JSON object (or `{"d":{...}}`
+    around one). A nested object or array, such as an OData deep insert of artifacts into a new package, is
+    refused, and so is a `PUT` whose body `Id` names another package or artifact than the URL.
   - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
     harness) follow the deployed content, not later designtime or configuration changes.
   - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.

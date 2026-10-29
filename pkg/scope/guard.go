@@ -715,6 +715,9 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 
 	case p == "IntegrationPackages":
 		if m == http.MethodPost {
+			if err := g.writeBody(r.Body, ""); err != nil {
+				return decision{}, err
+			}
 			return decision{need: []need{{res: Resource{Kind: KindPackage, ID: bodyField(r.Body, "Id")}, action: ActionUpload}}}, nil
 		}
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
@@ -731,6 +734,9 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 				// package, whatever the body says
 				if m != http.MethodPost {
 					return decision{}, g.refuse(&Refusal{Reason: m + " on the artifacts of a package is not available under a scope"})
+				}
+				if err := g.writeBody(r.Body, ""); err != nil {
+					return decision{}, err
 				}
 				if bp := bodyField(r.Body, "PackageId"); bp != "" && bp != pkg {
 					return decision{}, g.refuse(&Refusal{Reason: "the artifact's package does not match the request"})
@@ -749,11 +755,17 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		case http.MethodGet, http.MethodHead:
 			return decision{need: []need{{res: res, action: ActionRead}}}, nil
 		}
+		if err := g.writeBody(r.Body, pkg); err != nil {
+			return decision{}, err
+		}
 		return decision{need: []need{{res: res, action: ActionUpload}}}, nil
 
 	case slices.Contains([]string{"IntegrationDesigntimeArtifacts", "ValueMappingDesigntimeArtifacts", "MessageMappingDesigntimeArtifacts", "ScriptCollectionDesigntimeArtifacts"}, p):
 		if m != http.MethodPost {
 			return decision{}, g.refuse(&Refusal{Reason: "listing all artifacts of the tenant is not available under a scope"})
+		}
+		if err := g.writeBody(r.Body, ""); err != nil {
+			return decision{}, err
 		}
 		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: bodyField(r.Body, "Id"), Package: bodyField(r.Body, "PackageId")}, action: ActionUpload}}}, nil
 
@@ -769,6 +781,11 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		case write(m) && strings.HasPrefix(sub, "/$links/Configurations"):
 			return art(id, ActionConfigure), nil
 		case write(m):
+			if sub == "" {
+				if err := g.writeBody(r.Body, id); err != nil {
+					return decision{}, err
+				}
+			}
 			return art(id, ActionUpload), nil
 		case strings.Contains(sub, "$value"): // the artifact, or one of its resources
 			return art(id, ActionDownload), nil
@@ -1601,6 +1618,71 @@ func bodyField(body []byte, field string) string {
 		return "" // trailing data
 	}
 	return value
+}
+
+// flatBody reports whether a write body is one JSON object of plain values,
+// and returns its "Id" (any case) if it has one. A nested object or array (an
+// OData deep insert of other entities, cpicli#65), a repeated key or trailing
+// data is not accepted under a scope. An empty body is flat, and so is the
+// verbose form {"d":{...}} of a flat object (cpictl's package bodies).
+func flatBody(body []byte) (id string, hasID, ok bool) {
+	if len(bytes.TrimSpace(body)) == 0 {
+		return "", false, true
+	}
+	var wrapped map[string]json.RawMessage
+	if json.Unmarshal(body, &wrapped) == nil && len(wrapped) == 1 {
+		if inner, isD := wrapped["d"]; isD && bytes.HasPrefix(bytes.TrimSpace(inner), []byte("{")) {
+			body = inner
+		}
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return "", false, false
+	}
+	seen := map[string]bool{}
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return "", false, false
+		}
+		k, _ := t.(string)
+		if seen[strings.ToLower(k)] {
+			return "", false, false
+		}
+		seen[strings.ToLower(k)] = true
+		var v any
+		if err := dec.Decode(&v); err != nil {
+			return "", false, false
+		}
+		switch v.(type) {
+		case map[string]any, []any:
+			return "", false, false
+		}
+		if strings.EqualFold(k, "Id") {
+			id, _ = v.(string)
+			hasID = true
+		}
+	}
+	if t, err := dec.Token(); err != nil || t != json.Delim('}') {
+		return "", false, false
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return "", false, false
+	}
+	return id, hasID, true
+}
+
+// writeBody refuses a write body that is not flat, or whose Id names another
+// entity than the URL (want "": a create, whose Id the caller reads itself).
+func (g *Guard) writeBody(body []byte, want string) error {
+	id, hasID, ok := flatBody(body)
+	switch {
+	case !ok:
+		return g.refuse(&Refusal{Reason: "a write body with nested objects or arrays, repeated keys or other than one JSON object is not accepted under a scope"})
+	case want != "" && hasID && id != want:
+		return g.refuse(&Refusal{Reason: "the body's Id does not match the request"})
+	}
+	return nil
 }
 
 func (g *Guard) lookupField(ctx context.Context, path, field string) string {
