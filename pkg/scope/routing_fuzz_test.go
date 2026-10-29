@@ -66,7 +66,10 @@ func checkRouting(t *testing.T, c fzCase) {
 
 // --- the model -------------------------------------------------------------
 
-type mSeg struct{ name, params string }
+type mSeg struct {
+	name, params string
+	encoded      bool // parameters percent-encoded as written
+}
 
 // mPath is one reading of an entry point.
 type mPath struct {
@@ -151,7 +154,7 @@ func modelRequest(p string) ([]mSeg, bool) {
 		if err1 != nil || err2 != nil {
 			return nil, false
 		}
-		out = append(out, mSeg{n, ps})
+		out = append(out, mSeg{n, ps, strings.Contains(params, "%")})
 	}
 	return out, true
 }
@@ -173,10 +176,28 @@ func modelEntry(u string) []mPath {
 		if wild && !strings.HasSuffix(dec, "/") && strings.HasSuffix(strings.TrimSuffix(whole, "*"), "/") {
 			dec += "/"
 		}
+		// which segment's parameters were encoded: per segment when the
+		// decoding kept the segments as written, else all of them
+		decSegs := strings.Split(strings.TrimPrefix(dec, "/"), "/")
+		rawPath := strings.TrimSuffix(whole, "*")
+		if !wild {
+			rawPath = strings.TrimSuffix(rawPath, "/")
+		}
+		rawSegs := strings.Split(strings.TrimPrefix(rawPath, "/"), "/")
+		sameShape := len(rawSegs) == len(decSegs)
+		for i := 0; sameShape && i < len(rawSegs); i++ {
+			d, err := url.PathUnescape(rawSegs[i])
+			sameShape = err == nil && d == decSegs[i]
+		}
 		var segs []mSeg
-		for _, raw := range strings.Split(strings.TrimPrefix(dec, "/"), "/") {
+		for i, raw := range decSegs {
 			name, params, _ := strings.Cut(raw, ";")
-			segs = append(segs, mSeg{name, params})
+			enc := strings.Contains(whole, "%")
+			if sameShape {
+				_, rawParams, _ := strings.Cut(rawSegs[i], ";")
+				enc = strings.Contains(rawParams, "%")
+			}
+			segs = append(segs, mSeg{name, params, enc})
 		}
 		out = append(out, mPath{segs: segs, wild: wild})
 	}
@@ -201,7 +222,7 @@ func strictEntry(rest string) (mPath, bool) {
 			strings.ContainsAny(n, "/\\;*") || strings.ContainsAny(ps, "/\\*") || strings.Count(ps, ";") != strings.Count(params, ";") {
 			return mPath{}, false
 		}
-		p.segs = append(p.segs, mSeg{n, ps})
+		p.segs = append(p.segs, mSeg{n, ps, strings.Contains(params, "%")})
 	}
 	if p.wild && p.segs[len(p.segs)-1].params != "" {
 		return mPath{}, false
@@ -229,7 +250,11 @@ func (p mPath) matches(req []mSeg) (spec int, certain, ok bool) {
 			if r.name != s.name {
 				return 0, false, false
 			}
-			if s.params != "" && s.params != r.params {
+			switch {
+			case s.params == "":
+			case s.encoded || r.encoded:
+				certain = false // encoded parameters may read either way
+			case s.params != r.params:
 				if !paramsMaySatisfy(s.params, r.params) {
 					return 0, false, false
 				}
@@ -314,7 +339,7 @@ func (c *choices) n(k int) int {
 var (
 	fzNames  = []string{"http", "cxf", "gw", "odata", "api", "shared", "billing", "bill", "a", "b", "SRV", "srv", "x"}
 	fzParams = []string{"v=1", "v=2", "V=2", "v=02", "x=1", "v=2;x=1", "x=1;v=2", "jsessionid=1", "", "v= 2",
-		"v=+2", "v=2.0", "v='2'", "v=２", "v=", "v=1;v=2", " v=1", "v=3"}
+		"v=+2", "v=2.0", "v='2'", "v=２", "v=", "v=1;v=2", " v=1", "v=3", "v%3D1", "v=%32", "%76=2"}
 )
 
 // encode writes a name with some characters percent-encoded (either hex
@@ -413,6 +438,10 @@ func TestRoutingRegressions(t *testing.T) {
 		// one service; a wildcard after parameters
 		{[]fzEntry{sd("/b;v= 2"), fi("/b;v=02")}, "https://rt:443", "/b;v=%202/"},
 		{[]fzEntry{sd("/gw;v=02/odata"), fi("/gw;jsessionid=1*")}, "https://RT:443", "/gw;v=02/odata/%73rv"},
+		// found by FuzzRouting on the #65 fix: an unreadable, encoded entry point
+		{[]fzEntry{sd("/b"), sd("/b"), fi("/b/b%3Bv=2")}, "https://rt:443", "/%62/%62;v=1/%68%74%74%70;v=1/%68%74%74%70;v=1/"},
+		{[]fzEntry{sd("/b"), sd("/b;v=3/b/b"), fi("/b;x=1;v=2/b;v%3D1/b"), sd("/b")}, "https://rt:443", "/b;v=3/%62/%62/"},
+		{[]fzEntry{sd("/b"), fi("/b/b;v%3D1/b;x=1;v=2/*")}, "https://rt:443", "/%62/%62/%62;v=1/%68%74%74%70;v=1/"},
 	} {
 		checkRouting(t, c)
 	}

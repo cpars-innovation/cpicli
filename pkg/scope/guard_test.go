@@ -1117,11 +1117,13 @@ func TestGuardEndpointHardening(t *testing.T) {
 	}
 	// and what a runtime might also read as v=2 (cpicli#65)
 	for _, v := range []string{";V=2", ";v=02", ";v=2;x=1", ";x=1;v=2", ";v=2;", ";v=%202",
-		"", ";v=", ";v=%2B2", ";v=2.0", ";v='2'", ";v=%EF%BC%92", ";v=1;v=2", "; v=1"} {
+		"", ";v=", ";v=%2B2", ";v=2.0", ";v='2'", ";v=%EF%BC%92", ";v=1;v=2", "; v=1",
+		";v%3D1", ";v=%31", ";%76=1", ";v=%33"} {
 		refused(t, send("https://rt:443", "/gw/odata/SAP/SRV"+v+"/Invoices"))
 	}
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/SRV;v=3/Invoices"), "a version that provably differs")
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/OWN;v=1/Orders"), "the exact parameters still decide")
+	refused(t, send("https://rt:443", "/gw/odata/SAP/OWN;v=%31/Orders")) // encoded: proves nothing, not even its own
 	assert.NoError(t, send("https://rt:443", "/gw/odata/SAP/Other"), "a name nobody else has")
 	assert.NoError(t, send("https://RT:443", "/http/mine"), "host names are not case-sensitive")
 	for _, p := range []string{"/http/odd/x", "/http/q", "/http/e/x"} {
@@ -1240,4 +1242,19 @@ func TestGuardHarnessMapFollowsTheContent(t *testing.T) {
 	r := refused(t, call("/sd/in"))
 	assert.Contains(t, r.Audit, "no longer listens")
 	assert.NoError(t, call("/sd/new"))
+}
+
+// A list invalidated during every read is refused after a few reads, not
+// read for ever (cpicli#65).
+func TestEndpointCacheInvalidatedOnEveryRead(t *testing.T) {
+	var reads atomic.Int32
+	var cache *EndpointCache
+	cache = &EndpointCache{Fetch: func(_ context.Context, path string) ([]byte, error) {
+		reads.Add(1)
+		cache.Invalidate() // a deploy during each read
+		return []byte(`{"d":{"results":[]}}`), nil
+	}}
+	_, err := cache.get(context.Background())
+	assert.ErrorContains(t, err, "changed during each read")
+	assert.EqualValues(t, maxDiscardedReads, reads.Load())
 }

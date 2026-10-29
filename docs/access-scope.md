@@ -118,7 +118,7 @@ whichever command or MCP tool sends it, including tools added later:
     `/http/api/hr`.
   - **OData versions.** `…/SRV;v=1` and `…/SRV;v=2` are different services. A URL segment named like another flow's
     versioned service is refused unless its version provably differs, meaning both are plain integers
-    (`;v=1` against `;v=2`). `SRV` without a version, `;v=`, `;V=2`, `;v=02`, `;v=+2`, `;v=2.0` or `;v=2;x=1` might
+    (`;v=1` against `;v=2`, not percent-encoded). `SRV` without a version, `;v=`, `;V=2`, `;v=02`, `;v=+2`, `;v=2.0` or `;v=2;x=1` might
     be read as `;v=2`, so they are refused unless a more specific entry point decides them.
   - **Refused:** two flows equally specific (also two flows listing the same URL), an entry point the guard cannot
     read (it is taken as a runtime might read it: decoded as a whole, dot segments resolved), and a list the
@@ -142,7 +142,9 @@ whichever command or MCP tool sends it, including tools added later:
     list must be the tenant's whole list, as that key sees it.
 - **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Calls to it need `test` and a target
   address that belongs to the sender of a flow in the scope. The guard reads those addresses from the allowed
-  flows' designtime content, parsed as XML (an archive with a repeated or ambiguous address is not used).
+  flows' designtime content: only the flow's model (the one `.iflw` in
+  `src/main/resources/scenarioflows/integrationflow/`), parsed as XML, properties only at their place. An archive
+  with no or several models, repeated entries, or a repeated or ambiguous address is not used.
   - **Configured addresses are not used.** An address set by a configuration parameter (`{{…}}`) is not used: a
     configuration change takes effect only with the next deployment, and nothing tells which value the running
     flow has. Test such a flow through its other senders, or give it a fixed ProcessDirect address.

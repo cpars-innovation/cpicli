@@ -21,6 +21,17 @@ All notable changes to cpictl. Coming from FlashPipe? See
     filtering.
   - **The harness address map follows the content.** When a flow changed after the map was built, the map is read
     again before the flow's address decides.
+  - **From the re-check:**
+    - **Only the flow's own model is read.** `pdaddress.FromArchive` reads only the single model in
+      `src/main/resources/scenarioflows/integrationflow/`. Before, it read every `.iflw` in the archive, so a decoy
+      model could claim another team's address. An archive without exactly one model, with repeated entry names, or
+      over 256 MiB (64 MiB per model) is refused.
+    - **Properties only at their place.** A property counts only at its place in the model
+      (`definitions/collaboration/messageFlow/extensionElements/property`, by namespace URI) and with text-only key
+      and value.
+    - **Encoded parameters prove nothing.** URL parameters that are percent-encoded as written (`;v%3D1`, `;v=%32`,
+      `;%76=2`) neither prove a different OData version nor match exactly.
+    - **Repeated invalidation is refused.** A lookup whose read is discarded by `Invalidate` three times is refused.
   - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
     harness) follow the deployed content, not later designtime or configuration changes.
   - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.

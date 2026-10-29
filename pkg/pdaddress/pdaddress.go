@@ -10,10 +10,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 )
@@ -76,53 +76,100 @@ func XMLUnescape(s string) string {
 }
 
 // FromArchive returns the ProcessDirect sender addresses of an integration
-// flow archive as written ({{parameter}} not resolved). The models are read
-// as XML (comments and other markup are not properties), and a sender with
-// a repeated or ambiguous address property makes the archive unreadable:
-// the access scope must not guess which address a flow listens on
-// (cpicli#65).
+// flow archive as written ({{parameter}} not resolved). Only the flow's model
+// counts: the one .iflw directly in src/main/resources/scenarioflows/
+// integrationflow/. An archive without one, with several, with repeated
+// entry names or over the size limits is an error, as is a model with a
+// repeated or ambiguous address: the access scope must not guess which
+// address a flow listens on (cpicli#65).
 func FromArchive(zipped []byte) ([]string, error) {
+	if len(zipped) > maxArchive {
+		return nil, fmt.Errorf("archive larger than %d bytes", maxArchive)
+	}
 	zr, err := zip.NewReader(bytes.NewReader(zipped), int64(len(zipped)))
 	if err != nil {
 		return nil, err
 	}
-	var out []string
+	names := map[string]bool{}
+	var model *zip.File
 	for _, f := range zr.File {
-		if !strings.HasSuffix(f.Name, ".iflw") || f.UncompressedSize64 > 64<<20 {
+		name := strings.TrimPrefix(f.Name, "/")
+		if names[name] {
+			return nil, fmt.Errorf("archive entry %s repeated", name)
+		}
+		names[name] = true
+		dir, file := path.Split(name)
+		if dir != modelDir || !strings.HasSuffix(file, ".iflw") {
 			continue
 		}
-		rc, err := f.Open()
-		if err != nil {
-			return nil, err
+		if model != nil {
+			return nil, fmt.Errorf("archive with more than one model in %s", modelDir)
 		}
-		model, err := io.ReadAll(io.LimitReader(rc, 64<<20))
-		rc.Close()
-		if err != nil {
-			return nil, err
-		}
-		addrs, err := ProcessDirectSenders(model)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", f.Name, err)
-		}
-		out = append(out, addrs...)
+		model = f
 	}
-	return out, nil
+	if model == nil {
+		return nil, fmt.Errorf("archive without a model in %s", modelDir)
+	}
+	if model.UncompressedSize64 > maxModel {
+		return nil, fmt.Errorf("model larger than %d bytes", maxModel)
+	}
+	rc, err := model.Open()
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(io.LimitReader(rc, maxModel+1))
+	rc.Close()
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxModel {
+		return nil, fmt.Errorf("model larger than %d bytes", maxModel)
+	}
+	return ProcessDirectSenders(data)
 }
 
+const (
+	modelDir   = "src/main/resources/scenarioflows/integrationflow/"
+	maxArchive = 256 << 20
+	maxModel   = 64 << 20
+)
+
+// The namespaces of an integration flow model.
+const (
+	nsBPMN = "http://www.omg.org/spec/BPMN/20100524/MODEL"
+	nsIFL  = "http:///com.sap.ifl.model/Ifl.xsd"
+)
+
 // ProcessDirectSenders reads a model (.iflw) as XML and returns the address
-// of each ProcessDirect sender. A property repeated within one message flow,
-// or a sender with more than one address property, is an error.
+// of each ProcessDirect sender. Only properties at their place count:
+// bpmn2:definitions/bpmn2:collaboration/bpmn2:messageFlow/
+// bpmn2:extensionElements/ifl:property/key|value (by namespace URI), with
+// text-only key and value. A property repeated within one message flow, a
+// sender with more than one address property, or markup inside a key or
+// value is an error.
 func ProcessDirectSenders(model []byte) ([]string, error) {
 	dec := xml.NewDecoder(bytes.NewReader(model))
 	dec.Strict = true
+	want := []xml.Name{{Space: nsBPMN, Local: "definitions"}, {Space: nsBPMN, Local: "collaboration"},
+		{Space: nsBPMN, Local: "messageFlow"}, {Space: nsBPMN, Local: "extensionElements"}, {Space: nsIFL, Local: "property"}}
 	var (
+		stack    []xml.Name
 		out      []string
-		inFlow   bool
 		props    map[string]string
-		key, val *strings.Builder
+		key, val strings.Builder
 		field    *strings.Builder
-		inProp   bool
 	)
+	at := func(n int) bool { // the stack is the first n names of want
+		if len(stack) != n {
+			return false
+		}
+		for i := range n {
+			if stack[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -133,35 +180,39 @@ func ProcessDirectSenders(model []byte) ([]string, error) {
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
+			if field != nil {
+				return nil, fmt.Errorf("markup inside a property's key or value")
+			}
+			stack = append(stack, t.Name)
 			switch {
-			case t.Name.Local == "messageFlow":
-				if inFlow {
-					return nil, errors.New("nested messageFlow")
-				}
-				inFlow, props = true, map[string]string{}
-			case inFlow && t.Name.Local == "property":
-				inProp, key, val = true, &strings.Builder{}, &strings.Builder{}
-			case inProp && t.Name.Local == "key":
-				field = key
-			case inProp && t.Name.Local == "value":
-				field = val
+			case at(3):
+				props = map[string]string{}
+			case at(5):
+				key.Reset()
+				val.Reset()
+			case len(stack) == 6 && at5(stack, want) && t.Name == (xml.Name{Local: "key"}):
+				field = &key
+			case len(stack) == 6 && at5(stack, want) && t.Name == (xml.Name{Local: "value"}):
+				field = &val
 			}
 		case xml.CharData:
 			if field != nil {
 				field.Write(t)
 			}
+		case xml.Comment, xml.ProcInst, xml.Directive:
+			if field != nil {
+				return nil, fmt.Errorf("markup inside a property's key or value")
+			}
 		case xml.EndElement:
 			switch {
-			case t.Name.Local == "key" || t.Name.Local == "value":
+			case field != nil:
 				field = nil
-			case inProp && t.Name.Local == "property":
-				inProp = false
+			case at(5):
 				if _, dup := props[key.String()]; dup {
 					return nil, fmt.Errorf("property %s repeated in a message flow", key.String())
 				}
 				props[key.String()] = val.String()
-			case inFlow && t.Name.Local == "messageFlow":
-				inFlow = false
+			case at(3):
 				addr, err := processDirectAddress(props)
 				if err != nil {
 					return nil, err
@@ -170,9 +221,20 @@ func ProcessDirectSenders(model []byte) ([]string, error) {
 					out = append(out, addr)
 				}
 			}
+			stack = stack[:len(stack)-1]
 		}
 	}
 	return out, nil
+}
+
+// at5 reports whether the first five names of stack are want's.
+func at5(stack, want []xml.Name) bool {
+	for i := range 5 {
+		if stack[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // processDirectAddress is the address of a ProcessDirect sender ("" for

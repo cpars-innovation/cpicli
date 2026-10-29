@@ -334,6 +334,10 @@ const (
 // rebuild of the address map.
 const pdMaxAge = 5 * time.Minute
 
+// maxDiscardedReads is how many of its own reads an endpoint lookup lets
+// Invalidate discard before it refuses.
+const maxDiscardedReads = 3
+
 // pdClockSkew allows for the tenant's clock being behind the guard's when
 // ModifiedAt is compared with the address map's build time.
 const pdClockSkew = time.Minute
@@ -1092,6 +1096,7 @@ func (c *EndpointCache) get(ctx context.Context) ([]endpointEntry, error) {
 	fresh := func() bool {
 		return !c.builtAt.IsZero() && time.Since(c.builtAt) < cmpDuration(c.Refresh, 30*time.Second)
 	}
+	discarded := 0 // own reads thrown away by Invalidate
 	for {
 		c.mu.Lock()
 		ch, lastErr := c.building, c.err
@@ -1165,6 +1170,11 @@ func (c *EndpointCache) get(ctx context.Context) ([]endpointEntry, error) {
 		case err != nil:
 			return nil, err
 		case stale:
+			// a list that keeps changing while it is read is refused
+			// after a few tries, not read for ever
+			if discarded++; discarded >= maxDiscardedReads {
+				return nil, errors.New("the endpoint list changed during each read")
+			}
 			continue
 		}
 		return entries, nil
@@ -1213,7 +1223,12 @@ type endpointPath struct {
 	wild bool
 }
 
-type endpointSeg struct{ name, params string }
+type endpointSeg struct {
+	name, params string
+	// encoded: the parameters were percent-encoded as written; a runtime
+	// may or may not decode them, so they prove nothing (cpicli#65)
+	encoded bool
+}
 
 // parseEndpoint reads a runtime URL (entry false) or an entry point. A
 // segment that cannot be decoded, or decodes to a separator, gives false.
@@ -1262,7 +1277,7 @@ func parseEndpoint(u string, entry bool) (endpointPath, bool) {
 			strings.Count(ps, ";") != strings.Count(params, ";") {
 			return p, false
 		}
-		p.segs = append(p.segs, endpointSeg{n, ps})
+		p.segs = append(p.segs, endpointSeg{name: n, params: ps, encoded: strings.Contains(params, "%")})
 	}
 	if p.wild && p.segs[len(p.segs)-1].params != "" {
 		return p, false // "…;v=1*": what it covers is unclear
@@ -1292,7 +1307,8 @@ func rawEndpoint(u string) endpointPath {
 		}
 		for _, raw := range strings.Split(strings.TrimPrefix(clean, "/"), "/") {
 			name, params, _ := strings.Cut(raw, ";")
-			p.segs = append(p.segs, endpointSeg{name, params})
+			// decoded as a whole, its parameters prove nothing either
+			p.segs = append(p.segs, endpointSeg{name: name, params: params, encoded: strings.Contains(rest, "%")})
 		}
 		return p
 	}
@@ -1329,11 +1345,16 @@ func (e endpointPath) covers(t endpointPath) (n int, differs bool) {
 			}
 		case es.name != ts.name:
 			return -1, false
-		case es.params != "" && es.params != ts.params:
-			if !paramsMayMatch(es.params, ts.params) {
-				return -1, false
-			}
+		case es.params == "":
+		case es.encoded || ts.encoded:
+			// as written, the parameters may read either way: never a
+			// certain match, never a proven difference
 			differs = true
+		case es.params == ts.params:
+		case paramsMayMatch(es.params, ts.params):
+			differs = true
+		default:
+			return -1, false
 		}
 		n += 1 + len(es.name)
 		if es.params != "" {
