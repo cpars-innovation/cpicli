@@ -5,6 +5,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Security process (#60):** `SECURITY.md` says how to report a vulnerability (privately, through GitHub) and
+  how fixes are released. The release workflow now refuses a release whose changes since the last tag touch the
+  access scope, the HTTP client, sign-in, the MCP server or credential handling, unless it is started with
+  `security_verified` after an independent verification. Security fixes get GitHub Security Advisories with
+  affected and fixed versions; the earlier ones (0.34.1 to 0.35.9) are published.
+
 - **Signed releases (#61).** Every archive and `SHA256SUMS` gets a GitHub build provenance attestation
   (`gh attestation verify <file> --repo cpars-innovation/cpicli`), and `SHA256SUMS` a keyless cosign signature
   (`SHA256SUMS.sigstore.json`, a new release asset). The release notes and the README show how to verify both.

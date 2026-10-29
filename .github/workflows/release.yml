@@ -22,6 +22,10 @@ on:
         description: "Mark as pre-release"
         type: boolean
         default: false
+      security_verified:
+        description: "Independently verified (required when security-relevant code changed, see SECURITY.md)"
+        type: boolean
+        default: false
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
@@ -66,6 +70,29 @@ jobs:
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "Releasing ${version}" >> "$GITHUB_STEP_SUMMARY"
+
+      # SECURITY.md: changes to the access scope, the HTTP client, sign-in or
+      # credential handling are released only after an independent
+      # verification, recorded by the security_verified input
+      - name: Security gate
+        env:
+          VERIFIED: ${{ inputs.security_verified }}
+        run: |
+          last="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD^ 2>/dev/null || true)"
+          [ -n "${last}" ] || exit 0
+          changed="$(git diff --name-only "${last}" HEAD -- \
+            pkg/scope pkg/httpclnt pkg/pdaddress internal/auth internal/mcp \
+            internal/cmd/root.go internal/cmd/service_details.go 'internal/cmd/profile*.go' \
+            'pkg/ops/security*.go' pkg/ops/keymaterial.go pkg/testrun/refpath.go \
+            | grep -v '_test\.go$' || true)"
+          [ -n "${changed}" ] || exit 0
+          { echo "Security-relevant changes since ${last}:"; echo "${changed}" | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "::warning::security-relevant changes since ${last}; a pushed tag cannot record the verification (SECURITY.md)"
+          elif [ "${VERIFIED}" != "true" ]; then
+            echo "::error::security-relevant changes since ${last} (see the summary): release after an independent verification, with security_verified set (SECURITY.md)"
+            exit 1
+          fi
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
