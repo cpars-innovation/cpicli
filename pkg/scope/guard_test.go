@@ -479,10 +479,22 @@ func TestGuardRefusesAmbiguousRequests(t *testing.T) {
 		req("POST", "/api/v1/IntegrationPackages('SD_Orders')/IntegrationDesigntimeArtifacts", `{"Id":"SD_New","Configurations":[{"Id":"x"}]}`),
 		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":"CPICTL_Test_Stub","Name":"x"}`),
 		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"id":"FI_B"}`),
+		// a repeated wrapper: the tenant may take either
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"d":{"Id":"FI_Billing"},"d":{"Name":"y"}}`),
+		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"d":{"Id":"CPICTL_Test_Stub"},"d":{"Name":"y"}}`),
+		req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"SD_New"},"d":{"Id":"FI_New"}}`),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"d":{"d":{"Id":"FI_Billing"}}}`),
+		// keys the tenant may read differently
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", "{\"Id\":\"SD_Orders\",\"I\\u0000d\":\"FI_Billing\"}"),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", "{\"Id\":\"SD_Orders\",\"\xffId\":\"FI_Billing\"}"),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"Id":"SD_Orders","__metadata":{"uri":"x"}}`),
+		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":null,"Name":"A"}`),
 	} {
 		refused(t, g.Before(r))
 	}
 	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"d":{"Id":"SD_Orders","Name":"Orders","ShortText":"x"}}`)), "cpictl's package update")
+	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"SD_New","Name":"New","ShortText":"x","Version":"1.0.0"}}`)), "cpictl's package create")
+	refused(t, g.Before(req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"FI_New","Name":"New","ShortText":"x"}}`)))
 	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":"SD_A","Name":"A","ArtifactContent":"UEs="}`)))
 	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Name":"A","ArtifactContent":"UEs="}`)))
 

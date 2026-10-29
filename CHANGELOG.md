@@ -56,7 +56,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
     would trust it. Installing the tooling (`cpictl test tools install`) now needs a run without a scope.
   - **From the fifth re-check:** under a scope, a write body must be one flat JSON object (or `{"d":{...}}`
     around one). A nested object or array, such as an OData deep insert of artifacts into a new package, is
-    refused, and so is a `PUT` whose body `Id` names another package or artifact than the URL.
+    refused, and so is a `PUT` whose body `Id` names another package or artifact than the URL. The `{"d":...}`
+    wrapper counts only as the sole key, once; keys must not repeat, hold a NUL or be invalid UTF-8.
+  - **Package create under a scope works:** cpictl's own `{"d":{...}}` package body was refused, because the guard
+    read only top-level keys.
   - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
     harness) follow the deployed content, not later designtime or configuration changes.
   - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.

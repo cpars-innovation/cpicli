@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
@@ -1582,105 +1583,107 @@ func withoutDefaultPort(u string) string {
 
 // --- helpers for decisions -------------------------------------------------
 
-// bodyField reads a top-level string field of a JSON body. A body that
-// repeats a top-level key (also differing in case) gives "": which one the
-// tenant takes is its choice, and every decision that reads a body needs a
-// valid ID from it, so an empty one is refused.
-func bodyField(body []byte, field string) string {
-	dec := json.NewDecoder(bytes.NewReader(body))
-	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
-		return ""
+// bodyObject reads a write body: one JSON object, or the verbose form
+// {"d":{...}} (the sole key "d" around an object, unwrapped once). Its keys
+// must not repeat (also differing in case), be invalid UTF-8 or hold a NUL;
+// no data may follow. With flat, every value must be plain (no object or
+// array: an OData deep insert of other entities, cpicli#65). Otherwise ok is
+// false: which key or value the tenant takes would be its choice.
+func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
+	if !utf8.Valid(body) {
+		return nil, false
 	}
-	seen := map[string]bool{}
-	value := ""
-	for dec.More() {
-		t, err := dec.Token()
-		if err != nil {
-			return ""
+	walk := func(b []byte) (map[string]json.RawMessage, []string, bool) {
+		dec := json.NewDecoder(bytes.NewReader(b))
+		if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+			return nil, nil, false
 		}
-		k, _ := t.(string)
-		if seen[strings.ToLower(k)] {
-			return ""
+		raw, seen := map[string]json.RawMessage{}, map[string]bool{}
+		var keys []string
+		for dec.More() {
+			t, err := dec.Token()
+			if err != nil {
+				return nil, nil, false
+			}
+			k, _ := t.(string)
+			if seen[strings.ToLower(k)] || strings.ContainsRune(k, 0) || strings.ContainsRune(k, utf8.RuneError) {
+				return nil, nil, false
+			}
+			seen[strings.ToLower(k)] = true
+			var v json.RawMessage
+			if err := dec.Decode(&v); err != nil {
+				return nil, nil, false
+			}
+			raw[k] = v
+			keys = append(keys, k)
 		}
-		seen[strings.ToLower(k)] = true
+		if t, err := dec.Token(); err != nil || t != json.Delim('}') {
+			return nil, nil, false
+		}
+		if _, err := dec.Token(); err != io.EOF {
+			return nil, nil, false // trailing data
+		}
+		return raw, keys, true
+	}
+	raw, keys, ok := walk(body)
+	if !ok {
+		return nil, false
+	}
+	if len(keys) == 1 && keys[0] == "d" && bytes.HasPrefix(bytes.TrimSpace(raw["d"]), []byte("{")) {
+		if raw, keys, ok = walk(raw["d"]); !ok {
+			return nil, false
+		}
+	}
+	fields = map[string]any{}
+	for _, k := range keys {
 		var v any
-		if err := dec.Decode(&v); err != nil {
-			return ""
-		}
-		if k == field {
-			value, _ = v.(string)
-		}
-	}
-	if t, err := dec.Token(); err != nil || t != json.Delim('}') {
-		return ""
-	}
-	if _, err := dec.Token(); err != io.EOF {
-		return "" // trailing data
-	}
-	return value
-}
-
-// flatBody reports whether a write body is one JSON object of plain values,
-// and returns its "Id" (any case) if it has one. A nested object or array (an
-// OData deep insert of other entities, cpicli#65), a repeated key or trailing
-// data is not accepted under a scope. An empty body is flat, and so is the
-// verbose form {"d":{...}} of a flat object (cpictl's package bodies).
-func flatBody(body []byte) (id string, hasID, ok bool) {
-	if len(bytes.TrimSpace(body)) == 0 {
-		return "", false, true
-	}
-	var wrapped map[string]json.RawMessage
-	if json.Unmarshal(body, &wrapped) == nil && len(wrapped) == 1 {
-		if inner, isD := wrapped["d"]; isD && bytes.HasPrefix(bytes.TrimSpace(inner), []byte("{")) {
-			body = inner
-		}
-	}
-	dec := json.NewDecoder(bytes.NewReader(body))
-	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
-		return "", false, false
-	}
-	seen := map[string]bool{}
-	for dec.More() {
-		t, err := dec.Token()
-		if err != nil {
-			return "", false, false
-		}
-		k, _ := t.(string)
-		if seen[strings.ToLower(k)] {
-			return "", false, false
-		}
-		seen[strings.ToLower(k)] = true
-		var v any
-		if err := dec.Decode(&v); err != nil {
-			return "", false, false
+		if err := json.Unmarshal(raw[k], &v); err != nil {
+			return nil, false
 		}
 		switch v.(type) {
 		case map[string]any, []any:
-			return "", false, false
+			if flat {
+				return nil, false
+			}
 		}
-		if strings.EqualFold(k, "Id") {
-			id, _ = v.(string)
-			hasID = true
-		}
+		fields[k] = v
 	}
-	if t, err := dec.Token(); err != nil || t != json.Delim('}') {
-		return "", false, false
-	}
-	if _, err := dec.Token(); err != io.EOF {
-		return "", false, false
-	}
-	return id, hasID, true
+	return fields, true
 }
 
-// writeBody refuses a write body that is not flat, or whose Id names another
-// entity than the URL (want "": a create, whose Id the caller reads itself).
+// bodyField reads a top-level string field (in the exact case) of a JSON
+// body, as bodyObject reads it. An unreadable body gives "": every decision
+// that reads a body needs a valid ID from it, so an empty one is refused.
+func bodyField(body []byte, field string) string {
+	fields, ok := bodyObject(body, false)
+	if !ok {
+		return ""
+	}
+	v, _ := fields[field].(string)
+	return v
+}
+
+// writeBody refuses a write body that is not flat (bodyObject; an empty body
+// is), or whose Id (any case) names another entity than the URL (want "":
+// a create, whose Id the caller reads with bodyField). __metadata, an
+// object, is refused too: cpictl never sends it.
 func (g *Guard) writeBody(body []byte, want string) error {
-	id, hasID, ok := flatBody(body)
-	switch {
-	case !ok:
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil
+	}
+	fields, ok := bodyObject(body, true)
+	if !ok {
 		return g.refuse(&Refusal{Reason: "a write body with nested objects or arrays, repeated keys or other than one JSON object is not accepted under a scope"})
-	case want != "" && hasID && id != want:
-		return g.refuse(&Refusal{Reason: "the body's Id does not match the request"})
+	}
+	if want == "" {
+		return nil
+	}
+	for k, v := range fields {
+		if strings.EqualFold(k, "Id") {
+			if id, _ := v.(string); id != want {
+				return g.refuse(&Refusal{Reason: "the body's Id does not match the request"})
+			}
+		}
 	}
 	return nil
 }
