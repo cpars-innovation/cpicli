@@ -79,7 +79,7 @@ deny:
 | `upload` | create and update artifacts and packages, value mapping pairs |
 | `deploy` | deploy and undeploy |
 | `configure` | externalised parameters |
-| `test` | send test messages, test runs (the test tooling `CPICTL_Test*` may be read and called, never changed) |
+| `test` | send test messages, test runs (the test tooling `CPICTL_Test_Harness`, `_Stub` and `_XSLT` may be read and called, never changed) |
 | `log-level` | change a flow's log level (TRACE shows payloads) |
 | `delete` | delete artifacts and packages |
 | `pd-write` | change Partner Directory entries |
@@ -140,7 +140,7 @@ whichever command or MCP tool sends it, including tools added later:
   - Each guard (one per user and scope in the cpictl gateway) reads the list itself, unless guards share an
     `EndpointCache` (Go: `Guard.Endpoints`). Share one only among guards whose `Fetch` uses the same API key: the
     list must be the tenant's whole list, as that key sees it.
-- **The test harness** (`CPICTL_Test_*`) forwards to a ProcessDirect address. Under a scope it is **off by
+- **The test harness** (`CPICTL_Test_Harness`) forwards to a ProcessDirect address. Under a scope it is **off by
   default**: every harness call is refused ("the test harness (ProcessDirect tests) is off under this scope"), in
   cpictl and in the cpictl gateway. Reading which address a flow listens on means reading its archive the way SAP's
   loader does, and that is not yet checked on a tenant. `cpictl --scope-harness` turns it on, with these rules
@@ -157,8 +157,11 @@ whichever command or MCP tool sends it, including tools added later:
     the flow first.
   - **A changed flow is read again.** When a flow changed after the address map was built, the map is read again
     before its address decides.
-- **The test tooling** is exempt only by exact name: flows starting with `CPICTL_Test_`, and the Partner Directory
-  partners `CPICTL_Test` and `CPICTL_Stub`. Teams share these partners, so their parameters (stub rules,
+- **The test tooling** is exempt only by exact name: the flows `CPICTL_Test_Harness`, `CPICTL_Test_Stub` and
+  `CPICTL_Test_XSLT`, and the Partner Directory partners `CPICTL_Test` and `CPICTL_Stub`. Any other flow whose ID
+  starts with `CPICTL_Test_` is decided by its package like any flow, and its endpoints are refused, except those
+  of generated script test flows (`CPICTL_Test_Script_*`): a copy of the harness under another ID would reach any
+  ProcessDirect address without the harness check. So under a scope, `--harness` with another ID is refused. Teams share these partners, so their parameters (stub rules,
   stylesheets under test) are decided by their ID: it must start with an owner and a dot, where the owner is a flow
   the scope grants `test` on (stub rules, e.g. `Orders_Route.erp`) or a partner it may read (stylesheets: cpictl
   names them `<partner>.<parameter>`). With `test`, those may be read and written; others are hidden and refused,

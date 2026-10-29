@@ -154,6 +154,32 @@ func TestGuardToolingPartners(t *testing.T) {
 	refused(t, g.Before(req("PUT", "/api/v1/StringParameters(Pid='CPICTL_Testing_Prod',Id='x')", "")))
 	assert.False(t, toolingFlow("CPICTL_TestingProd"), "flows need the CPICTL_Test_ prefix")
 	assert.True(t, toolingFlow("CPICTL_Test_Harness"))
+	assert.False(t, toolingFlow("CPICTL_Test_Harness_v2"), "only the exact tooling IDs (#65)")
+}
+
+// Only the tooling's own flows are tooling (#65): a copy of the harness under
+// another ID would reach any ProcessDirect address without the harness
+// check, and any other flow named CPICTL_Test_* is decided by its package.
+func TestGuardToolingCopies(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	eps := `{"d":{"results":[
+		{"Name":"CPICTL_Test_Harness_v2","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/test2"}]}},
+		{"Name":"CPICTL_Test_Script_0011223344","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/script/0011223344"}]}},
+		{"Name":"CPICTL_Test_Stub","EntryPoints":{"results":[{"Url":"https://rt/http/cpictl/stub/*"}]}}]}}`
+	endpoints(g, eps)
+	send := func(path string) *httpclnt.GuardRequest {
+		return &httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt", Path: path,
+			Header: map[string]string{"CpictlTargetAddress": "/fi/in"}}
+	}
+	r := refused(t, g.Before(send("/http/cpictl/test2")))
+	assert.Contains(t, r.Error(), notAnEntryPoint)
+	assert.NotContains(t, r.Error(), "Harness_v2", "the refusal names no flow")
+	assert.Contains(t, r.Audit, "CPICTL_Test_Harness_v2")
+	refused(t, g.Before(send("/http/cpictl/script/0011223344")))
+	assert.NoError(t, g.Before(send("/http/cpictl/stub/SD_A.billing")), "the stub")
+	for _, id := range []string{"CPICTL_Test_Harness_v2", "CPICTL_Test_Script_0011223344", "CPICTL_Test_X"} {
+		refused(t, g.Before(req("GET", "/api/v1/IntegrationDesigntimeArtifacts(Id='"+id+"',Version='active')", "")))
+	}
 }
 
 func TestGuardFiltersLists(t *testing.T) {

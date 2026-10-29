@@ -50,14 +50,27 @@ func (r *Refusal) Error() string {
 // ExitCode implements output.ExitCoder.
 func (r *Refusal) ExitCode() int { return exitcode.Scope }
 
-// ToolingPrefix marks cpictl's own test tooling flows (harness, receiver
-// stub, XSLT test flow): a scope that grants "test" may read and call them
+// ToolingPrefix starts the IDs of cpictl's own test tooling flows. Only the
+// three of them with their exact IDs (harness, receiver stub, XSLT test
+// flow) are tooling: a scope that grants "test" may read and call them
 // wherever they are installed, but never change them. Their messages are
 // decided by the flow they tested (toolingTarget). Their Partner Directory
 // partners (stub answers, stylesheets under test) may be written with "test".
+// Any other flow with the prefix (a copy of the harness, a generated script
+// test flow) is decided by its package like any flow, and its endpoints,
+// except a script test flow's, are refused (cpicli#65): a copy of the harness
+// reaches any ProcessDirect address without the harness check.
 const ToolingPrefix = testtools.IDPrefix
 
-func toolingFlow(id string) bool { return strings.HasPrefix(id, ToolingPrefix) }
+func toolingFlow(id string) bool {
+	return id == testtools.HarnessID || id == testtools.StubID || id == testtools.XSLTID
+}
+
+// toolingCopy: a flow named like the tooling that is not one of it, nor a
+// generated script test flow.
+func toolingCopy(id string) bool {
+	return strings.HasPrefix(id, ToolingPrefix) && !toolingFlow(id) && !strings.HasPrefix(id, testtools.ScriptIDPrefix)
+}
 
 func toolingPartner(pid string) bool { return pid == testtools.XSLTPID || pid == testtools.StubPID }
 
@@ -954,6 +967,11 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 			}
 		}
 		return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: to}, action: ActionTest}}}, nil
+	}
+	if toolingCopy(flow) {
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint,
+			Audit: "the URL belongs to flow " + flow + ", named like cpictl's test tooling but not one of its flows (" +
+				testtools.HarnessID + ", " + testtools.StubID + ", " + testtools.XSLTID + ")"})
 	}
 	// another team's endpoint is refused like one that does not exist: the
 	// refusal must not tell which addresses exist and whose flows they reach

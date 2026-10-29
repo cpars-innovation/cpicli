@@ -44,6 +44,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
       - archive entries that are not plain paths (`./`, `..`, `//`, `\`, a leading `/`);
       - any `.iflw` other than the one model, including other cases and folders named `*.iflw`;
       - an entry whose local header names a different file than the central directory.
+  - **From the third re-check:** only the test tooling's own flows (`CPICTL_Test_Harness`, `CPICTL_Test_Stub`,
+    `CPICTL_Test_XSLT`) are exempt from the scope. Before, every flow whose ID started with `CPICTL_Test_` was, so
+    a copy of the harness under another ID (`--harness CPICTL_Test_Harness_v2`) could be called by any scope with
+    `test` and reached any ProcessDirect address, without the harness check; a `CPICTL_Test_*` flow in another
+    team's package was readable too. Such flows are now decided by their package, and their endpoints are refused
+    (generated script test flows, `CPICTL_Test_Script_*`, excepted). Also in 0.35.8 and 0.35.9.
   - **Mock tenant:** a deployment records the addresses the flow listens on. ProcessDirect calls (and the
     harness) follow the deployed content, not later designtime or configuration changes.
   - **Conformance probes:** an OData service without `;v=`, and with an empty `;v=`.
