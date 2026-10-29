@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -33,6 +34,10 @@ type Refusal struct {
 	Resource Resource
 	Action   string
 	Reason   string // when the request could not be classified
+	// Audit says what really decided, e.g. which other flow owns a URL,
+	// where Reason must stay generic. It is for logs the caller cannot read
+	// (a gateway's), never part of Error() (cpicli#63).
+	Audit string
 }
 
 func (r *Refusal) Error() string {
@@ -65,6 +70,9 @@ type Guard struct {
 	// package, message to flow). It runs through the guarded executer; the
 	// guard recognises its own requests by their context.
 	Fetch func(ctx context.Context, path string) ([]byte, error)
+	// Endpoints, when set, is the tenant's endpoint list shared with other
+	// guards of the same tenant; nil: the guard reads its own with Fetch.
+	Endpoints *EndpointCache
 	// OnRefuse is called for every refusal (events, audit); may be nil.
 	OnRefuse func(*Refusal)
 	// Refresh is the minimum time between two rebuilds of the artifact map
@@ -86,15 +94,8 @@ type Guard struct {
 	targets      map[string]string    // correlation ID -> allowed flow outside the tooling that shares it
 	noTarget     map[string]time.Time // correlation ID -> until when "no allowed flow" holds
 	correlations map[string]string    // tooling message GUID -> correlation ID ("": not looked up)
-	// allEndpoints are the entry points of every flow of the tenant (the
-	// guard's own lookup, replaced on each refresh), so that an allowed
-	// flow's entry point does not cover another team's below it
-	allEndpoints []endpointEntry
-	epBuiltAt    time.Time
-	epBuilding   chan struct{}     // closed when the running refresh ends
-	epErr        error             // the last refresh's error
-	epFailedAt   time.Time         // the last failed refresh (zero after a success)
-	pdFlows      map[string]string // ProcessDirect address -> flow, for allowed flows (built on first harness call)
+	ownEndpoints *EndpointCache       // when Endpoints is nil
+	pdFlows      map[string]string    // ProcessDirect address -> flow, for allowed flows (built on first harness call)
 	pdBuiltAt    time.Time
 	tenant       string // scheme://host:port of the tenant API
 }
@@ -906,9 +907,9 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 	if !ok {
 		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint})
 	}
-	flow, why := g.endpointOwner(r.Ctx, target)
+	flow, why, audit := g.endpointOwner(r.Ctx, target)
 	if flow == "" {
-		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + why})
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + why, Audit: audit})
 	}
 	if flow == testtools.HarnessID {
 		addr := ""
@@ -931,7 +932,8 @@ func (g *Guard) classifyEndpoint(r *httpclnt.GuardRequest) (decision, error) {
 	// (cpicli#54). With grants, read on a package does not mean test on it.
 	// A flow the scope may read is named (the caller sees it anyway).
 	if !g.mayTest(r.Ctx, flow) && !g.mayRead(r.Ctx, flow) {
-		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint})
+		return decision{}, g.refuse(&Refusal{Reason: "the endpoint " + written + " " + notAnEntryPoint,
+			Audit: "the URL belongs to flow " + flow + ", which the scope may neither read nor test"})
 	}
 	return decision{need: []need{{res: Resource{Kind: KindArtifact, ID: flow}, action: ActionTest}}}, nil
 }
@@ -958,19 +960,20 @@ func (g *Guard) mayOnFlow(ctx context.Context, id, action string) bool {
 // of the tenant (an exact entry point before a longer prefix before a
 // shorter one). The caller's need on that flow decides. Two flows equally
 // specific (also two flows listing the same URL), an entry point that could
-// not be read, or none: "" with the reason.
-func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (string, string) {
+// not be read, or none: "" with the reason for the caller (generic) and what
+// decided, for the audit.
+func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (flow, reason, audit string) {
 	// the reason stays generic: the error would show the caller the
 	// tenant's API path and answer
-	if err := g.refreshEndpoints(ctx); err != nil {
-		return "", "cannot be checked: the tenant's entry points could not be read"
+	entries, err := g.endpointCache().get(ctx)
+	if err != nil {
+		return "", "cannot be checked: the tenant's entry points could not be read", "reading ServiceEndpoints: " + err.Error()
 	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	// only the tenant-wide list decides: entry points seen in earlier
 	// answers may belong to a flow that has moved since (cpicli#55)
-	best, owners, variant := -1, map[string]bool{}, -1
-	for _, e := range g.allEndpoints {
+	best, owners, variant, variantOf := -1, map[string]bool{}, -1, ""
+	var bestURLs []string
+	for _, e := range entries {
 		n, differs := e.path.covers(target)
 		switch {
 		case n < 0:
@@ -978,70 +981,124 @@ func (g *Guard) endpointOwner(ctx context.Context, target endpointPath) (string,
 			// a segment of the same name with parameters the runtime may
 			// read as the entry point's (";V=2", ";v=02"): this entry point
 			// makes what it is as specific as ambiguous
-			variant = max(variant, n)
+			if n > variant {
+				variant, variantOf = n, cmp.Or(e.flow, "(unreadable)")+" "+e.url
+			}
 		case n > best:
-			best, owners = n, map[string]bool{e.flow: true}
+			best, owners, bestURLs = n, map[string]bool{e.flow: true}, []string{e.url}
 		case n == best:
 			owners[e.flow] = true
+			bestURLs = append(bestURLs, e.url)
 		}
-	}
-	if variant >= best {
-		return "", notAnEntryPoint
 	}
 	// two flows equally specific, or an entry point the guard could not
 	// read (flow ""): refused, with the text of an unknown endpoint (the
 	// caller learns nothing about the other flow)
-	if best < 0 || len(owners) > 1 || owners[""] {
-		return "", notAnEntryPoint
+	switch {
+	case best < 0 && variant < 0:
+		return "", notAnEntryPoint, "no entry point covers the URL"
+	case variant >= best:
+		return "", notAnEntryPoint, "the entry point " + variantOf + " may cover the URL with other parameters"
+	case owners[""]:
+		return "", notAnEntryPoint, "an entry point the guard cannot read covers the URL: " + strings.Join(bestURLs, ", ")
+	case len(owners) > 1:
+		return "", notAnEntryPoint, fmt.Sprintf("flows %s cover the URL equally (%s)",
+			strings.Join(slices.Sorted(maps.Keys(owners)), ", "), strings.Join(bestURLs, ", "))
 	}
 	for f := range owners {
-		return f, ""
+		return f, "", ""
 	}
-	return "", ""
+	return "", notAnEntryPoint, ""
 }
 
-// refreshEndpoints reads the entry points of every flow of the tenant (the
-// guard's own call, cached like the artifact map).
-// An error leaves no decision: without every flow's entry points, an
-// allowed one could cover another team's.
-// One refresh runs at a time; the others wait for its result.
-func (g *Guard) refreshEndpoints(ctx context.Context) error {
+// endpointCache is Endpoints, or the guard's own cache read with Fetch.
+func (g *Guard) endpointCache() *EndpointCache {
+	if g.Endpoints != nil {
+		return g.Endpoints
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.ownEndpoints == nil {
+		g.ownEndpoints = &EndpointCache{Refresh: g.Refresh, Fetch: func(ctx context.Context, path string) ([]byte, error) {
+			if g.Fetch == nil {
+				return nil, errors.New("the guard has no Fetch")
+			}
+			return g.Fetch(ctx, path)
+		}}
+	}
+	return g.ownEndpoints
+}
+
+// EndpointCache holds the entry points of every flow of one tenant, which
+// decide whose flow a runtime URL reaches. It reads them with Fetch
+// (ServiceEndpoints) at most every Refresh (default 30 seconds): one read at
+// a time, and after a failed read not again for 5 seconds (refusing in
+// between). Guards of the same tenant can share one through Guard.Endpoints,
+// so that N users mean one read per Refresh, not N (cpicli#63). Without it,
+// each guard keeps its own. Fetch must read the tenant directly (not through
+// a guard).
+type EndpointCache struct {
+	Fetch   func(ctx context.Context, path string) ([]byte, error)
+	Refresh time.Duration
+
+	mu       sync.Mutex
+	entries  []endpointEntry
+	builtAt  time.Time
+	building chan struct{} // closed when the running read ends
+	err      error         // the last read's error
+	failedAt time.Time     // the last failed read (zero after a success)
+}
+
+// Invalidate makes the next decision read the list anew (after a deploy, for
+// example).
+func (c *EndpointCache) Invalidate() {
+	c.mu.Lock()
+	c.builtAt, c.failedAt, c.err = time.Time{}, time.Time{}, nil
+	c.mu.Unlock()
+}
+
+// get returns the current entry points. An error leaves no decision: without
+// every flow's entry points, an allowed one could cover another team's.
+func (c *EndpointCache) get(ctx context.Context) ([]endpointEntry, error) {
+	fresh := func() bool {
+		return !c.builtAt.IsZero() && time.Since(c.builtAt) < cmpDuration(c.Refresh, 30*time.Second)
+	}
 	for {
-		g.mu.Lock()
-		fresh := !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second)
-		ch, lastErr := g.epBuilding, g.epErr
+		c.mu.Lock()
+		ch, lastErr := c.building, c.err
 		switch {
-		case fresh:
-			g.mu.Unlock()
-			return nil
-		case ch == nil && lastErr != nil && time.Since(g.epFailedAt) < mapRetry:
+		case fresh():
+			entries := c.entries
+			c.mu.Unlock()
+			return entries, nil
+		case ch == nil && lastErr != nil && time.Since(c.failedAt) < mapRetry:
 			// a failed read is not repeated for every message in an outage
-			g.mu.Unlock()
-			return lastErr
-		case g.Fetch == nil:
-			g.mu.Unlock()
-			return errors.New("the guard has no Fetch")
+			c.mu.Unlock()
+			return nil, lastErr
+		case c.Fetch == nil:
+			c.mu.Unlock()
+			return nil, errors.New("the endpoint cache has no Fetch")
 		case ch != nil:
-			g.mu.Unlock()
+			c.mu.Unlock()
 			select {
 			case <-ch:
 			case <-ctx.Done():
-				return ctx.Err()
+				return nil, ctx.Err()
 			}
-			g.mu.Lock()
-			fresh, lastErr = !g.epBuiltAt.IsZero() && time.Since(g.epBuiltAt) < cmpDuration(g.Refresh, 30*time.Second), g.epErr
-			g.mu.Unlock()
-			if fresh {
-				return nil
-			}
-			if lastErr != nil {
-				return lastErr
+			c.mu.Lock()
+			ok, err, entries := fresh(), c.err, c.entries
+			c.mu.Unlock()
+			switch {
+			case ok:
+				return entries, nil
+			case err != nil:
+				return nil, err
 			}
 			continue
 		}
 		ch = make(chan struct{})
-		g.epBuilding = ch
-		g.mu.Unlock()
+		c.building = ch
+		c.mu.Unlock()
 
 		err := func() (err error) {
 			defer func() {
@@ -1051,25 +1108,28 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 			}()
 			bctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), mapBuildTimeout)
 			defer cancel()
-			body, err := g.Fetch(internal(bctx), "/api/v1/ServiceEndpoints?$expand=EntryPoints")
+			body, err := c.Fetch(internal(bctx), "/api/v1/ServiceEndpoints?$expand=EntryPoints")
 			if err != nil {
 				return err
 			}
 			eps := mergeEndpoints(body)
-			g.mu.Lock()
-			g.allEndpoints, g.epBuiltAt = eps, time.Now()
-			g.mu.Unlock()
+			c.mu.Lock()
+			c.entries, c.builtAt = eps, time.Now()
+			c.mu.Unlock()
 			return nil
 		}()
-		g.mu.Lock()
-		g.epBuilding, g.epErr = nil, err
-		g.epFailedAt = time.Time{}
+		c.mu.Lock()
+		c.building, c.err, c.failedAt = nil, err, time.Time{}
 		if err != nil {
-			g.epFailedAt = time.Now()
+			c.failedAt = time.Now()
 		}
-		g.mu.Unlock()
+		entries := c.entries
+		c.mu.Unlock()
 		close(ch)
-		return err
+		if err != nil {
+			return nil, err
+		}
+		return entries, nil
 	}
 }
 
@@ -1078,6 +1138,7 @@ func (g *Guard) refreshEndpoints(ctx context.Context) error {
 type endpointEntry struct {
 	path endpointPath
 	flow string
+	url  string // as listed, for the audit
 }
 
 // mergeEndpoints lists the entry points of an endpoint list.
@@ -1091,10 +1152,10 @@ func mergeEndpoints(body []byte) []endpointEntry {
 				if u := str(ep, "Url"); u != "" {
 					p, ok := parseEndpoint(withoutDefaultPort(u), true)
 					if !ok {
-						out = append(out, endpointEntry{path: rawEndpoint(withoutDefaultPort(u))})
+						out = append(out, endpointEntry{path: rawEndpoint(withoutDefaultPort(u)), url: u})
 						continue
 					}
-					out = append(out, endpointEntry{path: p, flow: str(e, "Name")})
+					out = append(out, endpointEntry{path: p, flow: str(e, "Name"), url: u})
 				}
 			}
 		}

@@ -163,7 +163,16 @@ MCP `help` (topic `server`) shows the active scope and its SHA-256, so the calle
 started enforces.
 
 Go: `pkg/scope` (`Parse`, `Scope.Allows`, `Scope.Hash`, `Guard`, `Guard.Check`) is the same matcher the CLI uses, so other tools
-(CPI Studio) decide identically.
+(CPI Studio) decide identically. For a server that runs many guards (the cpictl gateway):
+
+- `Refusal.Audit` says what really decided where the refusal text stays generic (for example which other flow owns
+  a URL). Write it only to logs the caller cannot read; `Error()` never includes it. cpictl does not log it.
+- `Guard.Endpoints` takes an `EndpointCache` shared by the guards of one tenant: one `ServiceEndpoints` read per
+  30 seconds for all users instead of one per guard. `Invalidate` forces a new read (after a deploy). Its `Fetch`
+  reads the tenant directly.
+- `pkg/pdaddress.Reader(fetch)` builds `Guard.ProcessDirectAddresses` from a Fetch-style reader (the active
+  designtime archive and its configuration), so the test harness can be decided without the API client. Like
+  `pkg/scope`, it depends on the standard library and the packages its dependency test lists.
 
 ## Limits
 

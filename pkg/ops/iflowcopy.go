@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/pdaddress"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -298,8 +299,6 @@ type senderAddress struct {
 }
 
 var (
-	reMessageFlow    = regexp.MustCompile(`(?s)<(?:\w+:)?messageFlow\b.*?</(?:\w+:)?messageFlow>`)
-	reModelProperty  = regexp.MustCompile(`(?s)<key>([^<]*)</key>\s*<value>([^<]*)</value>`)
 	reWholeParameter = regexp.MustCompile(`^\{\{([^{}]+)\}\}$`)
 )
 
@@ -307,29 +306,8 @@ var (
 // one (the property chosen as in AnalyzeIFlow).
 func findSenderAddresses(model string) []senderAddress {
 	var res []senderAddress
-	for _, mf := range reMessageFlow.FindAllStringIndex(model, -1) {
-		block := model[mf[0]:mf[1]]
-		props := map[string][]int{}
-		values := map[string]string{}
-		for _, m := range reModelProperty.FindAllStringSubmatchIndex(block, -1) {
-			key := block[m[2]:m[3]]
-			props[key] = []int{mf[0] + m[4], mf[0] + m[5]}
-			values[key] = xmlUnescape(block[m[4]:m[5]])
-		}
-		if values["direction"] != "Sender" {
-			continue
-		}
-		adapter := values["ComponentType"]
-		if adapter == "" {
-			_, cname := variant(values["cmdVariantUri"])
-			adapter = strings.TrimPrefix(cname, "sap:")
-		}
-		for _, k := range addressKeys {
-			if strings.TrimSpace(values[k]) != "" {
-				res = append(res, senderAddress{adapter: adapter, value: values[k], start: props[k][0], end: props[k][1]})
-				break
-			}
-		}
+	for _, s := range pdaddress.Senders(model) {
+		res = append(res, senderAddress{adapter: s.Adapter, value: s.Value, start: s.Start, end: s.End})
 	}
 	return res
 }
@@ -484,9 +462,7 @@ func xmlEscape(s string) string {
 	return b.String()
 }
 
-func xmlUnescape(s string) string {
-	return strings.NewReplacer("&lt;", "<", "&gt;", ">", "&quot;", `"`, "&apos;", "'", "&#xA;", "\n", "&#xD;", "\r", "&#x9;", "\t", "&amp;", "&").Replace(s)
-}
+func xmlUnescape(s string) string { return pdaddress.XMLUnescape(s) }
 
 func textResource(p string) bool {
 	switch strings.ToLower(filepath.Ext(p)) {

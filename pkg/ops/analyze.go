@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/pkg/iflow"
+	"github.com/cpars-innovation/cpicli/pkg/pdaddress"
 	"io"
 	"io/fs"
 	"path"
@@ -101,7 +102,7 @@ type Trigger struct {
 
 // addressKeys are adapter properties that hold the address of an endpoint,
 // in order of preference.
-var addressKeys = []string{"urlPath", "address", "httpAddressWithoutQuery", "path", "directory", "QueueName_inbound", "QueueName_outbound", "queueName"}
+var addressKeys = pdaddress.AddressKeys
 
 // ScriptFacts describe one script of an integration flow.
 type ScriptFacts struct {

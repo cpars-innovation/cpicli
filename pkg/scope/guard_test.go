@@ -244,9 +244,7 @@ func TestGuardHarnessTargets(t *testing.T) {
 // endpoints makes g's Fetch answer the tenant-wide endpoint list with eps,
 // read at the next decision.
 func endpoints(g *Guard, eps string) {
-	g.mu.Lock()
-	g.epBuiltAt = time.Time{}
-	g.mu.Unlock()
+	g.endpointCache().Invalidate()
 	fetch := g.Fetch
 	g.Fetch = func(ctx context.Context, path string) ([]byte, error) {
 		if strings.HasPrefix(path, "/api/v1/ServiceEndpoints") {
@@ -842,9 +840,7 @@ func TestGuardEndpointOfAnotherTeamBelowAnAllowedOne(t *testing.T) {
 		assert.NoError(t, send("/http/api/orders"), own)
 
 		failing = true
-		g.mu.Lock()
-		g.epBuiltAt = time.Time{}
-		g.mu.Unlock()
+		g.endpointCache().Invalidate()
 		r := refused(t, send("/http/api/orders"))
 		assert.Contains(t, r.Error(), "could not be read")
 	}
@@ -888,9 +884,7 @@ func TestGuardWithoutFetchRefusesTestMessages(t *testing.T) {
 	_, err := g.After(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints", ""), 200, nil, []byte(eps))
 	require.NoError(t, err)
 	g.Fetch = nil
-	g.mu.Lock()
-	g.epBuiltAt = time.Time{}
-	g.mu.Unlock()
+	g.endpointCache().Invalidate()
 	r := refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd/orders"}))
 	assert.Contains(t, r.Error(), "could not be read")
 	assert.Contains(t, g.runsAsRead(context.Background(), "SD_A"), "no Fetch")
@@ -1130,4 +1124,47 @@ func TestGuardEndpointHardening(t *testing.T) {
 		refused(t, send("https://rt:443", p))
 	}
 	assert.NoError(t, send("https://rt:443", "/http/odd/y"), "no reading of /http/odd/./x covers it")
+}
+
+// A refusal tells the caller only the generic text; Audit says what decided,
+// for logs the caller cannot read (cpicli#63).
+func TestGuardRefusalAudit(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	endpoints(g, `{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/shared/*"},{"Url":"https://rt/http/same"}]}},
+		{"Name":"FI_B","EntryPoints":{"results":[{"Url":"https://rt/http/shared/billing"},{"Url":"https://rt/http/same"},{"Url":"https://rt/gw/SRV;v=2"}]}}]}}`)
+	send := func(path string) *Refusal {
+		return refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: path}))
+	}
+	for path, audit := range map[string]string{
+		"/http/shared/billing": "flow FI_B",
+		"/http/same":           "flows FI_B, SD_A cover the URL equally",
+		"/gw/SRV;V=2/x":        "FI_B https://rt/gw/SRV;v=2",
+		"/nowhere":             "no entry point covers the URL",
+	} {
+		r := send(path)
+		assert.Contains(t, r.Audit, audit, path)
+		assert.NotContains(t, r.Error(), "FI_B", path)
+		assert.NotContains(t, r.Error(), r.Audit, path)
+	}
+}
+
+// Guards of one tenant can share the endpoint list: one read for all of them
+// (cpicli#63).
+func TestGuardSharedEndpointCache(t *testing.T) {
+	var reads atomic.Int32
+	cache := &EndpointCache{Fetch: func(_ context.Context, path string) ([]byte, error) {
+		reads.Add(1)
+		return []byte(`{"d":{"results":[{"Name":"SD_A","EntryPoints":{"results":[{"Url":"https://rt/http/sd"}]}}]}}`), nil
+	}}
+	for range 5 {
+		g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+		g.Endpoints = cache
+		assert.NoError(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd"}))
+	}
+	assert.EqualValues(t, 1, reads.Load())
+	cache.Invalidate()
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","test"]}`)
+	g.Endpoints = cache
+	assert.NoError(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/sd"}))
+	assert.EqualValues(t, 2, reads.Load())
 }

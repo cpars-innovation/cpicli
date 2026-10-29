@@ -5,6 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Guard API for servers (#63):**
+  - `Refusal.Audit` says what decided where the refusal text stays generic (which other flow owns a URL, two flows
+    on one URL, a parameter variant, an unreadable entry point, a failed endpoint read). It is not part of
+    `Error()`, and cpictl does not log it.
+  - `EndpointCache` / `Guard.Endpoints` lets the guards of one tenant share a single endpoint list (one read per
+    30 seconds for all of them), with `Invalidate`.
+  - New package `pkg/pdaddress` (standard library only): `Reader(fetch)` builds `Guard.ProcessDirectAddresses`
+    without the API client, so the cpictl gateway can decide test-harness calls. `pkg/ops` uses the same parser.
+
 - **Smaller library packages (#62).** `pkg/mocktenant` no longer links `golang.org/x/crypto/ssh`. The mock reads
   uploaded SSH keys only when the program imports `pkg/mocktenant/sshkeys` (`cpictl mock-tenant` does);
   otherwise an SSH key upload is answered with 501. Embedders such as the cpictl gateway can drop their build tag.
