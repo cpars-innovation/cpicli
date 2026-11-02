@@ -545,7 +545,6 @@ func (m *Tenant) CSRFFetches() int {
 // DownloadLatency).
 func (m *Tenant) PeakDownloads() int64 { return m.peakInFlight.Load() }
 
-// Requests returns "METHOD path" for every request received.
 // LastQuery returns a query parameter of the last request to path.
 func (m *Tenant) LastQuery(path, param string) string {
 	m.mu.Lock()
@@ -553,6 +552,15 @@ func (m *Tenant) LastQuery(path, param string) string {
 	return m.queries[path].Get(param)
 }
 
+// HasQuery reports whether the last request to path had the query
+// parameter (with any value).
+func (m *Tenant) HasQuery(path, param string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.queries[path].Has(param)
+}
+
+// Requests returns "METHOD path" for every request received.
 func (m *Tenant) Requests() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1239,7 +1247,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		update := r.URL.Query().Get("update") == "true"
-		i := slices.IndexFunc(m.Keystore, func(e KeystoreEntry) bool { return e.Alias == string(alias) })
+		i := m.keystoreIndex(string(alias))
 		switch {
 		case i >= 0 && !update:
 			http.Error(w, "entry exists", http.StatusConflict)
@@ -1247,7 +1255,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		case i >= 0:
 			m.Keystore[i].DER, m.Keystore[i].NotAfter = der, cert.NotAfter
 		default:
-			m.Keystore = append(m.Keystore, KeystoreEntry{Alias: string(alias), DER: der, NotAfter: cert.NotAfter})
+			m.Keystore = append(m.Keystore, KeystoreEntry{Alias: strings.ToLower(string(alias)), DER: der, NotAfter: cert.NotAfter})
 		}
 		w.WriteHeader(http.StatusOK)
 
@@ -1261,7 +1269,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && reKeystoreCert.MatchString(path):
 		alias, _ := hex.DecodeString(reKeystoreCert.FindStringSubmatch(path)[1])
 		for _, e := range m.Keystore {
-			if e.Alias == string(alias) {
+			if strings.EqualFold(e.Alias, string(alias)) {
 				_, _ = w.Write(e.DER)
 				return
 			}
@@ -1277,7 +1285,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for i, e := range m.Keystore {
-			if e.Alias == string(alias) {
+			if strings.EqualFold(e.Alias, string(alias)) {
 				if r.URL.Query().Get("update") != "true" {
 					w.WriteHeader(http.StatusConflict)
 					return
@@ -1287,7 +1295,7 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		m.Keystore = append(m.Keystore, KeystoreEntry{Alias: string(alias), DER: der, NotAfter: time.Now().Add(365 * 24 * time.Hour)})
+		m.Keystore = append(m.Keystore, KeystoreEntry{Alias: strings.ToLower(string(alias)), DER: der, NotAfter: time.Now().Add(365 * 24 * time.Hour)})
 		w.WriteHeader(http.StatusNoContent)
 
 	case r.Method == http.MethodGet && path == "/api/v1/MessageProcessingLogs":

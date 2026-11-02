@@ -9,9 +9,11 @@ import (
 	_ "github.com/cpars-innovation/cpicli/pkg/mocktenant/sshkeys" // the mock reads uploaded SSH keys
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
+	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/ssh"
@@ -104,6 +106,59 @@ func TestApplyKeyMaterial(t *testing.T) {
 	_, err = ApplyCredentials(m.Executer(), f, false)
 	assert.ErrorContains(t, err, "T_SSH_PW is not set")
 	assert.Equal(t, before, m.KeyPairImports)
+}
+
+// A real tenant lists aliases in lower case: a second apply of mixed-case
+// aliases finds the entries (no new import the tenant would refuse), and a
+// renewed SSH key replaces the old one without the update option (SSH keys
+// are import-only there).
+func TestApplyKeyMaterialMixedCaseAliases(t *testing.T) {
+	m := cpitest.NewTenant(t, nil)
+	file := filepath.Join(t.TempDir(), "credentials.yml")
+	yaml := strings.NewReplacer("partner_signing", "Partner_Signing", "sftp_partner", "SFTP_Partner").Replace(keyMaterialYAML)
+	require.NoError(t, os.WriteFile(file, []byte(yaml), 0o600))
+	p12 := append([]byte{0x30, 0x82, 0x01, 0x02}, []byte("pkcs12-bytes")...)
+	t.Setenv("T_KP", base64.StdEncoding.EncodeToString(p12))
+	t.Setenv("T_KP_PW", "kp-secret-pass")
+	t.Setenv("T_SSH", base64.StdEncoding.EncodeToString(sshKeyFile(t, "ssh-secret-pass")))
+	t.Setenv("T_SSH_PW", "ssh-secret-pass")
+	t.Setenv("T_PGP", "-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nlQPGBGfake\n-----END PGP PRIVATE KEY BLOCK-----\n")
+	t.Setenv("T_PGP_PW", "pgp-secret-pass")
+	f, err := LoadCredentialsFile(file)
+	require.NoError(t, err)
+	actions := func(res *CredentialsApplyResult) map[string]string {
+		out := map[string]string{}
+		for _, r := range res.Results {
+			out[r.Kind+"/"+r.Name] = r.Action
+		}
+		return out
+	}
+
+	res, err := ApplyCredentials(m.Executer(), f, false)
+	require.NoError(t, err)
+	assert.Equal(t, "CREATED", actions(res)["key-pair/Partner_Signing"])
+	assert.Equal(t, "CREATED", actions(res)["ssh-key/SFTP_Partner"])
+	var aliases []string
+	for _, e := range m.Keystore {
+		aliases = append(aliases, e.Alias)
+	}
+	assert.ElementsMatch(t, []string{"partner_signing", "sftp_partner"}, aliases, "stored in lower case like a real tenant")
+
+	again, err := ApplyCredentials(m.Executer(), f, false)
+	require.NoError(t, err)
+	assert.Equal(t, "UNCHANGED", actions(again)["key-pair/Partner_Signing"])
+	assert.Equal(t, "UNCHANGED", actions(again)["ssh-key/SFTP_Partner"])
+	assert.Equal(t, 1, m.KeyPairImports)
+
+	t.Setenv("T_SSH", base64.StdEncoding.EncodeToString(sshKeyFile(t, "ssh-secret-pass")))
+	t.Setenv("T_KP", base64.StdEncoding.EncodeToString(append(p12, []byte("-renewed")...)))
+	rotated, err := ApplyCredentials(m.Executer(), f, false)
+	require.NoError(t, err)
+	assert.Equal(t, "UPDATED", actions(rotated)["ssh-key/SFTP_Partner"])
+	assert.Equal(t, "UPDATED", actions(rotated)["key-pair/Partner_Signing"])
+	assert.False(t, m.HasQuery("/api/v1/SSHKeyGenerationRequests", "update"))
+	assert.Equal(t, 1, m.Count("DELETE /api/v1/KeystoreEntries('"+cpi.HexAlias("sftp_partner")+"')"))
+	assert.Len(t, m.Keystore, 2)
 }
 
 // Sources a vault gives: base64 of binary content, PEM and armored text as

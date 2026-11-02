@@ -5,6 +5,18 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+**Fixed (seen on real tenants):**
+
+- `keystore generate-key-pair`, `keystore generate-ssh-key` and `credentials apply` for SSH keys no longer send
+  the `update` query option, which real tenants refuse (400 "invalid query option(s) [update]" for key pairs,
+  500 "jschKeyPair is null" for SSH keys). Replacing an existing entry (`--update`, a renewed SSH key) now deletes
+  it and creates it again; if the create fails, the error says the old entry was deleted.
+- Keystore aliases are matched without regard to case, as tenants store and list them in lower case. A second
+  `credentials apply`, `backup restore` or key rotation with a mixed-case alias no longer imports the entry as
+  new (which the tenant refused with 400).
+- **Embedding `pkg/cpi`:** `Security.GenerateKeyPair` and `Security.GenerateSSHKey` no longer take an `update`
+  argument. The mock tenant refuses `update` on those requests and stores aliases in lower case, like a real tenant.
+
 ## 0.36.0
 
 The security release from the cpictl gateway's review (cpicli#58 to #65): endpoint routing is checked against a

@@ -586,7 +586,7 @@ func (r *restorer) keyMaterialFromFile(f *CredentialsFile) error {
 	have := map[string]bool{}
 	if entries, err := s.KeystoreEntries("system"); err == nil {
 		for _, e := range entries {
-			have[e.Alias] = true
+			have[strings.ToLower(e.Alias)] = true // the tenant lists aliases in lower case
 		}
 	}
 	if keys, err := s.PgpKeys("secring"); err == nil {
@@ -605,20 +605,20 @@ func (r *restorer) keyMaterialFromFile(f *CredentialsFile) error {
 	}
 	var items []item
 	for _, k := range f.KeyPairs {
-		r.keyMaterial[k.Alias] = true
+		r.keyMaterial[strings.ToLower(k.Alias)] = true
 		src := []*SecretSource{&k.PKCS12}
 		if k.Password != nil {
 			src = append(src, k.Password)
 		}
-		items = append(items, item{&k, k.Alias, "key pair", have[k.Alias], src})
+		items = append(items, item{&k, k.Alias, "key pair", have[strings.ToLower(k.Alias)], src})
 	}
 	for _, k := range f.SSHKeys {
-		r.keyMaterial[k.Alias] = true
+		r.keyMaterial[strings.ToLower(k.Alias)] = true
 		src := []*SecretSource{&k.PrivateKey}
 		if k.Passphrase != nil {
 			src = append(src, k.Passphrase)
 		}
-		items = append(items, item{&k, k.Alias, "SSH key", have[k.Alias], src})
+		items = append(items, item{&k, k.Alias, "SSH key", have[strings.ToLower(k.Alias)], src})
 	}
 	for _, k := range f.PGPSecretKeys {
 		items = append(items, item{&k, k.Name, "PGP secret key", have["pgp/"+k.Name], []*SecretSource{&k.Keys, &k.Passphrase}})
@@ -700,15 +700,15 @@ func (r *restorer) certificates(ctx context.Context) error {
 	}
 	have := map[string]bool{}
 	for _, e := range entries {
-		have[e.Alias] = true
+		have[strings.ToLower(e.Alias)] = true // the tenant lists aliases in lower case
 	}
 	for _, it := range items {
 		switch {
 		case it.Restore == "sap":
 			continue
-		case it.Restore != "certificate" && r.keyMaterial[it.Alias]:
+		case it.Restore != "certificate" && r.keyMaterial[strings.ToLower(it.Alias)]:
 			continue // restored (or listed) by the credentials step from credentials.yml
-		case have[it.Alias]:
+		case have[strings.ToLower(it.Alias)]:
 			r.step(RestoreCertificates, it.Alias, RestoreUnchanged, "exists", nil)
 		case it.Restore == "certificate" && it.File != "":
 			data, err := os.ReadFile(r.file(it.File))

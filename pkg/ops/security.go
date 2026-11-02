@@ -565,7 +565,7 @@ func ImportCertificate(exe *httpclnt.HTTPExecuter, alias string, data []byte, up
 			return nil, err
 		}
 		for _, e := range entries {
-			if e.Alias == alias {
+			if sameAlias(e.Alias, alias) {
 				return nil, output.Usagef("keystore entry %s already exists (use update to replace it)", alias)
 			}
 		}

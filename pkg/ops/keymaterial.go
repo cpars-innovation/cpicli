@@ -172,12 +172,18 @@ func (m *resolvedKeyMaterial) deploy(exe *httpclnt.HTTPExecuter, dryRun bool) (*
 				return res, nil
 			}
 		}
+		alias := m.name
+		if existing != nil {
+			alias = existing.Alias // as the tenant lists it (lower case)
+		}
 		if m.kind == KindKeyPair {
-			err = sec.ImportKeyPair(m.name, m.data, m.secret, existing != nil)
+			err = sec.ImportKeyPair(alias, m.data, m.secret, existing != nil)
 		} else {
-			req := cpi.SSHKeyRequest{KeyPairRequest: cpi.KeyPairRequest{Alias: m.name, KeyType: "RSA", CommonName: m.commonName},
+			// SSH keys are import-only on a real tenant: no update option,
+			// an existing entry is replaced by delete and create
+			req := cpi.SSHKeyRequest{KeyPairRequest: cpi.KeyPairRequest{Alias: alias, KeyType: "RSA", CommonName: m.commonName},
 				SSHFile: string(m.data), Password: m.secret}
-			err = sec.GenerateSSHKey(req, existing != nil)
+			err = replaceEntry(sec, existing, func() error { return sec.GenerateSSHKey(req) })
 		}
 		if err != nil {
 			return fail(err)
@@ -213,7 +219,7 @@ func (m *resolvedKeyMaterial) sameAs(sec *cpi.Security, existing *cpi.KeystoreEn
 	if m.kind == KindKeyPair {
 		// the tenant reads the PKCS#12 without importing it (409 with the
 		// certificate): no PKCS#12 parser here, any encryption works
-		p, err := sec.PreviewKeyPair(m.name, m.data, m.secret, true)
+		p, err := sec.PreviewKeyPair(existing.Alias, m.data, m.secret, true)
 		if err != nil {
 			return false, err
 		}
@@ -223,7 +229,7 @@ func (m *resolvedKeyMaterial) sameAs(sec *cpi.Security, existing *cpi.KeystoreEn
 	if err != nil {
 		return false, err
 	}
-	have, err := sec.SSHPublicKey(m.name)
+	have, err := sec.SSHPublicKey(existing.Alias)
 	if err != nil {
 		return false, nil // not an SSH key (yet): replace it
 	}
