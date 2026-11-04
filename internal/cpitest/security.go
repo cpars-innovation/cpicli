@@ -107,8 +107,10 @@ func fromHex(s string) string {
 	return string(b)
 }
 
+// keystoreIndex finds an entry like a real tenant: aliases are stored in
+// lower case and matched without regard to case.
 func (m *Tenant) keystoreIndex(alias string) int {
-	return slices.IndexFunc(m.Keystore, func(e KeystoreEntry) bool { return e.Alias == alias })
+	return slices.IndexFunc(m.Keystore, func(e KeystoreEntry) bool { return strings.EqualFold(e.Alias, alias) })
 }
 
 func (m *Tenant) nextID() int64 {
@@ -230,6 +232,16 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 		w.WriteHeader(http.StatusNoContent)
 
 	case post && (path == "/api/v1/KeyPairGenerationRequests" || path == "/api/v1/SSHKeyGenerationRequests"):
+		// like a real tenant: these requests only create; the update query
+		// option is refused (400 for key pairs, 500 for SSH keys)
+		if q.Has("update") {
+			if path == "/api/v1/SSHKeyGenerationRequests" {
+				odataError(w, http.StatusInternalServerError, "Internal Server Error", "jschKeyPair is null")
+			} else {
+				odataError(w, http.StatusBadRequest, "Bad Request", "Request URI contains the invalid query option(s) [update]")
+			}
+			return true
+		}
 		var body map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -247,12 +259,11 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 				notAfter = time.UnixMilli(ms)
 			}
 		}
-		i := m.keystoreIndex(alias)
-		if i >= 0 && q.Get("update") != "true" {
+		if m.keystoreIndex(alias) >= 0 {
 			odataError(w, http.StatusConflict, "Conflict", "Entry with alias "+alias+" already exists")
 			return true
 		}
-		e, err := keyPairEntry(alias, cn, notAfter)
+		e, err := keyPairEntry(strings.ToLower(alias), cn, notAfter)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return true
@@ -287,11 +298,7 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 			}
 			m.SSHKeyRequests = append(m.SSHKeyRequests, rec)
 		}
-		if i >= 0 {
-			m.Keystore[i] = e
-		} else {
-			m.Keystore = append(m.Keystore, e)
-		}
+		m.Keystore = append(m.Keystore, e)
 		w.WriteHeader(http.StatusCreated)
 
 	case post && path == "/api/v1/KeyPairResources":
@@ -329,7 +336,7 @@ func (m *Tenant) handleSecurity(w http.ResponseWriter, r *http.Request) bool {
 				"SubjectDN": "CN=" + body.Alias, "FingerprintSha256": fp}})
 			return true
 		}
-		e := KeystoreEntry{Alias: body.Alias, Type: "KeyPair", NotAfter: time.Now().AddDate(1, 0, 0), Fingerprint: fp}
+		e := KeystoreEntry{Alias: strings.ToLower(body.Alias), Type: "KeyPair", NotAfter: time.Now().AddDate(1, 0, 0), Fingerprint: fp}
 		if i >= 0 {
 			m.Keystore[i] = e
 		} else {

@@ -120,6 +120,61 @@ func TestGenerateSSHKeyNeverReturnsThePassword(t *testing.T) {
 	assert.NotContains(t, string(out), secret)
 }
 
+// A real tenant takes no update option on KeyPairGenerationRequests and
+// SSHKeyGenerationRequests (400 / 500 with it) and lists aliases in lower
+// case: an existing entry, found in any case, is replaced by delete and
+// create.
+func TestGenerateReplacesWithoutUpdateOption(t *testing.T) {
+	t.Setenv("CPICTL_TEST_SECRET", secret)
+	mock := cpitest.NewTenant(t, nil)
+	exe := mock.Executer()
+	now := time.Now()
+	req := cpi.KeyPairRequest{Alias: "ClientKey", CommonName: "client.example.com"}
+
+	res, err := GenerateKeyPair(exe, req, false, now)
+	require.NoError(t, err)
+	assert.Equal(t, "CREATED", res.Action)
+	require.NotNil(t, res.Entry, "found again although the tenant lists it in lower case")
+	assert.Equal(t, "clientkey", res.Entry.Alias)
+	assert.False(t, mock.HasQuery("/api/v1/KeyPairGenerationRequests", "update"), "no update option")
+
+	_, err = GenerateKeyPair(exe, req, false, now)
+	assert.ErrorContains(t, err, "already exists")
+	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
+
+	res, err = GenerateKeyPair(exe, req, true, now)
+	require.NoError(t, err)
+	assert.Equal(t, "UPDATED", res.Action)
+	assert.Equal(t, 1, mock.Count("DELETE /api/v1/KeystoreEntries('"+cpi.HexAlias("clientkey")+"')"))
+	assert.False(t, mock.HasQuery("/api/v1/KeyPairGenerationRequests", "update"))
+	assert.Len(t, mock.Keystore, 1)
+
+	pw := &SecretSource{Env: "CPICTL_TEST_SECRET"}
+	ssh := cpi.KeyPairRequest{Alias: "SFTP_Partner", CommonName: "sftp"}
+	res, err = GenerateSSHKey(exe, ssh, sshKeyFile(t, secret), pw, false, now)
+	require.NoError(t, err)
+	assert.Equal(t, "CREATED", res.Action)
+	_, err = GenerateSSHKey(exe, ssh, sshKeyFile(t, secret), pw, false, now)
+	assert.ErrorContains(t, err, "already exists")
+	res, err = GenerateSSHKey(exe, ssh, sshKeyFile(t, secret), pw, true, now)
+	require.NoError(t, err)
+	assert.Equal(t, "UPDATED", res.Action)
+	assert.Equal(t, "SSHKey", res.Entry.Type)
+	assert.False(t, mock.HasQuery("/api/v1/SSHKeyGenerationRequests", "update"))
+	assert.Len(t, mock.Keystore, 2)
+
+	// a failed create after the delete says the old entry is gone
+	_, err = GenerateSSHKey(exe, ssh, []byte("not a key"), nil, true, now)
+	assert.ErrorContains(t, err, "sftp_partner was deleted to be replaced")
+	assert.Len(t, mock.Keystore, 1)
+}
+
+func TestSameAlias(t *testing.T) {
+	assert.True(t, sameAlias("MyKey", "mykey"))
+	assert.True(t, sameAlias("sftp_partner", "SFTP_PARTNER"))
+	assert.False(t, sameAlias("mykey", "mykey2"))
+}
+
 func TestKeystoreHistory(t *testing.T) {
 	mock := cpitest.NewTenant(t, nil)
 	mock.KeystoreHistory = []cpitest.KeystoreEntry{{Alias: "client", NotAfter: time.Now().AddDate(-1, 0, 0)}, {Alias: "other", NotAfter: time.Now()}}

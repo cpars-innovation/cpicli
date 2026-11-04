@@ -60,13 +60,15 @@ func (r KeyPairRequest) body() map[string]any {
 }
 
 // GenerateKeyPair has the tenant generate a key pair in the system keystore
-// (KeyPairGenerationRequests). update replaces an existing alias.
-func (s *Security) GenerateKeyPair(r KeyPairRequest, update bool) error {
+// (KeyPairGenerationRequests). The request creates a new alias only: a real
+// tenant refuses the update query option here (400 "Request URI contains the
+// invalid query option(s) [update]"); replace an entry by deleting it first.
+func (s *Security) GenerateKeyPair(r KeyPairRequest) error {
 	payload, err := json.Marshal(r.body())
 	if err != nil {
 		return err
 	}
-	return s.write(http.MethodPost, fmt.Sprintf("/api/v1/KeyPairGenerationRequests?returnKeystoreEntries=false&update=%t", update),
+	return s.write(http.MethodPost, "/api/v1/KeyPairGenerationRequests?returnKeystoreEntries=false",
 		payload, "application/json", "Generate key pair")
 }
 
@@ -80,8 +82,10 @@ type SSHKeyRequest struct {
 	Password string `json:"-"`
 }
 
-// GenerateSSHKey creates or imports an SSH key.
-func (s *Security) GenerateSSHKey(r SSHKeyRequest, update bool) error {
+// GenerateSSHKey creates or imports an SSH key under a new alias. Like
+// GenerateKeyPair it takes no update option (a real tenant answers 500
+// "jschKeyPair is null" with it); replace an entry by deleting it first.
+func (s *Security) GenerateSSHKey(r SSHKeyRequest) error {
 	b := r.body()
 	if r.SSHFile != "" {
 		// the tenant reads the key file only as base64 (raw text: "cannot
@@ -96,7 +100,7 @@ func (s *Security) GenerateSSHKey(r SSHKeyRequest, update bool) error {
 		return err
 	}
 	// Sent without request-body logging: it may contain the key and password
-	return s.write(http.MethodPost, fmt.Sprintf("/api/v1/SSHKeyGenerationRequests?returnKeystoreEntries=false&update=%t", update),
+	return s.write(http.MethodPost, "/api/v1/SSHKeyGenerationRequests?returnKeystoreEntries=false",
 		payload, "application/json", "Generate SSH key")
 }
 
