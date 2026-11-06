@@ -679,6 +679,13 @@ func checkProjectConfig(files []configFile) error {
 			return fmt.Errorf("%s contains %s: set it in the profile or $HOME/cpictl.yaml (a repository file must not change the production guard)", project.path, k)
 		}
 	}
+	// masking protects what an agent in the repository reads: a repository
+	// file must not loosen it (cpicli#75)
+	for _, k := range []string{"no-redact", "send-payloads", "redact-payloads", "masking-control"} {
+		if project.v.InConfig(k) {
+			return fmt.Errorf("%s contains %s: set it in the profile or $HOME/cpictl.yaml (a repository file must not loosen masking)", project.path, k)
+		}
+	}
 	// the user's gateway token is sent to the gateway: a repository file
 	// must not choose where
 	if project.v.InConfig("gateway") {

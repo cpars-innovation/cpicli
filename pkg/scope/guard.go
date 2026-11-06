@@ -1602,6 +1602,11 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 	if !utf8.Valid(body) {
 		return nil, false
 	}
+	// a flat body nests two levels at most ({"d":{…}}): anything deeper is
+	// refused by one linear scan before any of it is parsed (cpicli#75)
+	if flat && jsonDepth(body) > 2 {
+		return nil, false
+	}
 	// outer: the body's own object, where the first key may be the "d"
 	// wrapper; with flat any other object or array value is refused before
 	// it is read (a large nested value would cost seconds, cpicli#75)
@@ -1622,9 +1627,10 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 				return nil, nil, false
 			}
 			seen[strings.ToLower(k)] = true
-			if flat && !(outer && len(keys) == 0 && k == "d") {
+			if flat {
 				rest := bytes.TrimLeft(b[dec.InputOffset():], " \t\r\n:")
-				if len(rest) > 0 && (rest[0] == '{' || rest[0] == '[') {
+				wrapper := outer && len(keys) == 0 && k == "d" && len(rest) > 0 && rest[0] == '{'
+				if !wrapper && len(rest) > 0 && (rest[0] == '{' || rest[0] == '[') {
 					return nil, nil, false
 				}
 			}
@@ -1671,6 +1677,34 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 		fields[k] = v
 	}
 	return fields, true
+}
+
+// jsonDepth is the deepest nesting of objects and arrays in a JSON text,
+// outside strings (a linear scan; the text need not be valid JSON).
+func jsonDepth(b []byte) int {
+	depth, deepest, inString, escaped := 0, 0, false, false
+	for _, c := range b {
+		switch {
+		case inString:
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				inString = false
+			}
+		case c == '"':
+			inString = true
+		case c == '{' || c == '[':
+			if depth++; depth > deepest {
+				deepest = depth
+			}
+		case c == '}' || c == ']':
+			depth--
+		}
+	}
+	return deepest
 }
 
 // maxBodyKeys is the most keys a write body's object may have under a

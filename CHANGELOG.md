@@ -74,6 +74,14 @@ access scope.
   files carrying `••••` are refused; nested write bodies under a scope are refused before they are read;
   `RuntimeLocationListCommand` is GET only; Partner Directory marks match in any case; MCP error texts are
   masked; `runtimes watch` is masked under `--redact`.
+- **From the second verification (#75):** card numbers after `-` and inside longer digit runs (`qty 12 4111…`)
+  are masked; quoted, braced and bracketed connection-string passwords are masked; MCP masks name/value pairs
+  like `cpictl mask` (any name key, every value key, any value type) and values of any type under a sensitive
+  key; in gateway mode a `--mask-config` can only add masking, `--send-payloads` is ignored and `set_masking`
+  only tightens; a repository's `cpictl.yaml` can no longer loosen masking; IBANs need their country's exact
+  length (hashes and GUIDs keep their value) and match identifier fields only whole; a `d` wrapper holding an
+  array or a deep object is refused before it is parsed; configuration updates carrying `••••` are refused;
+  short `Basic` credentials and URL passwords with `@` and `/` are masked whole.
 
 ## 0.37.0
 

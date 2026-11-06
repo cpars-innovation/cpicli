@@ -59,9 +59,10 @@ func addRedactFlags(c *cobra.Command) {
 // --no-redact turns it off, --redact, CPICTL_REDACT or redact: true in a
 // config file turn it on.
 // In gateway mode redaction is always on: --no-redact (from a flag, the
-// environment or a profile) is ignored there, with a warning (cpicli#75).
-// The gateway enforces its own masking server-side; this keeps the client
-// from undoing it.
+// environment or a profile) is ignored there, with a warning, and a mask
+// config can only add masking (cpicli#75). Until the gateway masks its
+// answers itself (cpictl-gateway#28), this client-side masking is the only
+// layer, so it must not be undone from the client.
 func redactOn(cmd *cobra.Command) bool {
 	if config.GetString(cmd, "gateway") != "" {
 		if config.GetBool(cmd, "no-redact") {
@@ -87,7 +88,11 @@ func applyRedaction(cmd *cobra.Command) error {
 		agentHint(cmd)
 		return nil
 	}
-	masker, err := loadMasker(config.GetString(cmd, "mask-config"))
+	cfg, _, err := loadMaskConfig(config.GetString(cmd, "mask-config"))
+	if err != nil {
+		return err
+	}
+	_, masker, err := gatewayMaskConfig(cmd, cfg)
 	if err != nil {
 		return err
 	}

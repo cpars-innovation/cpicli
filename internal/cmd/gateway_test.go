@@ -86,6 +86,26 @@ func TestGatewayMode(t *testing.T) {
 		assert.Equal(t, 0, code, stderr)
 		assert.Contains(t, stderr, "--no-redact is ignored in gateway mode")
 		t.Setenv("CPICTL_NO_REDACT", "")
+
+		// a mask config can only add masking there
+		none := filepath.Join(home, "none.yaml")
+		writeModeFile(t, none, "builtIns: []\n", 0o600)
+		code, stderr = projectRun(t, home, t.TempDir(), "--profile", "gw", "--mask-config", none, "undeploy", "--artifact-ids", "A")
+		assert.Equal(t, 0, code, stderr)
+		assert.Contains(t, stderr, "builtIns of --mask-config are ignored in gateway mode")
+	})
+
+	t.Run("a repository file cannot loosen masking", func(t *testing.T) {
+		home, repo := t.TempDir(), t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(repo, ".git"), 0o755))
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n", 0o600)
+		t.Setenv(gatewayTokenEnv, "user-token")
+		for _, k := range []string{"no-redact: true", "send-payloads: true", "masking-control: full"} {
+			writeModeFile(t, filepath.Join(repo, "cpictl.yaml"), k+"\n", 0o644)
+			code, stderr := projectRun(t, home, repo, "--profile", "gw", "undeploy", "--artifact-ids", "A")
+			assert.NotEqual(t, 0, code, k)
+			assert.Contains(t, stderr, "must not loosen masking", k)
+		}
 	})
 
 	t.Run("no token", func(t *testing.T) {

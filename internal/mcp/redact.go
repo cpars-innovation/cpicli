@@ -265,23 +265,27 @@ func (w walker) walk(node any, key string) (any, bool) {
 	switch n := node.(type) {
 	case map[string]any:
 		changed := false
-		// name/value objects in any spelling: {"name","value"}, {"key","value"}
-		// (parameters), {"id","value"} (Partner Directory), {"Name","Value"}
-		var nameKey, valueKey string
+		// name/value objects in any spelling ({"name","value"}, {"key","value"},
+		// {"id","value"}, {"Name","Value"}): any name key with a sensitive
+		// name masks every value key, whatever its type (pkg/mask, the same
+		// rule as cpictl mask)
+		keys := make([]string, 0, len(n))
 		for k := range n {
-			switch l := strings.ToLower(k); l {
-			case "name", "key", "id", "parameterkey":
-				if nameKey == "" || l == "name" || l == "key" {
-					nameKey = k
-				}
-			case "value", "parametervalue":
-				valueKey = k
-			}
+			keys = append(keys, k)
 		}
-		if name, ok := n[nameKey].(string); ok && valueKey != "" {
-			if value, ok := n[valueKey].(string); ok && value != "" && value != Masked && r.sensitiveWith(w.m, name) {
-				n[valueKey], changed = Masked, true
-				w.st[mask.CountName]++
+		pair := w.m.SensitivePair(keys, func(k string) (string, bool) {
+			s, ok := n[k].(string)
+			if ok && !w.m.Sensitive(s) && slices.ContainsFunc(r.MaskPatterns, func(re *regexp.Regexp) bool { return re.MatchString(s) }) {
+				return "password", true // a --mask-pattern name counts as sensitive
+			}
+			return s, ok
+		})
+		if pair {
+			for _, k := range keys {
+				if mask.IsPairValue(k) && n[k] != nil && n[k] != "" && n[k] != Masked {
+					n[k], changed = Masked, true
+					w.st[mask.CountName]++
+				}
 			}
 		}
 		if w.payloads && (redactContent(n, r.Hint) || redactFailure(n, r.Hint)) {
@@ -308,7 +312,9 @@ func (w walker) walk(node any, key string) (any, bool) {
 					continue
 				}
 			}
-			if v, isString := child.(string); isString && v != "" && v != Masked && !mask.ReferenceKey(k) && r.sensitiveWith(w.m, k) {
+			// under a sensitive key the whole value is masked, whatever its type
+			// (mask.HidesWhole: a list of credential metadata is walked instead)
+			if child != nil && child != "" && child != Masked && (w.m.HidesWhole(k, child) || !w.m.Sensitive(k) && r.sensitiveWith(w.m, k) && !mask.ReferenceKey(k)) {
 				n[k], changed = Masked, true
 				w.st[mask.CountName]++
 				continue

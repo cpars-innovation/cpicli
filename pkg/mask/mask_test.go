@@ -1,10 +1,13 @@
 package mask
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -259,7 +262,7 @@ func TestVerificationFindings(t *testing.T) {
 		out, _ := m.Text(c.in)
 		assert.NotContains(t, out, c.secret, c.in)
 	}
-	for _, in := range []string{"Flow-4000000000000002", "ORD_4111111111111111", "Basic configuration of the adapter", "pwd = new String(cred.getPassword())"} {
+	for _, in := range []string{"Flow4000000000000002", "ORD_4111111111111111", "Basic configuration of the adapter", "pwd = new String(cred.getPassword())"} {
 		out, _ := m.Text(in)
 		assert.Equal(t, in, out)
 	}
@@ -271,4 +274,82 @@ func TestVerificationFindings(t *testing.T) {
 	out, _, err = m.JSON([]byte(`{"tokenId":"t1","customerId":"max@example.com","correlationId":"Bearer abcdef123456789","messageGuid":"AGrSWKfj4111111111111111","credentialName":"ERP_User","passwordType":"basic"}`))
 	require.NoError(t, err)
 	assert.Equal(t, `{"tokenId":"••••","customerId":"••••@••••","correlationId":"Bearer ••••","messageGuid":"AGrSWKfj4111111111111111","credentialName":"ERP_User","passwordType":"basic"}`, string(out))
+}
+
+// The second verification of 0.38.0 (cpicli#75).
+func TestVerificationFindings2(t *testing.T) {
+	m := Default()
+	for _, c := range []struct{ in, secret string }{
+		{"PAN-4111111111111111", "4111111111"},
+		{"card:-4111111111111111", "4111111111"},
+		{"Order ORD-1234 4111 1111 1111 1111", "4111 1111 1111"},
+		{"qty 12 4111111111111111", "4111111111"},
+		{`Password="p@ss w0rd";`, "p@ss w0rd"},
+		{`Password='S3cret!';`, "S3cret!"},
+		{"PWD=(hunter2)", "hunter2"},
+		{"Password=Pa(ss)word", "Pa(ss)word"},
+		{"PWD={p;ss}", "ss}"},
+		{"https://u:p@ss/word@host.example.com/x", "ss/word"},
+		{"Authorization: Basic dTpw", "dTpw"},
+	} {
+		out, _ := m.Text(c.in)
+		assert.NotContains(t, out, c.secret, c.in)
+	}
+	for _, in := range []string{"Password=getPassword()", "Password={{ERP_Password}}"} {
+		out, _ := m.Text(in)
+		assert.Equal(t, in, out)
+	}
+
+	// pairs: any name key, every value key, any value type
+	out, _, err := m.JSON([]byte(`[{"Name":"x","name":"password","value":"hunter2"},{"id":"Password","name":"Label","value":"hunter2"},` +
+		`{"key":"Password","value":123456},{"name":"Password","value":{"inner":"hunter2"}},{"password":{"v":"hunter2"}},{"password":123456},` +
+		`{"key":"Password","Value":"a","value":"b"}]`))
+	require.NoError(t, err)
+	for _, leak := range []string{"hunter2", "123456", `"a"`, `"b"`} {
+		assert.NotContains(t, string(out), leak)
+	}
+
+	// hashes and IDs keep their value: no IBAN inside them
+	for _, v := range []string{"ac1266f54e0d1c3a9f6b2e8d7c4a5b3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b", "AGrSWKfjlBddQU_blYCHKdnThF-G"} {
+		out, _, err := m.JSON([]byte(`{"sha256":"` + v + `","messageGuid":"` + v + `"}`))
+		require.NoError(t, err)
+		assert.Equal(t, `{"sha256":"`+v+`","messageGuid":"`+v+`"}`, string(out))
+	}
+	out, _, err = m.JSON([]byte(`{"customerId":"DE89370400440532013000"}`))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "3704004405320130", "a whole IBAN in an ID field is still masked")
+}
+
+// About 1 in 97 random strings passes mod-97; with the country lengths and
+// whole-value matching on identifiers, hashes keep their value.
+func TestIBANFalsePositives(t *testing.T) {
+	m := Default()
+	changed := 0
+	for i := range 20000 {
+		h := sha256.Sum256([]byte(fmt.Sprint(i)))
+		v := hex.EncodeToString(h[:])
+		out, _, err := m.JSON([]byte(`{"sha256":"` + v + `"}`))
+		require.NoError(t, err)
+		if string(out) != `{"sha256":"`+v+`"}` {
+			changed++
+		}
+	}
+	assert.Zero(t, changed, "identifier fields change only when the whole value is an IBAN")
+	changed = 0
+	for i := range 20000 {
+		h := sha256.Sum256([]byte(fmt.Sprint(i)))
+		v := strings.ToUpper(hex.EncodeToString(h[:]))
+		if out, _ := m.Text("ref " + v); out != "ref "+v {
+			changed++
+		}
+	}
+	assert.Less(t, changed, 20, "free text: rare (was about 1 percent)")
+}
+
+// A long run of digit groups costs linear time.
+func TestCardRunIsLinear(t *testing.T) {
+	s := strings.Repeat("1 ", 200000)
+	start := time.Now()
+	Default().Text(s)
+	assert.Less(t, time.Since(start), 2*time.Second)
 }

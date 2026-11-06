@@ -3,9 +3,12 @@ package cpi
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"github.com/go-errors/errors"
 	"github.com/rs/zerolog/log"
+	"strings"
 )
 
 type Configuration struct {
@@ -53,6 +56,11 @@ func (c *Configuration) Get(id string, version string) (*ParametersData, error) 
 }
 
 func (c *Configuration) Update(id string, version string, key string, value string) error {
+	// a value from a masked view would replace the real one (cpicli#75):
+	// every configure path (files, flags, MCP, orchestrator) ends here
+	if strings.Contains(value, mask.Dots) {
+		return output.Usagef("parameter %s of %s holds the masked value %s: set the real value", key, id, mask.Dots)
+	}
 	log.Info().Msgf("Updating configuration parameter %v of Integration designtime artifact %v", key, id)
 	urlPath := fmt.Sprintf("/api/v1/IntegrationDesigntimeArtifacts(Id=%s,Version=%s)/$links/Configurations(%s)", pathKey(id), pathKey(version), pathKey(key))
 

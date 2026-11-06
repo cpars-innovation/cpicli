@@ -18,6 +18,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,7 +59,7 @@ var BuiltIns = []string{DetectPrivateKey, DetectJWT, DetectAuthorization, Detect
 // identifierDetectors are the detectors that run on identifier fields
 // (IdentifierKey): not card and phone, which take digit runs of IDs.
 var identifierDetectors = []string{DetectPrivateKey, DetectJWT, DetectAuthorization, DetectURLCredentials, DetectURLSecret,
-	DetectConnectionString, DetectIBAN, DetectEmail}
+	DetectConnectionString, DetectEmail}
 
 // Rule is a caller's rule: a regex over text, or a path of element or key
 // names like //Customer/Name, which masks every value below it (XML
@@ -291,20 +292,23 @@ var (
 	// a private key block, also cut off before its END line
 	rePEMPrivate = regexp.MustCompile(`-----BEGIN ((?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?)-----[\s\S]*?(?:-----END [A-Z ]*-----|\z)`)
 	reJWT        = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`)
-	reAuth       = regexp.MustCompile(`(?i)\b(bearer|basic)(\s+|\s*[:=]\s*)([A-Za-z0-9+/._~-]{6,}=*)`)
+	reAuth       = regexp.MustCompile(`(?i)\b(bearer|basic)(\s+|\s*[:=]\s*)([A-Za-z0-9+/._~-]{4,}=*)`)
 	// user:password@host; the password may hold / and @ (the last @
-	// before a host ends it)
-	reURLCreds = regexp.MustCompile(`\b([a-zA-Z][a-zA-Z0-9+.-]*://)([^\s/:@"'<>]+):([^\s"'<>]*?)@([^\s/@:"'<>]+)([:/?#\s"'<>]|$)`)
+	// in the token ends it: masking a path beats leaking a password)
+	reURLCreds = regexp.MustCompile(`\b([a-zA-Z][a-zA-Z0-9+.-]*://)([^\s/:@"'<>]+):([^\s"'<>]*)@([^\s/@:"'<>]+)([:/?#\s"'<>]|$)`)
 	// Key=value in a connection string: no blanks around "=", unlike code
-	reConnSecret = regexp.MustCompile(`(?i)\b(SharedAccessKey|AccountKey|SharedSecret|SharedAccessSignature|ClientSecret|Password|Pwd)(=)([^;"'\s<>&()]+)(\(?)`)
-	reURLSecret  = regexp.MustCompile(`(?i)([?&;](?:sig|signature|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential|api_?key|apikey|access_?token|id_token|refresh_token|token|client_secret|password|passwd|pwd|secret|code|key|sv|se|skoid|sktid)=)([^&\s"'<>#]+)`)
+	reConnSecret = regexp.MustCompile(`(?i)\b(SharedAccessKey|AccountKey|SharedSecret|SharedAccessSignature|ClientSecret|Password|Pwd)(=)("[^"]*"|'[^']*'|\{[^}]*\}|[^;"'\s<>&]+)`)
+	// a call: password=getPassword()
+	reCall      = regexp.MustCompile(`^[\w.]+\(\)$`)
+	reURLSecret = regexp.MustCompile(`(?i)([?&;](?:sig|signature|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential|api_?key|apikey|access_?token|id_token|refresh_token|token|client_secret|password|passwd|pwd|secret|code|key|sv|se|skoid|sktid)=)([^&\s"'<>#]+)`)
 	// an IBAN candidate; its valid prefix is masked (a currency or more
 	// text may follow without a break)
 	ibanRE  = regexp.MustCompile(`(?i)\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}`)
 	emailRE = regexp.MustCompile(`[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)*\.\p{L}{2,}`)
 	phoneRE = regexp.MustCompile(`(?:\+|\b00)[1-9]\d{0,2}(?:[ ./-]?\(?\d+\)?){2,6}`)
-	cardRE  = regexp.MustCompile(`\b\d(?:[ -]?\d){12,18}`)
-	nonDig  = regexp.MustCompile(`\D`)
+	// a run of digit groups; cardIn finds the card in it
+	cardRE = regexp.MustCompile(`\b\d(?:[ -]?\d){12,}`)
+	nonDig = regexp.MustCompile(`\D`)
 )
 
 // urlSecretParams that are only masked when the value looks like a secret
@@ -451,10 +455,14 @@ func detect(d, s string, st Stats) string {
 	case DetectConnectionString:
 		return reConnSecret.ReplaceAllStringFunc(s, func(x string) string {
 			p := reConnSecret.FindStringSubmatch(x)
-			if p[3] == Dots || p[4] != "" || strings.HasPrefix(p[3], "{{") || strings.HasPrefix(p[3], "${") {
+			v := p[3]
+			if v == Dots || strings.Contains(v, Dots) || reCall.MatchString(v) || strings.HasPrefix(v, "{{") || strings.HasPrefix(v, "${") {
 				return x // a call (password=getPassword()) or a placeholder
 			}
 			st[d]++
+			if q := v[0]; q == '"' || q == '\'' {
+				return p[1] + p[2] + string(q) + Dots + string(q)
+			}
 			return p[1] + p[2] + Dots
 		})
 	case DetectIBAN:
@@ -485,32 +493,22 @@ func detect(d, s string, st Stats) string {
 		var b strings.Builder
 		last := 0
 		for _, loc := range cardRE.FindAllStringIndex(s, -1) {
-			// a number inside a name or an ID (Flow-4000…, ORD_4111…) is no card
-			if loc[0] > 0 && (isLetter(s[loc[0]-1]) || s[loc[0]-1] == '_' || s[loc[0]-1] == '-') {
+			if loc[0] < last {
 				continue
 			}
 			x := s[loc[0]:loc[1]]
-			// the longest card-shaped, Luhn-valid prefix: "4111 … 1111 12/27"
-			for end := len(x); end > 0; end-- {
-				if !isDigit(x[end-1]) {
-					continue
-				}
-				cand := x[:end]
-				digits := nonDig.ReplaceAllString(cand, "")
-				if len(digits) < 13 {
-					break
-				}
-				if end < len(x) && isDigit(x[end]) {
-					continue // a group cut in the middle
-				}
-				if cardShaped(cand, digits) && luhnValid(digits) {
-					st[d]++
-					b.WriteString(s[last:loc[0]])
-					b.WriteString(Dots + " " + Dots + " " + Dots + " " + digits[len(digits)-4:])
-					last = loc[0] + end
-					break
-				}
+			// the longest card-shaped, Luhn-valid part that starts and ends
+			// at a group boundary: "qty 12 4111…", "4111 … 1111 12/27".
+			// A number glued to a name (ORD_4111…, Flow4111…) is no card.
+			start, end := cardIn(x, loc[0] > 0 && (isLetter(s[loc[0]-1]) || s[loc[0]-1] == '_'))
+			if start < 0 {
+				continue
 			}
+			digits := digitsOf(x[start:end])
+			st[d]++
+			b.WriteString(s[last : loc[0]+start])
+			b.WriteString(Dots + " " + Dots + " " + Dots + " " + digits[len(digits)-4:])
+			last = loc[0] + end
 		}
 		if last == 0 {
 			return s
@@ -519,6 +517,51 @@ func detect(d, s string, st Stats) string {
 		return b.String()
 	}
 	return s
+}
+
+// cardIn finds the longest card number in x, a run of digit groups, that
+// starts and ends at a group boundary; glued: x follows a letter or _, so
+// its first group cannot start a card. -1 when there is none.
+func cardIn(x string, glued bool) (start, end int) {
+	var starts, ends []int
+	for i := 0; i < len(x); i++ {
+		if !isDigit(x[i]) {
+			continue
+		}
+		if i == 0 && !glued || i > 0 && !isDigit(x[i-1]) {
+			starts = append(starts, i)
+		}
+		if i == len(x)-1 || !isDigit(x[i+1]) {
+			ends = append(ends, i+1)
+		}
+	}
+	best, bs, be := 0, -1, -1
+	for _, a := range starts {
+		for _, z := range ends[sort.SearchInts(ends, a+1):] {
+			if z-a > 23 { // 19 digits and 4 separators at most; ends are sorted
+				break
+			}
+			if z <= a || z-a <= best {
+				continue
+			}
+			digits := digitsOf(x[a:z])
+			if len(digits) >= 13 && cardShaped(x[a:z], digits) && luhnValid(digits) {
+				best, bs, be = z-a, a, z
+			}
+		}
+	}
+	return bs, be
+}
+
+// digitsOf returns the ASCII digits of s.
+func digitsOf(s string) string {
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		if isDigit(s[i]) {
+			b = append(b, s[i])
+		}
+	}
+	return string(b)
 }
 
 // basicCredentials: Basic credentials that decode to user:password.
@@ -566,9 +609,23 @@ func cardShaped(x, digits string) bool {
 	return true
 }
 
+// ibanLengths are the IBAN lengths per country (ISO 13616 registry).
+var ibanLengths = map[string]int{
+	"AD": 24, "AE": 23, "AL": 28, "AT": 20, "AZ": 28, "BA": 20, "BE": 16, "BG": 22, "BH": 22, "BI": 27, "BR": 29,
+	"BY": 28, "CH": 21, "CR": 22, "CY": 28, "CZ": 24, "DE": 22, "DJ": 27, "DK": 18, "DO": 28, "EE": 20, "EG": 29,
+	"ES": 24, "FI": 18, "FK": 18, "FO": 18, "FR": 27, "GB": 22, "GE": 22, "GI": 23, "GL": 18, "GR": 27, "GT": 28,
+	"HR": 21, "HU": 28, "IE": 22, "IL": 23, "IQ": 23, "IS": 26, "IT": 27, "JO": 30, "KW": 30, "KZ": 20, "LB": 28,
+	"LC": 32, "LI": 21, "LT": 20, "LU": 20, "LV": 21, "LY": 25, "MC": 27, "MD": 24, "ME": 22, "MK": 19, "MN": 20,
+	"MR": 27, "MT": 31, "MU": 30, "NI": 28, "NL": 18, "NO": 15, "OM": 23, "PK": 24, "PL": 28, "PS": 29, "PT": 25,
+	"QA": 29, "RO": 24, "RS": 22, "RU": 33, "SA": 24, "SC": 31, "SD": 18, "SE": 24, "SI": 19, "SK": 24, "SM": 27,
+	"SO": 23, "ST": 25, "SV": 28, "TL": 23, "TN": 24, "TR": 26, "UA": 29, "VA": 22, "VG": 24, "XK": 20, "YE": 30,
+}
+
 func ibanValid(s string) bool {
 	c := strings.ToUpper(strings.ReplaceAll(s, " ", ""))
-	if len(c) < 15 || len(c) > 34 {
+	// the country's exact length: a hash or an ID passes mod-97 one time in
+	// 97, but rarely also has a country code and its length (cpicli#75)
+	if n, ok := ibanLengths[c[:min(2, len(c))]]; !ok || len(c) != n {
 		return false
 	}
 	rest := 0
@@ -864,7 +921,7 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 		for i, e := range t {
 			keys[i] = e.k
 		}
-		_, valueKey := m.pairOf(keys, func(k string) (string, bool) {
+		pair := m.SensitivePair(keys, func(k string) (string, bool) {
 			for _, e := range t {
 				if e.k == k {
 					s, ok := e.v.(string)
@@ -883,7 +940,7 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 			if indent {
 				b.WriteByte(' ')
 			}
-			hideChild := hide || e.k == valueKey || m.Sensitive(e.k) && !ReferenceKey(e.k)
+			hideChild := hide || pair && IsPairValue(e.k) || m.HidesWhole(e.k, e.v)
 			m.writeJSONKey(b, e.v, append(slices.Clone(stack), e.k), indent, depth+1, hideChild, !hideChild && IdentifierKey(e.k), st)
 		}
 		nl(depth)
@@ -971,31 +1028,29 @@ var (
 	pairValues = []string{"value", "parametervalue"}
 )
 
-// PairValueKey returns the key of the value to mask whole in a name/value
-// object (keys compared in any case): the object has a name key whose
-// string value is a sensitive name, and a value key. "" when not.
-func (m *Masker) PairValueKey(keys []string, str func(k string) (string, bool)) string {
-	_, v := m.pairOf(keys, str)
-	return v
-}
-
-func (m *Masker) pairOf(keys []string, str func(k string) (string, bool)) (nameKey, valueKey string) {
+// SensitivePair reports whether an object is a name/value pair of a
+// sensitive name (keys compared in any case): any of its name keys (name,
+// key, id, parameterKey) holds a sensitive name. Its value keys
+// (IsPairValue) are then masked whole, whatever their type.
+func (m *Masker) SensitivePair(keys []string, str func(k string) (string, bool)) bool {
+	hasValue, sensitive := false, false
 	for _, k := range keys {
 		l := strings.ToLower(k)
 		switch {
-		case nameKey == "" && slices.Contains(pairNames, l):
+		case slices.Contains(pairNames, l):
 			if n, ok := str(k); ok && m.Sensitive(n) {
-				nameKey = k
+				sensitive = true
 			}
-		case valueKey == "" && slices.Contains(pairValues, l):
-			valueKey = k
+		case slices.Contains(pairValues, l):
+			hasValue = true
 		}
 	}
-	if nameKey == "" || valueKey == "" {
-		return "", ""
-	}
-	return nameKey, valueKey
+	return hasValue && sensitive
 }
+
+// IsPairValue: the value key of a name/value object (value, parameterValue,
+// in any case).
+func IsPairValue(k string) bool { return slices.Contains(pairValues, strings.ToLower(k)) }
 
 // Identifier masks an identifier field's value with the identifier
 // detectors (not card and phone, which take the digit runs of IDs).
@@ -1014,6 +1069,12 @@ func (m *Masker) Identifier(s string, st Stats) string {
 			s = detect(d, s, st)
 		}
 	}
+	// an IBAN only as the whole value: hashes and GUIDs hold IBAN-like runs
+	if slices.Contains(m.detectors, DetectIBAN) && len(s) >= 15 && ibanValid(strings.TrimSpace(s)) {
+		st[DetectIBAN]++
+		c := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
+		s = c[:4] + " " + Dots + " " + Dots + " " + Dots + " " + c[len(c)-4:]
+	}
 	// the caller's own rules apply everywhere
 	for i, re := range m.regexes {
 		if p := m.prefixes[i]; p != "" && !strings.Contains(s, p) {
@@ -1022,4 +1083,20 @@ func (m *Masker) Identifier(s string, st Stats) string {
 		s = re.ReplaceAllStringFunc(s, func(string) string { st[CountRegex]++; return Dots })
 	}
 	return s
+}
+
+// HidesWhole reports whether the value v under key k is masked whole: k is
+// a sensitive name that is no reference (credentialName), and v is a scalar
+// or k names the secret itself (password, token, secret). A list or object
+// under a collection key like userCredentials is walked instead: its own
+// keys decide (credential metadata stays readable, its secrets do not).
+func (m *Masker) HidesWhole(k string, v any) bool {
+	if !m.Sensitive(k) || ReferenceKey(k) {
+		return false
+	}
+	switch v.(type) {
+	case object, []any, map[string]any:
+		return !strings.Contains(strings.ToLower(k), "credential")
+	}
+	return true
 }

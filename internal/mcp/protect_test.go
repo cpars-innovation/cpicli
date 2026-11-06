@@ -188,3 +188,25 @@ func TestRedactorPairsAndIdentifiers(t *testing.T) {
 		assert.Contains(t, out, kept)
 	}
 }
+
+// The same pair rules as cpictl mask, deterministically (cpicli#75).
+func TestRedactorPairsDeterministic(t *testing.T) {
+	r, err := NewRedactor("", nil, false, nil)
+	require.NoError(t, err)
+	in := []any{
+		map[string]any{"Name": "x", "name": "password", "value": "hunter2"},
+		map[string]any{"id": "Password", "name": "Label", "value": "hunter2"},
+		map[string]any{"key": "Password", "value": 123456},
+		map[string]any{"name": "Password", "value": map[string]any{"inner": "hunter2"}},
+		map[string]any{"password": map[string]any{"v": "hunter2"}},
+		map[string]any{"password": 123456},
+		map[string]any{"key": "Password", "Value": "a", "value": "b"},
+	}
+	for range 200 {
+		data, err := json.Marshal(r.Apply("get_parameters", map[string]any{"items": in}))
+		require.NoError(t, err)
+		for _, leak := range []string{"hunter2", "123456", `"a"`, `"b"`} {
+			require.NotContains(t, string(data), leak)
+		}
+	}
+}

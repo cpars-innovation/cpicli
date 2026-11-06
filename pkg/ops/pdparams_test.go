@@ -234,3 +234,14 @@ func TestPDSecureMarks(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a masked view cannot be deployed")
 }
+
+// A configuration value from a masked view is never written (cpicli#75).
+func TestConfigureRefusesMaskedValue(t *testing.T) {
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{
+		"A": {Type: "Integration", Package: "P", DesignVersion: "1.0.0", Parameters: map[string]string{"Password": "real"}},
+	})
+	err := cpi.NewConfiguration(mock.Executer()).Update("A", "active", "Password", mask.Dots)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "holds the masked value")
+	assert.Equal(t, "real", mock.Artifacts["A"].Parameters["Password"])
+}

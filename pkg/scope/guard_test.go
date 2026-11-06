@@ -1387,5 +1387,31 @@ func TestGuardNestedBodyIsCheap(t *testing.T) {
 	b.WriteString("}}")
 	start := time.Now()
 	refused(t, g.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", b.String())))
-	assert.Less(t, time.Since(start), 200*time.Millisecond)
+	assert.Less(t, time.Since(start), raceSlowdown*200*time.Millisecond)
+}
+
+// The d wrapper gives no way around the cheap refusal (cpicli#75): an array
+// or a deep object inside it is refused before it is parsed.
+func TestGuardWrappedNestedBodyIsCheap(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_*"],"actions":["read","upload"]}`)
+	big := func(open, item, close string, n int) string {
+		var b strings.Builder
+		b.WriteString(open)
+		for i := range n {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			fmt.Fprintf(&b, item, i)
+		}
+		return b.String() + close
+	}
+	for _, body := range []string{
+		big(`{"d":[`, `%d`, `]}`, 2000000),
+		big(`{"d":{"Id":"SD_New","x":{`, `"k%d":1`, `}}}`, 400000),
+	} {
+		start := time.Now()
+		refused(t, g.Before(req("POST", "/api/v1/IntegrationPackages", body)))
+		assert.Less(t, time.Since(start), raceSlowdown*300*time.Millisecond)
+	}
+	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"SD_New","Name":"N","ShortText":"x"}}`)), "the wrapper still works")
 }

@@ -14,7 +14,9 @@ keep that data away from the model.
    `cpictl mcp`: the agent sees and changes only the team's packages.
 3. **Redaction on.** `cpictl mcp` withholds payloads by default. For the CLI, set `redact: true` in the
    profile (or `CPICTL_REDACT=true`, or `--redact`). In gateway mode it is always on: `--no-redact` is ignored
-   there, and the gateway enforces its own policy server-side.
+   there, a `--mask-config` can only add masking (every detector stays on), `--send-payloads` is ignored and
+   `set_masking` can only tighten. A repository's `cpictl.yaml` can never loosen masking (`no-redact`,
+   `send-payloads`, `redact-payloads`, `masking-control` there are errors).
 
 ## What is withheld and masked
 
@@ -45,8 +47,11 @@ How values are found:
   `{"Name":…,"Value":…}`). Keys that name security material instead of holding it (`credentialName`,
   `keyAlias`, `tokenServiceUrl`, `passwordType`) are not masked whole.
 - **Identifiers** (`…Id`, `…Guid`, hashes, versions) stay usable for the next call: only the detectors for
-  e-mail, IBAN, tokens, keys and URL credentials run on them, not card and phone. A sensitive identifier
-  (`tokenId`) is masked whole.
+  e-mail, tokens, keys, URL credentials and connection strings run on them, an IBAN only as the whole
+  value, and not card and phone (an ID like `SAP_ApplicationID` holding a card number is therefore not
+  masked: add a name or rule for such fields). A sensitive identifier (`tokenId`) is masked whole.
+- **Writes**: an upload, a configuration change (`configure`, `set_parameters`) or a Partner Directory
+  deploy that carries `••••` is refused.
 
 `auth`, `whoami`, `profile` and `version` show the user's own sign-in and are not redacted.
 

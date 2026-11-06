@@ -116,9 +116,18 @@ CPICTL_* environment variables.`,
 			}
 			maskPatterns := stringListSetting(cmd, "mask-pattern")
 			redactPayloads := config.GetBool(cmd, "redact-payloads") && !config.GetBool(cmd, "send-payloads")
-			maskCfg, masker, err := loadMaskConfig(config.GetString(cmd, "mask-config"))
+			maskCfg, _, err := loadMaskConfig(config.GetString(cmd, "mask-config"))
 			if err != nil {
 				return err
+			}
+			maskCfg, masker, err := gatewayMaskConfig(cmd, maskCfg)
+			if err != nil {
+				return err
+			}
+			gatewayMode := config.GetString(cmd, "gateway") != ""
+			if gatewayMode && !redactPayloads {
+				log.Warn().Msg("--send-payloads is ignored in gateway mode: payloads and error texts stay withheld")
+				redactPayloads = true
 			}
 			redactor, err := mcp.NewRedactor(root, maskPatterns, redactPayloads, masker)
 			if err != nil {
@@ -128,6 +137,10 @@ CPICTL_* environment variables.`,
 			maskingControl := config.GetString(cmd, "masking-control")
 			if !slices.Contains(mcp.MaskingControls, maskingControl) {
 				return output.Usagef("--masking-control must be one of %s", strings.Join(mcp.MaskingControls, ", "))
+			}
+			if gatewayMode && maskingControl == mcp.MaskingFull {
+				log.Warn().Msg("--masking-control full is not available in gateway mode: tighten applies")
+				maskingControl = mcp.MaskingTighten
 			}
 			if !redactPayloads {
 				fmt.Fprintln(cmd.ErrOrStderr(), "cpictl mcp: message payloads and error texts are sent to the client (--send-payloads); values are still masked")
@@ -329,14 +342,23 @@ func gatewayScopeForMCP(cmd *cobra.Command, gw string) *scope.Scope {
 	return t.Scope
 }
 
-// loadMasker reads a --mask-config file (YAML or JSON); "" masks with every
-// built-in detector.
-func loadMasker(file string) (*mask.Masker, error) {
-	_, m, err := loadMaskConfig(file)
-	return m, err
+// gatewayMaskConfig keeps a mask config from taking masking away in gateway
+// mode: every built-in detector stays on, the config can only add names and
+// rules (cpicli#75).
+func gatewayMaskConfig(cmd *cobra.Command, c mask.Config) (mask.Config, *mask.Masker, error) {
+	if config.GetString(cmd, "gateway") != "" && c.BuiltIns != nil {
+		log.Warn().Msg("builtIns of --mask-config are ignored in gateway mode: every detector stays on")
+		c.BuiltIns = nil
+	}
+	m, err := mask.New(c)
+	if err != nil {
+		return c, nil, output.Usage(fmt.Errorf("masking rules: %w", err))
+	}
+	return c, m, nil
 }
 
-// loadMaskConfig is loadMasker, also returning the config.
+// loadMaskConfig reads a --mask-config file (YAML or JSON); "" masks with
+// every built-in detector.
 func loadMaskConfig(file string) (mask.Config, *mask.Masker, error) {
 	var c mask.Config
 	if file == "" {
