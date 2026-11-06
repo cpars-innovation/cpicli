@@ -432,3 +432,38 @@ func TestGUIDsKeepTheirValue(t *testing.T) {
 	}
 	assert.Zero(t, changed)
 }
+
+// The verification of 0.38.1 (cpicli#76): what the over-masking fixes must
+// not let through.
+func TestOverMaskingFixesKeepMasking(t *testing.T) {
+	m := Default()
+	for _, in := range []string{
+		"4111111111111111x", "PAN:4111111111111111abc", "4111 1111 1111 1111EUR", "4111-1111-1111-1111_x",
+		"4111111111111111JOHN SMITH 2027",
+		"call+4915123456789", "Mobil+49 151 2345678", "+4915123456789SMITH", "+49 151 2345678x",
+		"+49-151-2345678abc", "tel-+49 151 2345678",
+	} {
+		out, _ := m.Text(in)
+		assert.NotEqual(t, in, out, in)
+	}
+	for _, in := range []string{"id 3c1ae2bd-6978-4339-1512-40b9ce02be89", "id 3cd90e4d-0049-1771-53ff-05307223ef0d",
+		"sha " + strings.Repeat("0049151234567890", 4)} {
+		out, _ := m.Text(in)
+		assert.Equal(t, in, out, in)
+	}
+
+	// the caller's names apply to credential metadata too
+	named, err := New(Config{Names: []string{"^user$", "^description$"}})
+	require.NoError(t, err)
+	out, _, err := named.JSON([]byte(`{"userCredentials":[{"name":"ERP","user":"jdoe","description":"internal note"}]}`))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "jdoe")
+	assert.NotContains(t, string(out), "internal note")
+	assert.Contains(t, string(out), `"ERP"`)
+
+	// secretEnv only as a variable name
+	out, _, err = m.JSON([]byte(`{"credentials":[{"secretEnv":"hunter2"},{"secretEnv":"CRED_SFTP_PASSWORD"}]}`))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "hunter2")
+	assert.Contains(t, string(out), "CRED_SFTP_PASSWORD")
+}

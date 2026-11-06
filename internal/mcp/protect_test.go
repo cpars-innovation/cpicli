@@ -233,3 +233,18 @@ func TestCredentialContainers(t *testing.T) {
 		}
 	}
 }
+
+// --mask-pattern names apply to credential metadata in MCP too (cpicli#76).
+func TestMaskPatternOnCredentialMetadata(t *testing.T) {
+	r, err := NewRedactor("", []string{"^user$"}, false, nil)
+	require.NoError(t, err)
+	data, err := json.Marshal(r.Apply("list_credentials", map[string]any{
+		"userCredentials": []any{map[string]any{"name": "ERP", "user": "jdoe"}},
+		"credentials":     []any{map[string]any{"secretEnv": "hunter2"}, map[string]any{"secretEnv": "CRED_X"}},
+	}))
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), "jdoe")
+	assert.NotContains(t, string(data), "hunter2")
+	assert.Contains(t, string(data), `"ERP"`)
+	assert.Contains(t, string(data), "CRED_X")
+}

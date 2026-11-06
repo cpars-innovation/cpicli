@@ -493,7 +493,9 @@ func detect(d, s string, st Stats) string {
 		for _, loc := range phoneRE.FindAllStringIndex(s, -1) {
 			// a number that runs straight on into a letter is part of a
 			// hex ID (…-0049-1771-53ff-…), not a phone number (cpicli#76)
-			if loc[1] < len(s) && (isLetter(s[loc[1]]) || s[loc[1]] == '_') || inHexWord(s, loc[0], loc[1]) {
+			// a 00… run inside a hex ID (a GUID, a hash) is part of the ID;
+			// a +number never is (cpicli#76)
+			if s[loc[0]] != '+' && inHexID(s, loc[0], loc[1]) {
 				continue
 			}
 			if n := len(digitsOf(s[loc[0]:loc[1]])); n < 8 || n > 16 {
@@ -520,8 +522,7 @@ func detect(d, s string, st Stats) string {
 			// the longest card-shaped, Luhn-valid part that starts and ends
 			// at a group boundary: "qty 12 4111…", "4111 … 1111 12/27".
 			// A number glued to a name (ORD_4111…, Flow4111…) is no card.
-			start, end := cardIn(x, loc[0] > 0 && (isLetter(s[loc[0]-1]) || s[loc[0]-1] == '_'),
-				loc[1] < len(s) && (isLetter(s[loc[1]]) || s[loc[1]] == '_'))
+			start, end := cardIn(x, loc[0] > 0 && (isLetter(s[loc[0]-1]) || s[loc[0]-1] == '_'), inHexID(s, loc[0], loc[1]))
 			if start < 0 {
 				continue
 			}
@@ -573,8 +574,8 @@ func cardIn(x string, glued, gluedEnd bool) (start, end int) {
 		if i == 0 && !glued || i > 0 && !isDigit(x[i-1]) {
 			starts = append(starts, i)
 		}
-		// a run that goes straight on into a letter (inside a hex GUID) does
-		// not end there (cpicli#76)
+		// a run inside a hex ID (a GUID, a hash) does not end where the ID
+		// goes on; a card glued to text (IDoc, flat files) does (cpicli#76)
 		if i == len(x)-1 && !gluedEnd || i < len(x)-1 && !isDigit(x[i+1]) {
 			ends = append(ends, i+1)
 		}
@@ -618,22 +619,24 @@ func consecutiveGroups(x string) bool {
 	return true
 }
 
-// inHexWord: s[a:b] sits in a word of letters, digits, - and _ that holds
-// letters around it, such as a GUID (3cd90e4d-0049-1771-53ff-…): an ID, not
-// a phone number.
-func inHexWord(s string, a, b int) bool {
-	word := func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' || c == '_' }
-	for i := a - 1; i >= 0 && word(s[i]); i-- {
-		if isLetter(s[i]) {
-			return true
-		}
+var (
+	reGUID  = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	reHexID = regexp.MustCompile(`^[0-9a-fA-F]{32,}$`)
+)
+
+// inHexID: s[a:b] lies inside a hex ID, a GUID (8-4-4-4-12) or a run of 32
+// and more hex digits (a hash), not inside text where a number may touch a
+// letter (4111…JOHN SMITH in an IDoc, call+49…).
+func inHexID(s string, a, b int) bool {
+	word := func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' }
+	for a > 0 && word(s[a-1]) {
+		a--
 	}
-	for i := b; i < len(s) && word(s[i]); i++ {
-		if isLetter(s[i]) {
-			return true
-		}
+	for b < len(s) && word(s[b]) {
+		b++
 	}
-	return false
+	w := s[a:b]
+	return reGUID.MatchString(w) || reHexID.MatchString(w)
 }
 
 // digitsOf returns the ASCII digits of s.
@@ -1026,7 +1029,7 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 			}
 			// inside a credential container its metadata wins over a sensitive
 			// word in the key (secretEnv names a variable, cpicli#76)
-			meta := cred && CredentialMetaKey(e.k)
+			meta := cred && CredentialMetaKey(e.k) && !m.userSensitive(e.k) && envNameOK(e.k, e.v)
 			hideChild := hide || pair && IsPairValue(e.k) || !meta && m.HidesWhole(e.k, e.v) || cred && isScalar(e.v) && !meta
 			childCred := cred || !hideChild && isContainer(e.v) && CredentialContainer(e.k)
 			m.writeJSONKey(b, e.v, append(slices.Clone(stack), e.k), indent, depth+1, hideChild, !hideChild && IdentifierKey(e.k), childCred, st)
@@ -1237,3 +1240,33 @@ func isScalar(v any) bool {
 }
 
 func isContainer(v any) bool { return !isScalar(v) }
+
+// userSensitive: the caller's own sensitive names (Config.Names) match k.
+// They always apply, also to credential metadata (cpicli#76).
+func (m *Masker) userSensitive(k string) bool {
+	for _, re := range m.names {
+		if re.MatchString(k) {
+			return true
+		}
+	}
+	return false
+}
+
+var reEnvName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+
+// envNameOK: secretEnv is metadata only while it holds an environment
+// variable's name; any other value is treated as the secret (cpicli#76).
+func envNameOK(k string, v any) bool {
+	if !strings.EqualFold(k, "secretEnv") {
+		return true
+	}
+	s, ok := v.(string)
+	return ok && reEnvName.MatchString(s)
+}
+
+// CredentialMetaValue reports whether the value v of key k inside a
+// credential container stays readable: k is metadata, no caller name
+// matches it, and secretEnv holds a variable name.
+func (m *Masker) CredentialMetaValue(k string, v any) bool {
+	return CredentialMetaKey(k) && !m.userSensitive(k) && envNameOK(k, v)
+}

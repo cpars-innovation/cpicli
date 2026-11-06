@@ -314,7 +314,8 @@ func (w walker) walk(node any, key string) (any, bool) {
 				}
 			}
 			// inside a credential container every value but metadata is masked
-			if w.cred && child != nil && child != "" && child != Masked && isScalar(child) && !mask.CredentialMetaKey(k) {
+			if w.cred && child != nil && child != "" && child != Masked && isScalar(child) &&
+				(!w.m.CredentialMetaValue(k, child) || slices.ContainsFunc(r.MaskPatterns, func(re *regexp.Regexp) bool { return re.MatchString(k) })) {
 				n[k], changed = Masked, true
 				w.st[mask.CountName]++
 				continue
@@ -329,7 +330,9 @@ func (w walker) walk(node any, key string) (any, bool) {
 			}
 			// under a sensitive key the whole value is masked, whatever its type
 			// (mask.HidesWhole: a list of credential metadata is walked instead)
-			if child != nil && child != "" && child != Masked && !(w.cred && mask.CredentialMetaKey(k)) &&
+			metaOK := w.cred && w.m.CredentialMetaValue(k, child) &&
+				!slices.ContainsFunc(r.MaskPatterns, func(re *regexp.Regexp) bool { return re.MatchString(k) })
+			if child != nil && child != "" && child != Masked && !metaOK &&
 				(w.m.HidesWhole(k, child) || !w.m.Sensitive(k) && r.sensitiveWith(w.m, k) && !mask.ReferenceKey(k)) {
 				n[k], changed = Masked, true
 				w.st[mask.CountName]++

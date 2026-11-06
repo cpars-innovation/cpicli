@@ -144,7 +144,7 @@ func TestLineSecretLongLine(t *testing.T) {
 		for _, l := range lines {
 			start := time.Now()
 			LineSecret(path, l)
-			assert.Less(t, time.Since(start), time.Second, path)
+			assert.Less(t, time.Since(start), raceSlowdown*time.Second, path)
 		}
 	}
 }
