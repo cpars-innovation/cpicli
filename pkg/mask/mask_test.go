@@ -353,3 +353,34 @@ func TestCardRunIsLinear(t *testing.T) {
 	Default().Text(s)
 	assert.Less(t, time.Since(start), 2*time.Second)
 }
+
+// Escapes in connection-string values (cpicli#75, round 3).
+func TestConnectionStringEscapes(t *testing.T) {
+	m := Default()
+	for _, c := range []struct{ in, secret string }{
+		{"PWD={p}}w;d};Server=x", "w;d"},
+		{`Password="a""bcd";Server=x`, "bcd"},
+		{`Password="abc`, "abc"},
+		{`Password='a''b'`, "a''b"},
+	} {
+		out, _ := m.Text(c.in)
+		assert.NotContains(t, out, c.secret, c.in)
+	}
+	out, _ := m.Text("PWD={p}}w;d};Server=x")
+	assert.Equal(t, "PWD={••••};Server=x", out, "the rest of the string stays")
+}
+
+// Round-3 nits: lists of years or ports are no cards; an IBAN word inside
+// an identifier is masked.
+func TestRound3Nits(t *testing.T) {
+	m := Default()
+	for _, in := range []string{"2021 2022 2023 2024 2025 2026 2027 2028", "ports 5000 5001 5002 5003 5004 5005"} {
+		out, _ := m.Text(in)
+		assert.Equal(t, in, out)
+	}
+	out, _, err := m.JSON([]byte(`{"accountId":"x DE89370400440532013000","f":false,"cap":{"name":"Password","value":false}}`))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "3704004405320130")
+	assert.Contains(t, string(out), `"f":false`)
+	assert.Contains(t, string(out), `"value":"••••"`)
+}

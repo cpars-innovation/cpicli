@@ -210,3 +210,26 @@ func TestRedactorPairsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// Inside a credential container only metadata stays readable, in MCP and
+// cpictl mask alike (cpicli#75, round 3).
+func TestCredentialContainers(t *testing.T) {
+	r, err := NewRedactor("", nil, false, nil)
+	require.NoError(t, err)
+	in := `{"credentials":[{"Name":"x","SecureParam":"s3cr3t"},{"Name":"y","Kind":"secure_param","Value":"s3cr3t"},{"name":"z","pin":"1234","keystorePass":"kp","user":"svc"}],` +
+		`"credential":{"value":"hunter2","pass":"hunter2"},"creds2":{"credentials":["hunter2"]},"userCredentials":[{"name":"ERP","user":"svc","kind":"default"}]}`
+	var v any
+	require.NoError(t, json.Unmarshal([]byte(in), &v))
+	data, err := json.Marshal(r.Apply("list_credentials", v))
+	require.NoError(t, err)
+	viaMask, _, err := mask.Default().JSON([]byte(in))
+	require.NoError(t, err)
+	for _, out := range []string{string(data), string(viaMask)} {
+		for _, leak := range []string{"s3cr3t", "hunter2", `"1234"`, `"kp"`} {
+			assert.NotContains(t, out, leak, out)
+		}
+		for _, kept := range []string{`"svc"`, `"ERP"`, `"x"`, `"default"`, `"secure_param"`} {
+			assert.Contains(t, out, kept, out)
+		}
+	}
+}

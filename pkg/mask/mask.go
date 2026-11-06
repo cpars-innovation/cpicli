@@ -297,7 +297,7 @@ var (
 	// in the token ends it: masking a path beats leaking a password)
 	reURLCreds = regexp.MustCompile(`\b([a-zA-Z][a-zA-Z0-9+.-]*://)([^\s/:@"'<>]+):([^\s"'<>]*)@([^\s/@:"'<>]+)([:/?#\s"'<>]|$)`)
 	// Key=value in a connection string: no blanks around "=", unlike code
-	reConnSecret = regexp.MustCompile(`(?i)\b(SharedAccessKey|AccountKey|SharedSecret|SharedAccessSignature|ClientSecret|Password|Pwd)(=)("[^"]*"|'[^']*'|\{[^}]*\}|[^;"'\s<>&]+)`)
+	reConnSecret = regexp.MustCompile(`(?i)\b(SharedAccessKey|AccountKey|SharedSecret|SharedAccessSignature|ClientSecret|Password|Pwd)(=)("(?:[^"]|"")*"|'(?:[^']|'')*'|\{(?:[^}]|\}\})*\}|["'{][^\n]*|[^;"'\s<>&]+)`)
 	// a call: password=getPassword()
 	reCall      = regexp.MustCompile(`^[\w.]+\(\)$`)
 	reURLSecret = regexp.MustCompile(`(?i)([?&;](?:sig|signature|x-amz-signature|x-amz-credential|x-amz-security-token|x-goog-signature|x-goog-credential|api_?key|apikey|access_?token|id_token|refresh_token|token|client_secret|password|passwd|pwd|secret|code|key|sv|se|skoid|sktid)=)([^&\s"'<>#]+)`)
@@ -460,8 +460,14 @@ func detect(d, s string, st Stats) string {
 				return x // a call (password=getPassword()) or a placeholder
 			}
 			st[d]++
-			if q := v[0]; q == '"' || q == '\'' {
-				return p[1] + p[2] + string(q) + Dots + string(q)
+			// quoted (doubled quotes escape), braced (}} escapes), or
+			// unterminated: masked to the end of the line
+			if q := v[0]; q == '"' || q == '\'' || q == '{' {
+				closing := map[byte]byte{'"': '"', '\'': '\'', '{': '}'}[q]
+				if len(v) > 1 && v[len(v)-1] == closing {
+					return p[1] + p[2] + string(q) + Dots + string(closing)
+				}
+				return p[1] + p[2] + string(q) + Dots
 			}
 			return p[1] + p[2] + Dots
 		})
@@ -517,6 +523,27 @@ func detect(d, s string, st Stats) string {
 		return b.String()
 	}
 	return s
+}
+
+// cardNetwork: digits start with the prefix of a card network (Visa 4,
+// Mastercard 51-55 and 2221-2720, American Express 34/37, Diners 300-305,
+// 36, 38, Discover 6011, 644-649, 65, JCB 3528-3589, UnionPay 62). Lists of
+// years or ports (2021 2022 …, 5000 5001 …) start with none.
+func cardNetwork(d string) bool {
+	p := func(n int) int { v, _ := strconv.Atoi(d[:n]); return v }
+	switch {
+	case d[0] == '4':
+		return true
+	case p(2) >= 51 && p(2) <= 55, p(4) >= 2221 && p(4) <= 2720:
+		return true
+	case p(2) == 34 || p(2) == 37 || p(2) == 36 || p(2) == 38 || p(2) == 62 || p(2) == 65:
+		return true
+	case p(3) >= 300 && p(3) <= 305, p(3) >= 644 && p(3) <= 649:
+		return true
+	case p(4) == 6011, p(4) >= 3528 && p(4) <= 3589:
+		return true
+	}
+	return false
 }
 
 // cardIn finds the longest card number in x, a run of digit groups, that
@@ -587,7 +614,7 @@ func credentialLike(v string) bool {
 // last shorter), or 4-6-4/4-6-5 (American Express, Diners). Dates, times
 // and IDs with other groups are not cards.
 func cardShaped(x, digits string) bool {
-	if len(digits) < 13 || len(digits) > 19 || digits[0] < '2' || digits[0] > '6' {
+	if len(digits) < 13 || len(digits) > 19 || !cardNetwork(digits) {
 		return false
 	}
 	groups := strings.FieldsFunc(x, func(r rune) bool { return r == ' ' || r == '-' })
@@ -889,12 +916,13 @@ func decodeValue(dec *json.Decoder) (any, error) {
 // writeJSON writes v with masking at the leaves (2-space indent when
 // indent). hide masks every leaf (below a sensitive key).
 func (m *Masker) writeJSON(b *bytes.Buffer, v any, stack []string, indent bool, depth int, hide bool, st Stats) {
-	m.writeJSONKey(b, v, stack, indent, depth, hide, false, st)
+	m.writeJSONKey(b, v, stack, indent, depth, hide, false, false, st)
 }
 
 // writeJSONKey is writeJSON; ident: v is an identifier field
-// (IdentifierKey), masked by identifierDetectors only.
-func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent bool, depth int, hide, ident bool, st Stats) {
+// (IdentifierKey), masked by identifierDetectors only; cred: v is inside a
+// credential container (InCredential), where only metadata stays readable.
+func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent bool, depth int, hide, ident, cred bool, st Stats) {
 	nl := func(d int) {
 		if indent {
 			b.WriteByte('\n')
@@ -940,8 +968,9 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 			if indent {
 				b.WriteByte(' ')
 			}
-			hideChild := hide || pair && IsPairValue(e.k) || m.HidesWhole(e.k, e.v)
-			m.writeJSONKey(b, e.v, append(slices.Clone(stack), e.k), indent, depth+1, hideChild, !hideChild && IdentifierKey(e.k), st)
+			hideChild := hide || pair && IsPairValue(e.k) || m.HidesWhole(e.k, e.v) || cred && isScalar(e.v) && !CredentialMetaKey(e.k)
+			childCred := cred || !hideChild && isContainer(e.v) && CredentialContainer(e.k)
+			m.writeJSONKey(b, e.v, append(slices.Clone(stack), e.k), indent, depth+1, hideChild, !hideChild && IdentifierKey(e.k), childCred, st)
 		}
 		nl(depth)
 		b.WriteByte('}')
@@ -956,7 +985,8 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 				b.WriteByte(',')
 			}
 			nl(depth + 1)
-			m.writeJSON(b, e, stack, indent, depth+1, hide, st)
+			// a bare value in a credential list is a secret
+			m.writeJSONKey(b, e, stack, indent, depth+1, hide || cred && isScalar(e), false, cred, st)
 		}
 		nl(depth)
 		b.WriteByte(']')
@@ -979,6 +1009,11 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 		}
 		b.WriteString(string(t)) // as written: never rounded
 	case bool:
+		if c := leafHidden(); c != "" {
+			st[c]++
+			writeString(b, Dots)
+			return
+		}
 		b.WriteString(strconv.FormatBool(t))
 	default: // null
 		b.WriteString("null")
@@ -1069,11 +1104,24 @@ func (m *Masker) Identifier(s string, st Stats) string {
 			s = detect(d, s, st)
 		}
 	}
-	// an IBAN only as the whole value: hashes and GUIDs hold IBAN-like runs
-	if slices.Contains(m.detectors, DetectIBAN) && len(s) >= 15 && ibanValid(strings.TrimSpace(s)) {
-		st[DetectIBAN]++
-		c := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
-		s = c[:4] + " " + Dots + " " + Dots + " " + Dots + " " + c[len(c)-4:]
+	// an IBAN only as the whole value or a whole word: hashes and GUIDs hold
+	// IBAN-like runs
+	if slices.Contains(m.detectors, DetectIBAN) && len(s) >= 15 {
+		if ibanValid(strings.TrimSpace(s)) {
+			st[DetectIBAN]++
+			c := strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(s), " ", ""))
+			s = c[:4] + " " + Dots + " " + Dots + " " + Dots + " " + c[len(c)-4:]
+		} else if strings.Contains(s, " ") {
+			words := strings.Split(s, " ")
+			for i, w := range words {
+				if len(w) >= 15 && ibanValid(w) {
+					st[DetectIBAN]++
+					c := strings.ToUpper(w)
+					words[i] = c[:4] + " " + Dots + " " + Dots + " " + Dots + " " + c[len(c)-4:]
+				}
+			}
+			s = strings.Join(words, " ")
+		}
 	}
 	// the caller's own rules apply everywhere
 	for i, re := range m.regexes {
@@ -1100,3 +1148,32 @@ func (m *Masker) HidesWhole(k string, v any) bool {
 	}
 	return true
 }
+
+// CredentialContainer: a key whose list or object holds credentials
+// (credentials, userCredentials, credential). Inside it only metadata
+// (CredentialMetaKey) stays readable; every other value, also under keys
+// no rule knows, is masked (cpicli#75).
+func CredentialContainer(k string) bool { return strings.Contains(strings.ToLower(k), "credential") }
+
+// credentialMeta are the readable fields of a credential (cpi.UserCredential,
+// cpi.OAuth2Credential and the like).
+var credentialMeta = []string{"name", "kind", "type", "description", "user", "username", "companyid", "clientid",
+	"clientauthentication", "scope", "resource", "audience", "status", "deployedby", "deployedon", "modifiedby",
+	"modifiedon", "createdby", "createdon", "lastmodified", "expiry", "expires", "validuntil", "alias"}
+
+// CredentialMetaKey: a field of a credential that is metadata, not the
+// secret: its name, kind, user, client ID, token URL and the like, and
+// reference or identifier fields (…Name, …Url, …Type, …Id).
+func CredentialMetaKey(k string) bool {
+	return slices.Contains(credentialMeta, strings.ToLower(k)) || ReferenceKey(k) || IdentifierKey(k) && !SensitiveName(k)
+}
+
+func isScalar(v any) bool {
+	switch v.(type) {
+	case object, []any, map[string]any:
+		return false
+	}
+	return true
+}
+
+func isContainer(v any) bool { return !isScalar(v) }

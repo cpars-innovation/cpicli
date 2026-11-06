@@ -2,6 +2,7 @@ package ops
 
 import (
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,6 +25,28 @@ type ConfigureConfigFile struct {
 // LoadConfigureFiles reads a configure YAML file or all *.yml/*.yaml files of
 // a folder (not recursive).
 func LoadConfigureFiles(path string) ([]*ConfigureConfigFile, error) {
+	files, err := loadConfigureFiles(path)
+	if err != nil {
+		return nil, err
+	}
+	// a value from a masked view would replace the real one on the tenant:
+	// refused before anything is written, on every write path (batch too,
+	// cpicli#75)
+	for _, f := range files {
+		for _, p := range f.Config.Packages {
+			for _, a := range p.Artifacts {
+				for _, param := range a.Parameters {
+					if strings.Contains(param.Value, mask.Dots) {
+						return nil, fmt.Errorf("%s: parameter %s of %s holds the masked value %s: set the real value", f.Source, param.Key, a.ID, mask.Dots)
+					}
+				}
+			}
+		}
+	}
+	return files, nil
+}
+
+func loadConfigureFiles(path string) ([]*ConfigureConfigFile, error) {
 	// Check if path is a file or directory
 	info, err := os.Stat(path)
 	if err != nil {

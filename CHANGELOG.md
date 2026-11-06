@@ -82,6 +82,12 @@ access scope.
   length (hashes and GUIDs keep their value) and match identifier fields only whole; a `d` wrapper holding an
   array or a deep object is refused before it is parsed; configuration updates carrying `••••` are refused;
   short `Basic` credentials and URL passwords with `@` and `/` are masked whole.
+- **From the third verification (#75):** inside a credential container (`credentials`, `userCredentials`) every
+  value but metadata (name, kind, user, client ID, token URL, …) is masked, also under keys no rule knows;
+  escaped quotes and braces in connection strings (`""`, `''`, `}}`) and unterminated values are masked to their
+  end; configure files with `••••` are refused when loaded, before the batch path; a repository `cpictl.yaml` can
+  no longer set `mask-config`; card numbers need a card network's prefix (lists of years or ports are no cards);
+  an IBAN word in an identifier field is masked; a `d` value that is not an object is refused before it is read.
 
 ## 0.37.0
 

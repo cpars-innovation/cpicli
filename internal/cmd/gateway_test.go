@@ -100,7 +100,7 @@ func TestGatewayMode(t *testing.T) {
 		require.NoError(t, os.Mkdir(filepath.Join(repo, ".git"), 0o755))
 		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n", 0o600)
 		t.Setenv(gatewayTokenEnv, "user-token")
-		for _, k := range []string{"no-redact: true", "send-payloads: true", "masking-control: full"} {
+		for _, k := range []string{"no-redact: true", "send-payloads: true", "masking-control: full", "mask-config: none.yaml"} {
 			writeModeFile(t, filepath.Join(repo, "cpictl.yaml"), k+"\n", 0o644)
 			code, stderr := projectRun(t, home, repo, "--profile", "gw", "undeploy", "--artifact-ids", "A")
 			assert.NotEqual(t, 0, code, k)

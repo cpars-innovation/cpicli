@@ -681,7 +681,7 @@ func checkProjectConfig(files []configFile) error {
 	}
 	// masking protects what an agent in the repository reads: a repository
 	// file must not loosen it (cpicli#75)
-	for _, k := range []string{"no-redact", "send-payloads", "redact-payloads", "masking-control"} {
+	for _, k := range []string{"no-redact", "send-payloads", "redact-payloads", "masking-control", "mask-config"} {
 		if project.v.InConfig(k) {
 			return fmt.Errorf("%s contains %s: set it in the profile or $HOME/cpictl.yaml (a repository file must not loosen masking)", project.path, k)
 		}

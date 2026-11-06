@@ -1408,6 +1408,7 @@ func TestGuardWrappedNestedBodyIsCheap(t *testing.T) {
 	for _, body := range []string{
 		big(`{"d":[`, `%d`, `]}`, 2000000),
 		big(`{"d":{"Id":"SD_New","x":{`, `"k%d":1`, `}}}`, 400000),
+		`{"d":"` + strings.Repeat("x", 30<<20) + `"}`,
 	} {
 		start := time.Now()
 		refused(t, g.Before(req("POST", "/api/v1/IntegrationPackages", body)))

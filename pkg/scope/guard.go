@@ -1633,6 +1633,11 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 				if !wrapper && len(rest) > 0 && (rest[0] == '{' || rest[0] == '[') {
 					return nil, nil, false
 				}
+				// "d" holds the wrapped object or nothing: any other value is
+				// refused before it is read (a 51 MB string costs seconds)
+				if strings.EqualFold(k, "d") && !wrapper {
+					return nil, nil, false
+				}
 			}
 			var v json.RawMessage
 			if err := dec.Decode(&v); err != nil || replacementText(v) {

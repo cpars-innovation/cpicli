@@ -245,3 +245,13 @@ func TestConfigureRefusesMaskedValue(t *testing.T) {
 	assert.Contains(t, err.Error(), "holds the masked value")
 	assert.Equal(t, "real", mock.Artifacts["A"].Parameters["Password"])
 }
+
+// A configure file with a masked value is refused when it is loaded, before
+// any write path (batch included) runs.
+func TestConfigureFileRefusesMaskedValue(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "c.yml")
+	require.NoError(t, os.WriteFile(f, []byte("packages:\n  - integrationSuiteId: P\n    artifacts:\n      - artifactId: A\n        parameters:\n          - {key: Host, value: \""+mask.Dots+"\"}\n"), 0o600))
+	_, err := LoadConfigureFiles(f)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "holds the masked value")
+}

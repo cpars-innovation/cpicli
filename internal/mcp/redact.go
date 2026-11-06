@@ -255,6 +255,7 @@ func (r *Redactor) apply(v, g any, payloads bool, st mask.Stats) (any, mask.Stat
 type walker struct {
 	r           *Redactor
 	m           *mask.Masker
+	cred        bool // inside a credential container: only metadata stays readable
 	payloads    bool // withhold message bodies (payload tools)
 	messageData bool // withhold error texts, mask business keys (every tool)
 	st          mask.Stats
@@ -312,6 +313,20 @@ func (w walker) walk(node any, key string) (any, bool) {
 					continue
 				}
 			}
+			// inside a credential container every value but metadata is masked
+			if w.cred && child != nil && child != "" && child != Masked && isScalar(child) && !mask.CredentialMetaKey(k) {
+				n[k], changed = Masked, true
+				w.st[mask.CountName]++
+				continue
+			}
+			if !isScalar(child) && mask.CredentialContainer(k) && !w.m.HidesWhole(k, child) && !w.cred {
+				inner := w
+				inner.cred = true
+				if c, ok := inner.walk(child, k); ok {
+					n[k], changed = c, true
+				}
+				continue
+			}
 			// under a sensitive key the whole value is masked, whatever its type
 			// (mask.HidesWhole: a list of credential metadata is walked instead)
 			if child != nil && child != "" && child != Masked && (w.m.HidesWhole(k, child) || !w.m.Sensitive(k) && r.sensitiveWith(w.m, k) && !mask.ReferenceKey(k)) {
@@ -337,6 +352,11 @@ func (w walker) walk(node any, key string) (any, bool) {
 	case []any:
 		changed := false
 		for i, child := range n {
+			if w.cred && isScalar(child) && child != nil && child != "" && child != Masked {
+				n[i], changed = Masked, true // a bare value in a credential list
+				w.st[mask.CountName]++
+				continue
+			}
 			if w.messageData && key == "customHeaderProperties" {
 				if m, ok := child.(map[string]any); ok {
 					if s, ok := m["value"].(string); ok && s != "" && s != Masked {
@@ -479,4 +499,12 @@ func maskScriptLines(n map[string]any, st mask.Stats) bool {
 		}
 	}
 	return false
+}
+
+func isScalar(v any) bool {
+	switch v.(type) {
+	case map[string]any, []any:
+		return false
+	}
+	return true
 }

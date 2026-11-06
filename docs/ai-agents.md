@@ -16,7 +16,7 @@ keep that data away from the model.
    profile (or `CPICTL_REDACT=true`, or `--redact`). In gateway mode it is always on: `--no-redact` is ignored
    there, a `--mask-config` can only add masking (every detector stays on), `--send-payloads` is ignored and
    `set_masking` can only tighten. A repository's `cpictl.yaml` can never loosen masking (`no-redact`,
-   `send-payloads`, `redact-payloads`, `masking-control` there are errors).
+   `send-payloads`, `redact-payloads`, `masking-control`, `mask-config` there are errors).
 
 ## What is withheld and masked
 
