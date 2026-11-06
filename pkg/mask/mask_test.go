@@ -351,7 +351,7 @@ func TestCardRunIsLinear(t *testing.T) {
 	s := strings.Repeat("1 ", 200000)
 	start := time.Now()
 	Default().Text(s)
-	assert.Less(t, time.Since(start), 2*time.Second)
+	assert.Less(t, time.Since(start), raceSlowdown*2*time.Second)
 }
 
 // Escapes in connection-string values (cpicli#75, round 3).
@@ -403,9 +403,9 @@ func TestCardNetworks(t *testing.T) {
 // cards still mask.
 func TestOverMasking(t *testing.T) {
 	m := Default()
-	out, _, err := m.JSON([]byte(`{"credentials":[{"name":"SFTP","secretEnv":"CRED_SFTP_PASSWORD","password":"hunter2"}]}`))
+	out, _, err := m.JSON([]byte(`{"credentials":[{"name":"SFTP","secretEnv":"CPI_SECRET_USER_SFTP","password":"hunter2"}]}`))
 	require.NoError(t, err)
-	assert.Contains(t, string(out), `"secretEnv":"CRED_SFTP_PASSWORD"`)
+	assert.Contains(t, string(out), `"secretEnv":"CPI_SECRET_USER_SFTP"`)
 	assert.NotContains(t, string(out), "hunter2")
 	for _, in := range []string{"id 3c1ae2bd-6978-4339-1512-40b9ce02be89", "ports 5000 5001 5002 5003 5004 5005"} {
 		got, _ := m.Text(in)
@@ -462,8 +462,30 @@ func TestOverMaskingFixesKeepMasking(t *testing.T) {
 	assert.Contains(t, string(out), `"ERP"`)
 
 	// secretEnv only as a variable name
-	out, _, err = m.JSON([]byte(`{"credentials":[{"secretEnv":"hunter2"},{"secretEnv":"CRED_SFTP_PASSWORD"}]}`))
+	out, _, err = m.JSON([]byte(`{"credentials":[{"secretEnv":"hunter2"},{"secretEnv":"CPI_SECRET_USER_SFTP"}]}`))
 	require.NoError(t, err)
 	assert.NotContains(t, string(out), "hunter2")
-	assert.Contains(t, string(out), "CRED_SFTP_PASSWORD")
+	assert.Contains(t, string(out), "CPI_SECRET_USER_SFTP")
+}
+
+// Round 6 of #76: the hex-ID check stays linear; a card glued to more hex
+// is masked; secretEnv only in cpictl's format.
+func TestHexIDLinearAndStrict(t *testing.T) {
+	m := Default()
+	for _, s := range []string{strings.Repeat("4111111111111111-a-", 20000), strings.Repeat("x-0049151234567-", 25000)} {
+		start := time.Now()
+		m.Text(s)
+		assert.Less(t, time.Since(start), raceSlowdown*2*time.Second)
+	}
+	out, _ := m.Text("pan 4111111111111111" + strings.Repeat("ab", 16))
+	assert.NotContains(t, out, "4111111111111111")
+	h := sha256.Sum256([]byte("x"))
+	hash := hex.EncodeToString(h[:])
+	out, _ = m.Text("sha " + hash)
+	assert.Equal(t, "sha "+hash, out)
+
+	got, _, err := m.JSON([]byte(`{"credentials":[{"secretEnv":"HUNTER2"},{"secretEnv":"CPI_SECRET_OAUTH2_GRAPH"}]}`))
+	require.NoError(t, err)
+	assert.NotContains(t, string(got), "HUNTER2")
+	assert.Contains(t, string(got), "CPI_SECRET_OAUTH2_GRAPH")
 }

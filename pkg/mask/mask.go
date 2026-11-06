@@ -621,22 +621,38 @@ func consecutiveGroups(x string) bool {
 
 var (
 	reGUID  = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-	reHexID = regexp.MustCompile(`^[0-9a-fA-F]{32,}$`)
+	reHexID = regexp.MustCompile(`^[0-9a-fA-F]+$`)
+	// hash lengths in hex: MD5, SHA-1, SHA-224, SHA-256, SHA-384, SHA-512
+	hexIDLengths = []int{32, 40, 56, 64, 96, 128}
 )
 
-// inHexID: s[a:b] lies inside a hex ID, a GUID (8-4-4-4-12) or a run of 32
-// and more hex digits (a hash), not inside text where a number may touch a
-// letter (4111…JOHN SMITH in an IDoc, call+49…).
+// maxHexID is the longest hex ID (SHA-512 in hex): a longer word is no hex
+// ID, and the scan for one stops there, so that masking stays linear
+// (cpicli#76).
+const maxHexID = 128
+
+// inHexID: s[a:b] lies inside a hex ID, a GUID (8-4-4-4-12) or a hash (hex
+// digits of a hash's length), not inside text where a number may touch a
+// letter (4111…JOHN SMITH in an IDoc, call+49…) or a card glued to more hex.
+// It looks at most maxHexID characters around the match: a longer word is no
+// hex ID (masked, the safe side).
 func inHexID(s string, a, b int) bool {
+	if b-a > maxHexID {
+		return false
+	}
 	word := func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' }
 	for a > 0 && word(s[a-1]) {
-		a--
+		if a--; b-a > maxHexID {
+			return false
+		}
 	}
 	for b < len(s) && word(s[b]) {
-		b++
+		if b++; b-a > maxHexID {
+			return false
+		}
 	}
 	w := s[a:b]
-	return reGUID.MatchString(w) || reHexID.MatchString(w)
+	return reGUID.MatchString(w) || slices.Contains(hexIDLengths, len(w)) && reHexID.MatchString(w)
 }
 
 // digitsOf returns the ASCII digits of s.
@@ -1252,10 +1268,14 @@ func (m *Masker) userSensitive(k string) bool {
 	return false
 }
 
-var reEnvName = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+// reEnvName is cpictl's name for a secret's variable (credentials.yml,
+// backup: CPI_SECRET_<KIND>_<NAME>); an upper-case value alone could be
+// the secret itself (HUNTER2).
+var reEnvName = regexp.MustCompile(`^CPI_SECRET_[A-Z0-9_]+$`)
 
-// envNameOK: secretEnv is metadata only while it holds an environment
-// variable's name; any other value is treated as the secret (cpicli#76).
+// envNameOK: secretEnv is metadata only while it holds cpictl's variable
+// name for the secret; any other value is treated as the secret
+// (cpicli#76).
 func envNameOK(k string, v any) bool {
 	if !strings.EqualFold(k, "secretEnv") {
 		return true

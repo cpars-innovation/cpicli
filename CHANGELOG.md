@@ -12,9 +12,9 @@ Masking in 0.38.0 masked a few values that are no secrets (#76). Nothing leaked;
 - `secretEnv` (the variable a credential's secret comes from) and other metadata of a credential stay readable
   inside credential lists, even when their name holds a sensitive word.
 - Lists of consecutive 4-digit numbers (`ports 5000 5001 5002 …`) are no card numbers.
-- Digits inside hex IDs (GUIDs, hashes of 32 and more hex digits) are neither card nor phone numbers. Card and
+- Digits inside hex IDs (GUIDs, MD5 to SHA-512 hashes in hex) are neither card nor phone numbers. Card and
   phone numbers glued to text (`4111…JOHN SMITH` in an IDoc, `call+49…`) are still masked.
-- A `secretEnv` value is shown only when it is an environment variable's name, and the caller's own sensitive
+- A `secretEnv` value is shown only in cpictl's format (`CPI_SECRET_…`), and the caller's own sensitive
   names (`--mask-config` names, `--mask-pattern`) also apply to credential metadata.
 - The release gate now also requires an independent verification for changes to the masking code (`pkg/mask`,
   `pkg/secretscan`, `internal/cmd/redact.go`).
