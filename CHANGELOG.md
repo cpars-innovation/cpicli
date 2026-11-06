@@ -5,11 +5,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.38.0
+
 **AI data protection.** Whatever an AI agent reads through cpictl goes to its model provider. From this release
 cpictl keeps tenant data out of it by default where it can: message payloads and error texts are withheld, personal
 data and secrets are masked as `••••`, and the operator decides how much an agent may see
 ([docs/ai-agents.md](docs/ai-agents.md)). Also: clean backups of tenants with SAP standard content, and a stricter
-access scope.
+access scope. Verified by the cpictl gateway's independent verifier in four rounds on the mock tenant (#75)
+before the tag.
 
 **What to do:**
 
