@@ -923,6 +923,12 @@ func (g *Guard) classifyOperations(r *httpclnt.GuardRequest, cmd string) (decisi
 	name, _, _ := strings.Cut(cmd, "?")
 	switch name {
 	case "com.sap.it.op.srv.web.cf.RuntimeLocationListCommand":
+		// tenant-wide on purpose, the one tenant-wide read a scope allows
+		// (cpicli#49): the names of the runtimes (cloudintegration, an
+		// integration cell), no content and no credentials. Deploy status,
+		// the runtime listing and the log level per runtime need it, also
+		// for read-only scopes. TestGuardRuntimeLocationsAreTenantWide pins
+		// it.
 		return decision{allow: true}, nil
 	case "com.sap.it.op.tmn.commands.dashboard.webui.IntegrationComponentsListCommand":
 		return decision{filter: func(g *Guard, b []byte) ([]byte, error) { return g.filterComponents(r.Ctx, b), nil }}, nil
@@ -1611,11 +1617,15 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 			}
 			seen[strings.ToLower(k)] = true
 			var v json.RawMessage
-			if err := dec.Decode(&v); err != nil {
+			if err := dec.Decode(&v); err != nil || replacementText(v) {
 				return nil, nil, false
 			}
 			raw[k] = v
-			keys = append(keys, k)
+			// a cap before the rest is decoded: a body with a million keys
+			// costs seconds of CPU (cpicli#66)
+			if keys = append(keys, k); len(keys) > maxBodyKeys {
+				return nil, nil, false
+			}
 		}
 		if t, err := dec.Token(); err != nil || t != json.Delim('}') {
 			return nil, nil, false
@@ -1649,6 +1659,31 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 		fields[k] = v
 	}
 	return fields, true
+}
+
+// maxBodyKeys is the most keys a write body's object may have under a
+// scope; cpictl's own bodies have fewer than 20.
+const maxBodyKeys = 256
+
+// replacementText reports whether a JSON value holds U+FFFD or an escaped
+// surrogate (\ud800-\udfff): a lone surrogate decodes to U+FFFD, and the
+// tenant may read either differently (cpicli#66).
+func replacementText(v []byte) bool {
+	if bytes.ContainsRune(v, utf8.RuneError) {
+		return true
+	}
+	lower := bytes.ToLower(v)
+	for i := bytes.Index(lower, []byte(`\u`)); i >= 0; {
+		if j := i + 2; j+2 <= len(lower) && (lower[j] == 'd' && lower[j+1] >= '8' && lower[j+1] <= 'f' || string(lower[j:j+min(4, len(lower)-j)]) == "fffd") {
+			return true
+		}
+		next := bytes.Index(lower[i+2:], []byte(`\u`))
+		if next < 0 {
+			break
+		}
+		i += 2 + next
+	}
+	return false
 }
 
 // bodyField reads a top-level string field (in the exact case) of a JSON

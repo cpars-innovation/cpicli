@@ -175,6 +175,11 @@ whichever command or MCP tool sends it, including tools added later:
   test runs stay hidden. A tooling message with no such flow (an XSLT or script test run) is refused: nothing says
   whose it was.
 - **API Management**, tenant-wide artifact lists and any request the guard does not know are refused.
+- **The runtime locations** (`RuntimeLocationListCommand`) are the one tenant-wide read every scope gets: the names
+  of the tenant's runtimes (Cloud Integration, integration cells), no content and no credentials. Deploy status, the
+  runtime listing and the log level per runtime need them, also for read-only scopes.
+- **Write bodies** must be one flat JSON object (or `{"d":{...}}` around one) of at most 256 keys, without repeated
+  keys, nested objects or arrays, U+FFFD or escaped surrogates; a `PUT`'s body `Id` must match the URL.
 - **Requests a server could read differently** are refused, also inside a `$batch`: dot segments (also encoded or as
   `..;`), encoded slashes, backslashes and `%`, `;` in API paths, repeated query parameters, method override headers,
   compressed request bodies and JSON bodies that repeat a key. The guard decides on the literal request; these would

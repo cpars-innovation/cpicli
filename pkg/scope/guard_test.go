@@ -488,11 +488,18 @@ func TestGuardRefusesAmbiguousRequests(t *testing.T) {
 		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", "{\"Id\":\"SD_Orders\",\"I\\u0000d\":\"FI_Billing\"}"),
 		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", "{\"Id\":\"SD_Orders\",\"\xffId\":\"FI_Billing\"}"),
 		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"Id":"SD_Orders","__metadata":{"uri":"x"}}`),
+		// values the tenant may read differently, and too many keys (#66)
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", "{\"Id\":\"SD_Orders\",\"Name\":\"a\uFFFDb\"}"),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"Id":"SD_Orders","Name":"a\ud800b"}`),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"Id":"SD_Orders","Name":"a\uFFFDb"}`),
+		req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", manyKeys(257)),
 		req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":null,"Name":"A"}`),
 	} {
 		refused(t, g.Before(r))
 	}
 	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"d":{"Id":"SD_Orders","Name":"Orders","ShortText":"x"}}`)), "cpictl's package update")
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", manyKeys(255))), "up to the cap")
+	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationPackages('SD_Orders')", `{"Id":"SD_Orders","Name":"Bestellungen \u00fc C:\\users"}`)))
 	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"SD_New","Name":"New","ShortText":"x","Version":"1.0.0"}}`)), "cpictl's package create")
 	refused(t, g.Before(req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"FI_New","Name":"New","ShortText":"x"}}`)))
 	assert.NoError(t, g.Before(req("PUT", "/api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active')", `{"Id":"SD_A","Name":"A","ArtifactContent":"UEs="}`)))
@@ -1341,4 +1348,23 @@ func TestGuardHarnessOff(t *testing.T) {
 	r := refused(t, g.Before(&httpclnt.GuardRequest{Ctx: context.Background(), Method: "POST", Base: "https://rt:443", Path: "/http/cpictl/test",
 		Header: map[string]string{"CpictlTargetAddress": "/sd/in"}}))
 	assert.Contains(t, r.Error(), "test harness (ProcessDirect tests) is off under this scope")
+}
+
+// manyKeys is a package body with n keys (Id and n-1 others).
+func manyKeys(n int) string {
+	var b strings.Builder
+	b.WriteString(`{"Id":"SD_Orders"`)
+	for i := 1; i < n; i++ {
+		fmt.Fprintf(&b, `,"k%d":"v"`, i)
+	}
+	return b.String() + "}"
+}
+
+// The runtime locations are the one tenant-wide read a scope allows: a scope
+// with read on one package gets them (cpicli#49). Changing this decision has
+// to change this test.
+func TestGuardRuntimeLocationsAreTenantWide(t *testing.T) {
+	g := testGuard(t, `{"version":1,"packages":["SD_Orders"],"actions":["read"]}`)
+	assert.NoError(t, g.Before(req("GET", "/Operations/com.sap.it.op.srv.web.cf.RuntimeLocationListCommand", "")))
+	refused(t, g.Before(req("GET", "/Operations/com.sap.it.op.srv.web.cf.SomeOtherCommand", "")))
 }
