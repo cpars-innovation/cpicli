@@ -1,11 +1,13 @@
 package mcp
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"github.com/cpars-innovation/cpicli/pkg/ops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,4 +98,54 @@ func TestRedactorMasksScriptSecretLines(t *testing.T) {
 		"def cred = secureStore.getUserCredential(\"ERP\")\n    def password = \"S3cr3t!x9\"\nreturn message\n"), 0)}
 	m := applyJSON(t, r, "get_resource", res)
 	assert.Equal(t, "def cred = secureStore.getUserCredential(\"ERP\")\n    "+Masked+"\nreturn message\n", m["text"])
+}
+
+// set_masking: with control tighten only more masking is accepted; full
+// changes everything; fixed refuses. The policy applies to the next result.
+func TestMaskingControl(t *testing.T) {
+	r, err := NewRedactor("", nil, true, nil)
+	require.NoError(t, err)
+	call := func(control string, args map[string]any) (any, error) {
+		tools := MaskingTools(func() *Redactor { return r }, control)
+		raw, _ := json.Marshal(args)
+		if _, ok := args["get"]; ok {
+			return tools[0].Handler(context.Background(), json.RawMessage(`{}`))
+		}
+		return tools[1].Handler(context.Background(), raw)
+	}
+	v, err := call(MaskingTighten, map[string]any{"get": true})
+	require.NoError(t, err)
+	assert.Equal(t, "withheld", v.(maskingView).Payloads)
+	assert.Len(t, v.(maskingView).Detectors, len(mask.BuiltIns))
+
+	_, err = call(MaskingTighten, map[string]any{"names": []string{"^customerNo$"}, "rules": []map[string]string{{"kind": "regex", "pattern": `ORD-\d+`}}})
+	require.NoError(t, err)
+	out := applyJSON(t, r, "get_resource", map[string]any{"customerNo": "C-77", "note": "see ORD-4711"})
+	assert.Equal(t, Masked, out["customerNo"])
+	assert.Equal(t, "see "+Masked, out["note"])
+
+	for _, loosen := range []map[string]any{
+		{"payloads": "sent"},
+		{"mode": "replace", "names": []string{}},
+		{"detectors": []string{"email"}, "mode": "replace"},
+	} {
+		_, err := call(MaskingTighten, loosen)
+		require.Error(t, err, "%v", loosen)
+		assert.Contains(t, err.Error(), "only accepts more masking")
+	}
+	_, err = call(MaskingTighten, map[string]any{"rules": []map[string]string{{"kind": "regex", "pattern": "a*"}}})
+	assert.Error(t, err, "an invalid rule changes nothing")
+
+	_, err = call(MaskingFixed, map[string]any{"names": []string{"x"}})
+	assert.Error(t, err)
+
+	v, err = call(MaskingFull, map[string]any{"mode": "replace", "detectors": []string{"email"}, "payloads": "sent"})
+	require.NoError(t, err)
+	assert.Equal(t, "sent", v.(maskingView).Payloads)
+	assert.Equal(t, []string{"email"}, v.(maskingView).Detectors)
+	assert.False(t, r.Withholding())
+	out = applyJSON(t, r, "get_resource", map[string]any{"iban": "DE89370400440532013000", "mail": "a@example.com", "customerNo": "C-77"})
+	assert.Equal(t, "DE89370400440532013000", out["iban"], "the IBAN detector is off now")
+	assert.Equal(t, "••••@••••", out["mail"])
+	assert.Equal(t, "C-77", out["customerNo"], "the name was replaced away")
 }

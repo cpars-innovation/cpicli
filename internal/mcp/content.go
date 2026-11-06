@@ -273,7 +273,7 @@ func (s *Server) Contents() *ContentStore { return s.contentStore() }
 
 // ContentTool reads stored content by reference (get_content). store
 // returns the server's store; it is called on each use.
-func ContentTool(store func() *ContentStore, root func() string, redacted bool) Tool {
+func ContentTool(store func() *ContentStore, root func() string, redacted func() bool) Tool {
 	return Tool{
 		Name: "get_content", Title: "Read stored content by reference",
 		Description: "Read a payload that a result gave as ref (results show the first bytes inline and say \"cut\"): " +
@@ -297,8 +297,8 @@ func ContentTool(store func() *ContentStore, root func() string, redacted bool) 
 			if err := decode(raw, &a); err != nil {
 				return nil, err
 			}
-			if redacted {
-				return nil, output.Usagef("get_content is not available: this server redacts message bodies (--redact-payloads)")
+			if redacted() {
+				return nil, output.Usagef("get_content is not available: this server withholds message bodies (start it with --send-payloads, or set_masking payloads sent)")
 			}
 			b, err := store().Get(a.Ref)
 			if err != nil {

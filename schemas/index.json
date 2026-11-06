@@ -461,6 +461,16 @@
       "typed": true
     },
     {
+      "command": "mask",
+      "file": "mask.json",
+      "typed": true
+    },
+    {
+      "command": "mask config",
+      "file": "mask_config.json",
+      "typed": true
+    },
+    {
       "command": "matrix",
       "file": "matrix.json",
       "typed": true

@@ -150,7 +150,7 @@ func TestLoopCountsOnlyItsFailures(t *testing.T) {
 
 // Every tool has a class; tenant tools are classified explicitly.
 func TestEveryToolHasAClass(t *testing.T) {
-	all := append(allToolsForTest(), HelpTool(HelpInfo{}))
+	all := append(append(allToolsForTest(), HelpTool(HelpInfo{})), MaskingTools(func() *Redactor { return &Redactor{} }, MaskingTighten)...)
 	for _, tool := range all {
 		c := ClassOf(tool.Name)
 		require.NotEmpty(t, c, tool.Name)

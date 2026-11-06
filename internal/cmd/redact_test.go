@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -83,4 +85,28 @@ func TestCLIRedactionScriptLines(t *testing.T) {
 	res := runMain(t, append([]string{"resources", "get", "--artifact-id", "A", "--name", "s.groovy", "--type", "groovy", "--redact"}, basicAuth(mock)...)...)
 	require.Equal(t, 0, res.code, res.stderr)
 	assert.Equal(t, "••••\nprintln 1", res.stdout)
+}
+
+// cpictl mask: files or stdin through the masker, counts on stderr; mask
+// config checks rules.
+func TestMaskCommand(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "p.json")
+	require.NoError(t, os.WriteFile(f, []byte(`{"customerNo":"C-77","mail":"jane@example.com","amount":12.50}`), 0o600))
+	res := runMain(t, "mask", "--name", "^customerNo$", f)
+	require.Equal(t, 0, res.code, res.stderr)
+	assert.Equal(t, `{"customerNo":"••••","mail":"••••@••••","amount":12.50}`, res.stdout)
+	assert.Contains(t, res.stderr, "Masked 2 values")
+	assert.NotContains(t, res.stderr, "jane@example.com")
+
+	res = runMain(t, "mask", "--lines", "--rule", `regex:ORD-\d+`, f)
+	require.Equal(t, 0, res.code, res.stderr)
+	assert.Equal(t, `{"customerNo":"C-77","mail":"••••@••••","amount":12.50}`, res.stdout, "lines: no key rules beyond the built-in names")
+
+	res = runMain(t, "mask", "config", "--rule", "regex:a*", "--output", "json")
+	assert.Equal(t, 2, res.code, "a rule that matches empty text")
+	res = runMain(t, "mask", "config", "--detector", "email", "--output", "json")
+	require.Equal(t, 0, res.code, res.stderr)
+	assert.Contains(t, res.stdout, `"detectors": [`)
+	assert.Contains(t, res.stdout, `"email"`)
 }

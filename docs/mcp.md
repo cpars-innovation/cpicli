@@ -127,6 +127,7 @@ server: [plugin.md](plugin.md).
 | `--redact-payloads` | `true` | Withhold message bodies and message error texts, mask business keys, see [Masking](#masking) |
 | `--send-payloads` | `false` | Send message bodies and error texts (still through the value masker): turns `--redact-payloads` off |
 | `--mask-config` | | Masking rules (YAML or JSON), see [ai-agents.md](ai-agents.md#masking-rules) |
+| `--masking-control` | `tighten` | How far `set_masking` may change masking: `tighten`, `full`, `fixed`, see [Masking](#masking) |
 
 Every flag can also be set in `cpictl.yaml` (`loop-required: true`, `loop-max-deploys: 5`,
 `mask-pattern: ["^X-Customer", "iban"]`) or as an environment variable (`CPICTL_LOOP_REQUIRED=true`,
@@ -622,6 +623,22 @@ value reads `••••`.
   literal read as their indentation and `••••` (the file keeps its lines).
 - **Partner Directory:** entries marked secure in `.cpi/secrets/partner-directory.json` return
   `"value": "••••", "secure": true` ([ai-agents.md](ai-agents.md#secure-partner-directory-entries)).
+
+- **Keys:** a string under a sensitive key (or a name from `--mask-pattern`, `--mask-config` or
+  `set_masking`) is masked whole, except keys that name security material instead of holding it
+  (`…Name`, `…Alias`, `…Url`, `…Type`, `…Id`). Identifier fields (`…Id`, `…Guid`, `fingerprint`,
+  `sha256`, `version`) are never masked: the agent passes them back to the next call.
+
+**Changing the policy while the server runs.** `get_masking` shows the policy in force (payloads
+withheld or sent, detectors, names, rules) and `control`. `set_masking {detectors, names, rules,
+payloads, mode}` changes it for every following result; `mode: add` (default) merges, `replace`
+sets it whole. How far it may go is the operator's choice, `--masking-control`:
+
+| `--masking-control` | `set_masking` |
+|---|---|
+| `tighten` (default) | only more masking: add detectors, names and rules, withhold payloads; anything that would take masking away is refused. Safe to leave to the agent. |
+| `full` | everything, also `payloads: sent` and `replace`. For a client that keeps the tool away from its agent (CPI Studio, the cpictl gateway) and decides itself what the agent sees. |
+| `fixed` | not offered: the policy of the start (`--mask-config`, `--send-payloads`) is final. |
 
 With `--send-payloads` payloads, error texts and business keys go through, masked by the value
 masker. A write tool refuses an argument that carries `••••`: a masked view must not be written

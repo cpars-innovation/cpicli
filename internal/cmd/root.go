@@ -173,6 +173,7 @@ func NewCLI(version string) *cobra.Command {
 	rootCmd.AddCommand(NewConfigGenerateCommand())
 	rootCmd.AddCommand(NewOrchestratorCommand())
 	rootCmd.AddCommand(NewConfigureCommand())
+	rootCmd.AddCommand(NewMaskCommand())
 	return rootCmd
 }
 

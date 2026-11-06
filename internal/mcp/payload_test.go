@@ -40,7 +40,7 @@ func payloadServer(t *testing.T, root string, body []byte, sends *int) *Server {
 	}
 	withSaveTo(tools)
 	var srv *Server
-	tools = append(tools, ContentTool(func() *ContentStore { return srv.Contents() }, func() string { return root }, false))
+	tools = append(tools, ContentTool(func() *ContentStore { return srv.Contents() }, func() string { return root }, func() bool { return false }))
 	srv = NewServer("cpicli", "test", "", tools)
 	srv.Root = root
 	return srv

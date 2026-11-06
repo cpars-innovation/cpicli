@@ -124,6 +124,7 @@ type Masker struct {
 	names     []*regexp.Regexp
 	paths     [][]string
 	regexes   []*regexp.Regexp
+	prefixes  []string // each regex's literal prefix: a string without it is skipped
 
 	sensitive sync.Map // name -> bool: names repeat (element and key names)
 }
@@ -182,7 +183,8 @@ func New(c Config) (*Masker, error) {
 			if re.MatchString("") {
 				return nil, fmt.Errorf("regex rule %q matches empty text", r.Pattern)
 			}
-			m.regexes = append(m.regexes, re)
+			prefix, _ := re.LiteralPrefix()
+			m.regexes, m.prefixes = append(m.regexes, re), append(m.prefixes, prefix)
 		default:
 			return nil, fmt.Errorf("rule kind %q: regex or path", r.Kind)
 		}
@@ -308,7 +310,10 @@ func (m *Masker) plain(s string, st Stats) string {
 			s = detect(d, s, st)
 		}
 	}
-	for _, re := range m.regexes {
+	for i, re := range m.regexes {
+		if p := m.prefixes[i]; p != "" && !strings.Contains(s, p) {
+			continue
+		}
 		s = re.ReplaceAllStringFunc(s, func(string) string { st[CountRegex]++; return Dots })
 	}
 	return s

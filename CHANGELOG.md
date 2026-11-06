@@ -41,6 +41,11 @@ Details:
 - **Hard-coded secrets in scripts (#74):** `secretscan.LineSecret` judges literals only, so runtime credential code
   is no finding. The lint rule `hard-coded-secret` flags such lines (line and kind, never the value); MCP results
   and redacted CLI output show them as `••••`.
+- **Masking under the operator's and the client's control:** `get_masking` and `set_masking` in `cpictl mcp` show
+  and change the policy while the server runs; `--masking-control tighten` (default: only more masking), `full`
+  (for CPI Studio and the gateway, which keep the tool from their agent) or `fixed`. New `cpictl mask [file...]`
+  masks files or stdin with the same rules (`--detector`, `--name`, `--rule`, `--lines`), `cpictl mask config`
+  checks a rules file. Regex rules with a fixed start skip text that lacks it.
 - **Access scope (#66, #49):** a write body may have at most 256 keys and no U+FFFD or escaped surrogates; the
   tenant-wide `RuntimeLocationListCommand` read is documented and pinned by a test.
 

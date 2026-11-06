@@ -55,6 +55,22 @@ An unknown detector, an invalid regex or path, or a regex that matches empty tex
 silently does nothing would leak. Go programs (the cpictl gateway, CPI Studio) use the same masker:
 `pkg/mask` (`mask.New(cfg)`, `Text`, `JSON`, `Field`, `InPlace`, `Writer`).
 
+## Who decides what is masked
+
+- **The operator, at the start:** `--mask-config`, `--mask-pattern`, `--send-payloads` and `--masking-control`
+  of `cpictl mcp`; `redact: true`, `--mask-config` for the CLI.
+- **The MCP client, while the server runs:** `get_masking` shows the policy, `set_masking` changes it.
+  `--masking-control tighten` (the default) lets it only add masking (detectors, names, rules, withholding
+  payloads), so it is safe to leave to the agent. `full` lets it change everything, for a client that keeps
+  the tool away from its agent and decides itself what the agent sees: CPI Studio, the cpictl gateway.
+  `fixed` turns `set_masking` off. See [mcp.md](mcp.md#masking).
+- **Pipelines and other programs:** `cpictl mask [file...]` masks files or stdin with the same masker
+  (`--mask-config`, `--detector`, `--name`, `--rule path://… | regex:…`, `--lines` to keep the layout);
+  `cpictl mask config` checks rules and shows the policy. Go programs use `pkg/mask` directly.
+
+Regex rules are compiled once when the policy is set; a rule with a fixed start (`ORD-\d+`) only runs on
+text that contains it, so rules cost little on text they cannot match.
+
 ## Secure Partner Directory entries
 
 Most Partner Directory entries are routing and value mapping data an agent needs. Mark the few that hold

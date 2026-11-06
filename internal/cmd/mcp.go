@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -112,13 +113,18 @@ CPICTL_* environment variables.`,
 			}
 			maskPatterns := stringListSetting(cmd, "mask-pattern")
 			redactPayloads := config.GetBool(cmd, "redact-payloads") && !config.GetBool(cmd, "send-payloads")
-			masker, err := loadMasker(config.GetString(cmd, "mask-config"))
+			maskCfg, masker, err := loadMaskConfig(config.GetString(cmd, "mask-config"))
 			if err != nil {
 				return err
 			}
 			redactor, err := mcp.NewRedactor(root, maskPatterns, redactPayloads, masker)
 			if err != nil {
 				return output.Usagef("invalid --mask-pattern: %v", err)
+			}
+			redactor.Config = maskCfg
+			maskingControl := config.GetString(cmd, "masking-control")
+			if !slices.Contains(mcp.MaskingControls, maskingControl) {
+				return output.Usagef("--masking-control must be one of %s", strings.Join(mcp.MaskingControls, ", "))
 			}
 			if !redactPayloads {
 				fmt.Fprintln(cmd.ErrOrStderr(), "cpictl mcp: message payloads and error texts are sent to the client (--send-payloads); values are still masked")
@@ -207,7 +213,12 @@ CPICTL_* environment variables.`,
 			}
 			help.Listed = func(name string) bool { return server.IsListed(name) }
 			tools = append(tools, mcp.HelpTool(help),
-				mcp.ContentTool(func() *mcp.ContentStore { return server.Contents() }, func() string { return root }, redactPayloads))
+				mcp.ContentTool(func() *mcp.ContentStore { return server.Contents() }, func() string { return root }, redactor.Withholding))
+			for _, t := range mcp.MaskingTools(func() *mcp.Redactor { return redactor }, maskingControl) {
+				if t.Name != "set_masking" || maskingControl != mcp.MaskingFixed {
+					tools = append(tools, t)
+				}
+			}
 			var instructions string
 			if len(toolsets) > 0 && !dynamic {
 				// only the parts of these toolsets, and no list of the many
@@ -278,6 +289,7 @@ CPICTL_* environment variables.`,
 	c.Flags().Int("loop-max-minutes", 0, "Highest wall_clock_minutes loop_start accepts (0: no cap); also lowers the default")
 	c.Flags().StringArray("mask-pattern", nil, "Also mask the values of names (headers, properties, attributes, parameters) matching this regular expression (case-insensitive; repeatable)")
 	c.Flags().Bool("redact-payloads", true, "Withhold message bodies (test message responses, attachments, message store entries, trace payloads, data store entries, variables) and message error texts, and mask business keys (default on; see --send-payloads)")
+	c.Flags().String("masking-control", mcp.MaskingTighten, "How far the MCP client may change masking with set_masking: tighten (only more masking, the default), full (everything; for a client that keeps the tool from its agent, e.g. CPI Studio or the gateway), fixed (no changes)")
 	c.Flags().Bool("send-payloads", false, "Send message bodies and error texts to the client (masked by the value masker): turns --redact-payloads off")
 	addRuntimeAuthFlags(c)
 	return c
@@ -317,20 +329,26 @@ func gatewayScopeForMCP(cmd *cobra.Command, gw string) *scope.Scope {
 // loadMasker reads a --mask-config file (YAML or JSON); "" masks with every
 // built-in detector.
 func loadMasker(file string) (*mask.Masker, error) {
+	_, m, err := loadMaskConfig(file)
+	return m, err
+}
+
+// loadMaskConfig is loadMasker, also returning the config.
+func loadMaskConfig(file string) (mask.Config, *mask.Masker, error) {
+	var c mask.Config
 	if file == "" {
-		return mask.Default(), nil
+		return c, mask.Default(), nil
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return nil, output.Usagef("--mask-config: %v", err)
+		return c, nil, output.Usagef("--mask-config: %v", err)
 	}
-	var c mask.Config
 	if err := yaml.Unmarshal(data, &c); err != nil {
-		return nil, output.Usagef("--mask-config %s: %v", file, err)
+		return c, nil, output.Usagef("--mask-config %s: %v", file, err)
 	}
 	m, err := mask.New(c)
 	if err != nil {
-		return nil, output.Usagef("--mask-config %s: %v", file, err)
+		return c, nil, output.Usagef("--mask-config %s: %v", file, err)
 	}
-	return m, nil
+	return c, m, nil
 }

@@ -109,6 +109,8 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
 | [`logs trace`](#logs-trace) | List the traced steps of a message (flow on log level TRACE) |
 | [`logs trace-message`](#logs-trace-message) | Show payload, headers and exchange properties of a traced step (ID from 'logs trace') |
 | [`logs tree`](#logs-tree) | Show the path of a message or trace across flows and its first failure |
+| [`mask`](#mask) | Mask personal data and secrets in files or stdin (the masker of cpictl mcp and --redact) |
+| [`mask config`](#mask-config) | Check masking rules and show the policy they give |
 | [`matrix`](#matrix) | Version matrix: every artifact's version in Git and on each tier, and what is ready to promote |
 | [`mcp`](#mcp) | Run the MCP server (stdio) for AI agents |
 | [`mock-tenant`](#mock-tenant) | Run an in-memory SAP CPI tenant for local development and tests (never a real tenant) |
@@ -2578,6 +2580,59 @@ is the same for every message taking the same route.
   cpictl logs tree --message AGXyz... --key-header OrderNo --package-id Orders --since 2h
 ```
 
+## mask
+
+Mask personal data and secrets in files or stdin (the masker of cpictl mcp and --redact)
+
+```
+Writes the files (or stdin) to stdout with personal data and secrets masked as ••••:
+IBAN, e-mail, phone, payment card, JWT, Bearer/Basic credentials, private keys,
+credentials and signatures in URLs, values under sensitive names, and the rules of
+--mask-config (docs/ai-agents.md). JSON stays valid JSON and XML is masked element by
+element; --lines keeps every line and leaves unmasked lines byte for byte (for files a
+patch is made against). stderr gets the counts per detector, never a value.
+```
+
+**Usage:** `cpictl mask [file...] [flags]`
+
+**Flags:**
+
+```
+      --detector stringArray   Only these built-in detectors (repeatable; default all, or those of --mask-config)
+      --lines                  Mask line by line and keep the layout (unmasked lines stay byte for byte)
+      --name stringArray       Also mask values under names matching this regex (repeatable)
+      --rule stringArray       A rule: path://Customer/Name or regex:<expression> (repeatable)
+```
+
+**Examples:**
+
+```
+  cpictl mask payload.xml
+  cat error.txt | cpictl mask --mask-config .cpi/mask.yaml
+  cpictl mask --lines --detector email --detector iban --name '^customerNo$' report.csv
+  cpictl mask config --mask-config .cpi/mask.yaml        # check rules, show the policy
+```
+
+## mask config
+
+Check masking rules and show the policy they give
+
+```
+Reads --mask-config (and --detector, --name, --rule) like cpictl mcp and --redact do,
+and prints the resulting policy: the detectors, sensitive names and rules. An invalid
+rule, an unknown detector or a regex that matches empty text is a usage error (exit 2).
+```
+
+**Usage:** `cpictl mask config [flags]`
+
+**Flags:**
+
+```
+      --detector stringArray   Only these built-in detectors (repeatable; default all, or those of --mask-config)
+      --name stringArray       Also mask values under names matching this regex (repeatable)
+      --rule stringArray       A rule: path://Customer/Name or regex:<expression> (repeatable)
+```
+
 ## matrix
 
 Version matrix: every artifact's version in Git and on each tier, and what is ready to promote
@@ -2697,6 +2752,7 @@ CPICTL_* environment variables.
       --loop-max-same-errors int            Highest same_error_limit loop_start accepts (0: no cap); also lowers the default
       --loop-required                       Refuse tools that change the tenant or trigger processing (errorCategory loop_required) while no loop is open (loop_start)
       --mask-pattern stringArray            Also mask the values of names (headers, properties, attributes, parameters) matching this regular expression (case-insensitive; repeatable)
+      --masking-control string              How far the MCP client may change masking with set_masking: tighten (only more masking, the default), full (everything; for a client that keeps the tool from its agent, e.g. CPI Studio or the gateway), fixed (no changes) (default "tighten")
       --max-checks int                      Default maximum number of deploy/undeploy status checks (default 30)
       --mode string                         Preset: discover (read-only), operate (read tools + set_log_level), develop (all tools, no pd_deploy full_sync), full (all tools, no restrictions)
       --opt-in strings                      Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does

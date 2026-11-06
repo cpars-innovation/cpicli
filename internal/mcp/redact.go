@@ -104,17 +104,47 @@ type Redactor struct {
 	// secrets, credentials, API keys).
 	MaskPatterns []*regexp.Regexp
 	// RedactPayloads withholds message bodies and error texts, and masks
-	// business keys.
+	// business keys. Read it with Withholding: set_masking changes it.
 	RedactPayloads bool
-	// Masker masks every other string (nil: mask.Default()).
+	// Masker masks every other string (nil: mask.Default()); Config is
+	// what it was built from (get_masking shows it). Read them with
+	// Policy: set_masking changes them.
 	Masker *mask.Masker
+	Config mask.Config
 	// Root makes absolute paths inside it root-relative ("" : unchanged).
 	Root string
 	// Hint ends a withheld placeholder: how to get the data (HintMCP).
 	Hint string
 
+	mu    sync.RWMutex // RedactPayloads, Masker, Config
 	once  sync.Once
 	roots []string // Root, absolute and with symlinks resolved
+}
+
+// Withholding reports whether payloads and error texts are withheld now.
+func (r *Redactor) Withholding() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.RedactPayloads
+}
+
+// Policy returns the masking policy in force.
+func (r *Redactor) Policy() (cfg mask.Config, withhold bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.Config, r.RedactPayloads
+}
+
+// SetPolicy replaces the masking policy; an invalid config changes nothing.
+func (r *Redactor) SetPolicy(cfg mask.Config, withhold bool) error {
+	m, err := mask.New(cfg)
+	if err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.Masker, r.Config, r.RedactPayloads = m, cfg, withhold
+	r.mu.Unlock()
+	return nil
 }
 
 // NewRedactor compiles the mask patterns (Go regular expressions, matched
@@ -133,6 +163,8 @@ func NewRedactor(root string, maskPatterns []string, redactPayloads bool, masker
 }
 
 func (r *Redactor) masker() *mask.Masker {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if r.Masker == nil {
 		return defaultMasker
 	}
@@ -142,8 +174,10 @@ func (r *Redactor) masker() *mask.Masker {
 var defaultMasker = mask.Default()
 
 // sensitive reports whether the value of name is masked.
-func (r *Redactor) sensitive(name string) bool {
-	return r.masker().Sensitive(name) || slices.ContainsFunc(r.MaskPatterns, func(re *regexp.Regexp) bool { return re.MatchString(name) })
+func (r *Redactor) sensitive(name string) bool { return r.sensitiveWith(r.masker(), name) }
+
+func (r *Redactor) sensitiveWith(m *mask.Masker, name string) bool {
+	return m.Sensitive(name) || slices.ContainsFunc(r.MaskPatterns, func(re *regexp.Regexp) bool { return re.MatchString(name) })
 }
 
 // Apply returns v with sensitive values masked, payloads redacted (if
@@ -171,7 +205,7 @@ func (r *Redactor) ApplyStats(tool string, v any) (any, mask.Stats) {
 	if dec.Decode(&g) != nil {
 		return v, st
 	}
-	return r.apply(v, g, r.RedactPayloads && slices.Contains(payloadTools, tool), st)
+	return r.apply(v, g, slices.Contains(payloadTools, tool), st)
 }
 
 // ApplyPayloads is ApplyStats for a result that is message data (payloads
@@ -192,11 +226,13 @@ func (r *Redactor) ApplyPayloads(v any, payloads bool) (any, mask.Stats) {
 	if dec.Decode(&g) != nil {
 		return v, st
 	}
-	return r.apply(v, g, r.RedactPayloads && payloads, st)
+	return r.apply(v, g, payloads, st)
 }
 
 func (r *Redactor) apply(v, g any, payloads bool, st mask.Stats) (any, mask.Stats) {
-	w := walker{r: r, payloads: payloads, messageData: r.RedactPayloads, st: st}
+	// one policy for the whole result, also when set_masking runs meanwhile
+	withhold, m := r.Withholding(), r.masker()
+	w := walker{r: r, m: m, payloads: withhold && payloads, messageData: withhold, st: st}
 	out, changed := w.walk(g, "")
 	if !changed {
 		return v, st
@@ -206,6 +242,7 @@ func (r *Redactor) apply(v, g any, payloads bool, st mask.Stats) (any, mask.Stat
 
 type walker struct {
 	r           *Redactor
+	m           *mask.Masker
 	payloads    bool // withhold message bodies (payload tools)
 	messageData bool // withhold error texts, mask business keys (every tool)
 	st          mask.Stats
@@ -217,7 +254,7 @@ func (w walker) walk(node any, key string) (any, bool) {
 	case map[string]any:
 		changed := false
 		if name, ok := n["name"].(string); ok {
-			if value, ok := n["value"].(string); ok && value != "" && value != Masked && r.sensitive(name) {
+			if value, ok := n["value"].(string); ok && value != "" && value != Masked && r.sensitiveWith(w.m, name) {
 				n["value"], changed = Masked, true
 				w.st[mask.CountName]++
 			}
@@ -234,17 +271,22 @@ func (w walker) walk(node any, key string) (any, bool) {
 		for k, child := range n {
 			if m, ok := child.(map[string]any); ok && slices.Contains(nameValueMaps, k) {
 				for name, value := range m {
-					if s, ok := value.(string); ok && s != "" && s != Masked && (r.sensitive(name) || w.messageData && k == "keys") {
+					if s, ok := value.(string); ok && s != "" && s != Masked && (r.sensitiveWith(w.m, name) || w.messageData && k == "keys") {
 						m[name], changed = Masked, true
 						w.st[mask.CountName]++
 					}
 				}
 			}
 			if s, ok := child.(string); ok && k == "filter" {
-				if m := headerFilter.FindStringSubmatch(s); m != nil && (r.sensitive(m[2]) || w.messageData) {
+				if m := headerFilter.FindStringSubmatch(s); m != nil && (r.sensitiveWith(w.m, m[2]) || w.messageData) {
 					n[k], changed = m[1]+m[2]+m[3]+`"`+Masked+`"`, true
 					continue
 				}
+			}
+			if v, isString := child.(string); isString && v != "" && v != Masked && !referenceKey(k) && r.sensitiveWith(w.m, k) {
+				n[k], changed = Masked, true
+				w.st[mask.CountName]++
+				continue
 			}
 			if _, isString := child.(string); isString && identifierKey(k) {
 				if rel, ok := r.relative(child.(string)); ok {
@@ -280,7 +322,7 @@ func (w walker) walk(node any, key string) (any, bool) {
 		if strings.HasPrefix(n, "[") && strings.Contains(n, " withheld: ") {
 			return n, false
 		}
-		out, st := r.masker().Text(n)
+		out, st := w.m.Text(n)
 		if st.Total() > 0 {
 			w.st.Add(st)
 			return out, true
@@ -416,4 +458,17 @@ func identifierKey(k string) bool {
 	}
 	return strings.HasSuffix(l, "id") && !strings.HasSuffix(l, "paid") || strings.HasSuffix(l, "guid") || strings.HasSuffix(l, "ids") ||
 		strings.HasSuffix(l, "sha256") || strings.HasSuffix(l, "version")
+}
+
+// referenceKey: a field that names security material instead of holding it
+// (credentialName, keyAlias, tokenServiceUrl, passwordType): not masked by
+// its name.
+func referenceKey(k string) bool {
+	l := strings.ToLower(k)
+	for _, suffix := range []string{"name", "alias", "url", "uri", "type", "kind", "id", "ids", "ref", "count", "expiry", "expires", "length"} {
+		if strings.HasSuffix(l, suffix) {
+			return true
+		}
+	}
+	return false
 }

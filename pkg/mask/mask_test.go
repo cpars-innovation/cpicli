@@ -229,3 +229,11 @@ func TestCardShape(t *testing.T) {
 		assert.NotEqual(t, in, out, in)
 	}
 }
+
+func BenchmarkTextRegexRule(b *testing.B) {
+	m, _ := New(Config{Rules: []Rule{{Kind: "regex", Pattern: `ORD-\d{6}`}, {Kind: "regex", Pattern: `CUST/[A-Z]{3}\d+`}}})
+	s := "Orders_Inbound_Replication_2026 COMPLETED AGrSWKfjlBddQU_blYCHKdnThF-G 2026-11-06T18:51:00.123Z"
+	for b.Loop() {
+		m.Text(s)
+	}
+}

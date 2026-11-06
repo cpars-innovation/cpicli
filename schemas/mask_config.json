@@ -1,0 +1,9 @@
+{
+  "$id": "https://github.com/cpars-innovation/cpicli/schemas/mask_config.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl mask config.",
+  "title": "cpictl mask config result",
+  "type": "object",
+  "x-schemaVersion": 1
+}

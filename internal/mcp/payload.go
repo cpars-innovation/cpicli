@@ -105,7 +105,7 @@ func (s *Server) payloadArgs(t Tool, args json.RawMessage) (json.RawMessage, pay
 	return out, pc, err
 }
 
-func (s *Server) redacting() bool { return s.Redactor != nil && s.Redactor.RedactPayloads }
+func (s *Server) redacting() bool { return s.Redactor != nil && s.Redactor.Withholding() }
 
 // storedResponse answers get_message_content response_of from the store.
 func (s *Server) storedResponse(guid string) (any, error) {
