@@ -398,6 +398,9 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		res.Error = err.Error()
 		if s.Redactor != nil {
 			res.Error = s.Redactor.relativeText(res.Error)
+			if masked, st := s.Redactor.masker().Text(res.Error); st.Total() > 0 {
+				res.Error = masked
+			}
 		}
 		log.Warn().Str("tool", p.Name).Int("exitCode", code).Int64("durationMs", res.DurationMs).Msg(err.Error())
 	} else {

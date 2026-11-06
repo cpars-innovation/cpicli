@@ -137,13 +137,25 @@ func (r *Redactor) Policy() (cfg mask.Config, withhold bool) {
 
 // SetPolicy replaces the masking policy; an invalid config changes nothing.
 func (r *Redactor) SetPolicy(cfg mask.Config, withhold bool) error {
+	return r.UpdatePolicy(func(mask.Config, bool) (mask.Config, bool, error) { return cfg, withhold, nil })
+}
+
+// UpdatePolicy changes the policy atomically: change gets the policy in
+// force and returns the next one, all under one lock, so that concurrent
+// set_masking calls cannot lose a change (cpicli#75). An error or an
+// invalid config changes nothing.
+func (r *Redactor) UpdatePolicy(change func(cfg mask.Config, withhold bool) (mask.Config, bool, error)) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cfg, withhold, err := change(r.Config, r.RedactPayloads)
+	if err != nil {
+		return err
+	}
 	m, err := mask.New(cfg)
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
 	r.Masker, r.Config, r.RedactPayloads = m, cfg, withhold
-	r.mu.Unlock()
 	return nil
 }
 
@@ -253,9 +265,22 @@ func (w walker) walk(node any, key string) (any, bool) {
 	switch n := node.(type) {
 	case map[string]any:
 		changed := false
-		if name, ok := n["name"].(string); ok {
-			if value, ok := n["value"].(string); ok && value != "" && value != Masked && r.sensitiveWith(w.m, name) {
-				n["value"], changed = Masked, true
+		// name/value objects in any spelling: {"name","value"}, {"key","value"}
+		// (parameters), {"id","value"} (Partner Directory), {"Name","Value"}
+		var nameKey, valueKey string
+		for k := range n {
+			switch l := strings.ToLower(k); l {
+			case "name", "key", "id", "parameterkey":
+				if nameKey == "" || l == "name" || l == "key" {
+					nameKey = k
+				}
+			case "value", "parametervalue":
+				valueKey = k
+			}
+		}
+		if name, ok := n[nameKey].(string); ok && valueKey != "" {
+			if value, ok := n[valueKey].(string); ok && value != "" && value != Masked && r.sensitiveWith(w.m, name) {
+				n[valueKey], changed = Masked, true
 				w.st[mask.CountName]++
 			}
 		}
@@ -283,14 +308,18 @@ func (w walker) walk(node any, key string) (any, bool) {
 					continue
 				}
 			}
-			if v, isString := child.(string); isString && v != "" && v != Masked && !referenceKey(k) && r.sensitiveWith(w.m, k) {
+			if v, isString := child.(string); isString && v != "" && v != Masked && !mask.ReferenceKey(k) && r.sensitiveWith(w.m, k) {
 				n[k], changed = Masked, true
 				w.st[mask.CountName]++
 				continue
 			}
-			if _, isString := child.(string); isString && identifierKey(k) {
-				if rel, ok := r.relative(child.(string)); ok {
+			if v, isString := child.(string); isString && mask.IdentifierKey(k) {
+				// round-trip values: only the identifier detectors and the
+				// caller's rules (an e-mail or a token in an ID is masked)
+				if rel, ok := r.relative(v); ok {
 					n[k], changed = rel, true
+				} else if out := w.m.Identifier(v, w.st); out != v {
+					n[k], changed = out, true
 				}
 				continue
 			}
@@ -440,33 +469,6 @@ func maskScriptLines(n map[string]any, st mask.Stats) bool {
 			}
 			n["text"] = out
 			st["script-secret"] += lines
-			return true
-		}
-	}
-	return false
-}
-
-// identifierKey: a field that holds an identifier the agent passes back to
-// a tool (an artifact or message ID, a loop or task ID, a hash). The value
-// masker leaves it alone: masking it would break the next call, and an ID
-// carries no personal data. Sensitive names are masked whatever the key.
-func identifierKey(k string) bool {
-	l := strings.ToLower(k)
-	switch l {
-	case "id", "guid", "fingerprint", "sha256", "hash", "etag", "ref", "version", "pid":
-		return true
-	}
-	return strings.HasSuffix(l, "id") && !strings.HasSuffix(l, "paid") || strings.HasSuffix(l, "guid") || strings.HasSuffix(l, "ids") ||
-		strings.HasSuffix(l, "sha256") || strings.HasSuffix(l, "version")
-}
-
-// referenceKey: a field that names security material instead of holding it
-// (credentialName, keyAlias, tokenServiceUrl, passwordType): not masked by
-// its name.
-func referenceKey(k string) bool {
-	l := strings.ToLower(k)
-	for _, suffix := range []string{"name", "alias", "url", "uri", "type", "kind", "id", "ids", "ref", "count", "expiry", "expires", "length"} {
-		if strings.HasSuffix(l, suffix) {
 			return true
 		}
 	}

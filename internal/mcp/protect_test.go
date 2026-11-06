@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
@@ -148,4 +149,42 @@ func TestMaskingControl(t *testing.T) {
 	assert.Equal(t, "DE89370400440532013000", out["iban"], "the IBAN detector is off now")
 	assert.Equal(t, "••••@••••", out["mail"])
 	assert.Equal(t, "C-77", out["customerNo"], "the name was replaced away")
+}
+
+// Concurrent set_masking calls under tighten lose no change (cpicli#75).
+func TestSetMaskingConcurrent(t *testing.T) {
+	for range 200 {
+		r, err := NewRedactor("", nil, false, nil)
+		require.NoError(t, err)
+		set := MaskingTools(func() *Redactor { return r }, MaskingTighten)[1]
+		var wg sync.WaitGroup
+		wg.Go(func() { _, _ = set.Handler(context.Background(), json.RawMessage(`{"payloads":"withheld"}`)) })
+		wg.Go(func() { _, _ = set.Handler(context.Background(), json.RawMessage(`{"names":["^x$"]}`)) })
+		wg.Wait()
+		cfg, withhold := r.Policy()
+		require.True(t, withhold, "the tightening to withheld was lost")
+		require.Equal(t, []string{"^x$"}, cfg.Names)
+	}
+}
+
+// Pairs in any spelling, identifiers with secrets, sensitive identifiers:
+// the same as cpictl mask (cpicli#75).
+func TestRedactorPairsAndIdentifiers(t *testing.T) {
+	r, err := NewRedactor("", nil, false, nil)
+	require.NoError(t, err)
+	data, err := json.Marshal(r.Apply("get_parameters", map[string]any{
+		"parameters": []any{map[string]any{"key": "SFTP_Password", "value": "hunter2"}, map[string]any{"key": "Host", "value": "erp"}},
+		"pd":         map[string]any{"id": "ClientSecret", "value": "s3cr3t"},
+		"cap":        map[string]any{"Name": "Password", "Value": "x1"},
+		"tokenId":    "t1", "customerId": "max@example.com", "correlationId": "Bearer abcdef123456789",
+		"messageGuid": "AGrSWKfj4111111111111111", "credentialName": "ERP_User", "passwordType": "basic",
+	}))
+	require.NoError(t, err)
+	out := string(data)
+	for _, leak := range []string{"hunter2", "s3cr3t", `"x1"`, "max@example.com", "abcdef123456789", `"t1"`} {
+		assert.NotContains(t, out, leak)
+	}
+	for _, kept := range []string{`"erp"`, "AGrSWKfj4111111111111111", `"ERP_User"`, `"basic"`} {
+		assert.Contains(t, out, kept)
+	}
 }

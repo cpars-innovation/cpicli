@@ -193,6 +193,9 @@ func TestPDSecureMarks(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, ".cpi", "secrets", "partner-directory.json"), []byte(s), 0o600))
 	}
 	assert.False(t, LoadPDSecureMarks(root).Secure("ONE_OMS", "endpoint"), "no file: nothing marked")
+	write(`{"entries":[{"pid":"one_oms","id":"ENDPOINT"}],"patterns":[{"pid":"*","id":"*token*"}]}`)
+	assert.True(t, LoadPDSecureMarks(root).Secure("ONE_OMS", "endpoint"), "marks match in any case")
+	assert.True(t, LoadPDSecureMarks(root).Secure("FI", "ApiToken"))
 
 	write(`{"entries":[{"pid":"ONE_OMS","id":"endpoint"}],"patterns":[{"pid":"*","id":"now_*"}]}`)
 	res, err := GetPDParametersWith(api, "ONE_OMS", nil, PDGetOptions{IncludeContent: true, Secure: LoadPDSecureMarks(root)})

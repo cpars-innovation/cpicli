@@ -127,3 +127,17 @@ func TestTenantErrorText(t *testing.T) {
 	assert.Empty(t, tenantErrorText([]byte("<html>login</html>")))
 	assert.Empty(t, tenantErrorText(nil))
 }
+
+// A file with the masked value is never uploaded: it would replace the real
+// value on the tenant (cpicli#75).
+func TestUploadArtifactRefusesMaskedFiles(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "OrderIntake")
+	writeIFlow(t, dir, "x")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "main", "resources", "parameters.prop"), []byte("ERP_Password=••••\n"), 0o600))
+	mock := cpitest.NewTenant(t, nil)
+	_, err := UploadArtifact(mock.Executer(), UploadRequest{ID: "OrderIntake", Type: "Integration", PackageID: "Orders", Dir: dir})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "src/main/resources/parameters.prop holds the masked value")
+	assert.Equal(t, exitcode.Usage, output.ExitCode(err))
+	assert.Zero(t, mock.Count("POST /api/v1/IntegrationDesigntimeArtifacts"))
+}

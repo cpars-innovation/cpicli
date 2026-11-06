@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"slices"
 
 	"github.com/cpars-innovation/cpicli/internal/output"
@@ -111,38 +112,43 @@ func MaskingTools(redactor func() *Redactor, control string) []Tool {
 			if control == MaskingFixed {
 				return nil, output.Usagef("set_masking: the masking policy of this server is fixed (--masking-control fixed)")
 			}
-			old, withhold := r.Policy()
-			next, nextWithhold := old, withhold
-			switch a.Mode {
-			case "", "add":
-				if a.Detectors != nil {
-					next.BuiltIns = union(effectiveDetectors(old), *a.Detectors)
+			err := r.UpdatePolicy(func(old mask.Config, withhold bool) (mask.Config, bool, error) {
+				next, nextWithhold := old, withhold
+				switch a.Mode {
+				case "", "add":
+					if a.Detectors != nil {
+						next.BuiltIns = union(effectiveDetectors(old), *a.Detectors)
+					}
+					next.Names = union(old.Names, a.Names)
+					next.Rules = unionRules(old.Rules, a.Rules)
+				case "replace":
+					next = mask.Config{Names: a.Names, Rules: a.Rules}
+					if a.Detectors != nil {
+						next.BuiltIns = *a.Detectors
+					}
+				default:
+					return old, withhold, output.Usagef("set_masking: mode is add or replace")
 				}
-				next.Names = union(old.Names, a.Names)
-				next.Rules = unionRules(old.Rules, a.Rules)
-			case "replace":
-				next = mask.Config{Names: a.Names, Rules: a.Rules}
-				if a.Detectors != nil {
-					next.BuiltIns = *a.Detectors
+				switch a.Payloads {
+				case "withheld":
+					nextWithhold = true
+				case "sent":
+					nextWithhold = false
+				case "":
+				default:
+					return old, withhold, output.Usagef("set_masking: payloads is withheld or sent")
 				}
-			default:
-				return nil, output.Usagef("set_masking: mode is add or replace")
-			}
-			switch a.Payloads {
-			case "withheld":
-				nextWithhold = true
-			case "sent":
-				nextWithhold = false
-			case "":
-			default:
-				return nil, output.Usagef("set_masking: payloads is withheld or sent")
-			}
-			if control != MaskingFull {
-				if why := loosens(old, withhold, next, nextWithhold); why != "" {
-					return nil, output.Usagef("set_masking: %s; this server only accepts more masking (--masking-control tighten)", why)
+				if control != MaskingFull {
+					if why := loosens(old, withhold, next, nextWithhold); why != "" {
+						return old, withhold, output.Usagef("set_masking: %s; this server only accepts more masking (--masking-control tighten)", why)
+					}
 				}
-			}
-			if err := r.SetPolicy(next, nextWithhold); err != nil {
+				return next, nextWithhold, nil
+			})
+			if err != nil {
+				if output.ExitCode(err) == exitcode.Usage {
+					return nil, err
+				}
 				return nil, output.Usage(fmt.Errorf("set_masking: %w", err))
 			}
 			v := maskingViewOf(r, control)

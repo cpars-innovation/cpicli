@@ -237,3 +237,38 @@ func BenchmarkTextRegexRule(b *testing.B) {
 		m.Text(s)
 	}
 }
+
+// The verification of 0.38.0 (cpicli#75): overlong matches, gaps, pairs,
+// identifiers.
+func TestVerificationFindings(t *testing.T) {
+	m := Default()
+	for _, c := range []struct{ in, secret string }{
+		{"IBAN DE89370400440532013000 EUR", "3704004405320130"},
+		{"iban de89 3704 0044 0532 0130 00", "3704 0044 0532"},
+		{"card 4111 1111 1111 1111 12/27", "4111 1111 1111 1111"},
+		{"4111 1111 1111 1111 123", "4111 1111 1111"},
+		{"Endpoint=sb://ns.servicebus.windows.net/;SharedAccessKeyName=Root;SharedAccessKey=AbC123xyz=", "AbC123xyz"},
+		{"DefaultEndpointsProtocol=https;AccountName=acc;AccountKey=Zm9vYmFy+/==;EndpointSuffix=core.windows.net", "Zm9vYmFy"},
+		{"Authorization: Basic dXNlcjpwYXNz", "dXNlcjpwYXNz"},
+		{"bearer:abcdef123456", "abcdef123456"},
+		{"mail info@bäckerei-schmidt.de now", "bäckerei"},
+		{"https://u:ab/cd@host.example.com/x", "ab/cd"},
+		{"sftp://user:p@ss@host.example.com", "p@ss"},
+		{"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC", "MIIEvQIBADAN"},
+	} {
+		out, _ := m.Text(c.in)
+		assert.NotContains(t, out, c.secret, c.in)
+	}
+	for _, in := range []string{"Flow-4000000000000002", "ORD_4111111111111111", "Basic configuration of the adapter", "pwd = new String(cred.getPassword())"} {
+		out, _ := m.Text(in)
+		assert.Equal(t, in, out)
+	}
+
+	out, _, err := m.JSON([]byte(`[{"key":"SFTP_Password","value":"hunter2"},{"id":"ClientSecret","value":"s3cr3t"},{"Name":"Password","Value":"x1"},{"key":"Host","value":"erp"}]`))
+	require.NoError(t, err)
+	assert.Equal(t, `[{"key":"SFTP_Password","value":"••••"},{"id":"ClientSecret","value":"••••"},{"Name":"Password","Value":"••••"},{"key":"Host","value":"erp"}]`, string(out))
+
+	out, _, err = m.JSON([]byte(`{"tokenId":"t1","customerId":"max@example.com","correlationId":"Bearer abcdef123456789","messageGuid":"AGrSWKfj4111111111111111","credentialName":"ERP_User","passwordType":"basic"}`))
+	require.NoError(t, err)
+	assert.Equal(t, `{"tokenId":"••••","customerId":"••••@••••","correlationId":"Bearer ••••","messageGuid":"AGrSWKfj4111111111111111","credentialName":"ERP_User","passwordType":"basic"}`, string(out))
+}

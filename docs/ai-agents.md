@@ -13,7 +13,8 @@ keep that data away from the model.
 2. **An access scope** (`--scope-file`, [access-scope.md](access-scope.md)) or `--read-only` for
    `cpictl mcp`: the agent sees and changes only the team's packages.
 3. **Redaction on.** `cpictl mcp` withholds payloads by default. For the CLI, set `redact: true` in the
-   profile (or `CPICTL_REDACT=true`, or `--redact`); in gateway mode it is on already.
+   profile (or `CPICTL_REDACT=true`, or `--redact`). In gateway mode it is always on: `--no-redact` is ignored
+   there, and the gateway enforces its own policy server-side.
 
 ## What is withheld and masked
 
@@ -27,9 +28,25 @@ keep that data away from the model.
 | Script lines with a hard-coded secret literal | `••••` (the line keeps its indentation) | `••••` |
 | Partner Directory entries marked secure | `••••`, `"secure": true` | `••••` |
 
-`cpictl mcp --send-payloads` and `cpictl --no-redact` send bodies and error texts; the value masker
-still runs in `cpictl mcp`. A masked value always reads `••••`, and a write that carries it is refused
-(MCP write tools, `pd deploy`): a masked view must never be written back to the tenant.
+`cpictl mcp --send-payloads` and `cpictl --no-redact` (not in gateway mode) send bodies and error texts; the
+value masker still runs in `cpictl mcp`. A masked value always reads `••••`, and a write that carries it is
+refused: MCP write tools, `pd deploy`, and every artifact upload whose files contain it. A masked view must
+never be written back to the tenant.
+
+How values are found:
+
+- **Detectors** (everywhere): IBAN (mod-97, also lower case and followed by more text), e-mail (also with
+  umlauts), phone with a country prefix, payment cards (Luhn and card-shaped; not inside names like
+  `Flow-4000…`), JWT, `Bearer`/`Basic` (also `bearer:` and short `user:password` credentials), private keys
+  (also cut off), credentials and signatures in URLs, connection-string secrets (`SharedAccessKey=`,
+  `AccountKey=`, `Password=`, `Pwd=`).
+- **Sensitive names**: a value under a key like `password`, `pwd`, `token`, `secret`, `apiKey` is masked whole,
+  also in name/value objects of any spelling (`{"key":"SFTP_Password","value":…}`, `{"id":"ClientSecret",…}`,
+  `{"Name":…,"Value":…}`). Keys that name security material instead of holding it (`credentialName`,
+  `keyAlias`, `tokenServiceUrl`, `passwordType`) are not masked whole.
+- **Identifiers** (`…Id`, `…Guid`, hashes, versions) stay usable for the next call: only the detectors for
+  e-mail, IBAN, tokens, keys and URL credentials run on them, not card and phone. A sensitive identifier
+  (`tokenId`) is masked whole.
 
 `auth`, `whoami`, `profile` and `version` show the user's own sign-in and are not redacted.
 

@@ -1366,5 +1366,26 @@ func manyKeys(n int) string {
 func TestGuardRuntimeLocationsAreTenantWide(t *testing.T) {
 	g := testGuard(t, `{"version":1,"packages":["SD_Orders"],"actions":["read"]}`)
 	assert.NoError(t, g.Before(req("GET", "/Operations/com.sap.it.op.srv.web.cf.RuntimeLocationListCommand", "")))
+	for _, m := range []string{"POST", "PUT", "DELETE"} {
+		refused(t, g.Before(req(m, "/Operations/com.sap.it.op.srv.web.cf.RuntimeLocationListCommand", "")))
+	}
 	refused(t, g.Before(req("GET", "/Operations/com.sap.it.op.srv.web.cf.SomeOtherCommand", "")))
+}
+
+// A large nested value under a scope is refused before it is read
+// (cpicli#75): it must cost about as little as a plain refusal.
+func TestGuardNestedBodyIsCheap(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	var b strings.Builder
+	b.WriteString(`{"Id":"SD_New","PackageId":"SD_Orders","x":{`)
+	for i := range 400000 {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `"k%d":1`, i)
+	}
+	b.WriteString("}}")
+	start := time.Now()
+	refused(t, g.Before(req("POST", "/api/v1/IntegrationDesigntimeArtifacts", b.String())))
+	assert.Less(t, time.Since(start), 200*time.Millisecond)
 }

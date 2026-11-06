@@ -55,13 +55,24 @@ func addRedactFlags(c *cobra.Command) {
 	f.String("mask-config", "", "Masking rules for --redact and cpictl mcp (YAML or JSON: builtIns, names, rules of kind path or regex); default: every built-in detector")
 }
 
-// redactOn decides redaction for a run: --no-redact turns it off; --redact,
-// CPICTL_REDACT, redact: true in a config file or gateway mode turn it on.
+// redactOn decides redaction for a run: gateway mode always; otherwise
+// --no-redact turns it off, --redact, CPICTL_REDACT or redact: true in a
+// config file turn it on.
+// In gateway mode redaction is always on: --no-redact (from a flag, the
+// environment or a profile) is ignored there, with a warning (cpicli#75).
+// The gateway enforces its own masking server-side; this keeps the client
+// from undoing it.
 func redactOn(cmd *cobra.Command) bool {
+	if config.GetString(cmd, "gateway") != "" {
+		if config.GetBool(cmd, "no-redact") {
+			log.Warn().Msg("--no-redact is ignored in gateway mode: the gateway's masking policy applies")
+		}
+		return true
+	}
 	if config.GetBool(cmd, "no-redact") {
 		return false
 	}
-	return config.GetBool(cmd, "redact") || config.GetString(cmd, "gateway") != ""
+	return config.GetBool(cmd, "redact")
 }
 
 // applyRedaction turns redaction on for the run when redactOn says so: the
@@ -88,8 +99,10 @@ func applyRedaction(cmd *cobra.Command) error {
 	r.on, r.redactor = true, red
 	r.out.Masker, r.err.Masker = masker, masker
 	r.err.Enable(true)
-	ownsStdout := cmd.Annotations[annotationNoEnvelope] == "true"
-	r.out.Enable(!ownsStdout && outputFormat(cmd) != output.FormatJSON)
+	// stdout is masked for every command but cpictl mcp (its protocol;
+	// it masks its own results), also for streams like runtimes watch
+	protocol := commandName(cmd) == "mcp"
+	r.out.Enable(!protocol && (outputFormat(cmd) != output.FormatJSON || cmd.Annotations[annotationNoEnvelope] == "true"))
 	return nil
 }
 

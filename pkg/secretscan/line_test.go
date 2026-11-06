@@ -159,3 +159,12 @@ func TestMaskLines(t *testing.T) {
 		t.Fatal("only scripts")
 	}
 }
+
+// A private key block is masked whole, not only its BEGIN line (cpicli#75).
+func TestMaskLinesKeyBlock(t *testing.T) {
+	in := "def key = \"\"\"-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n  BKcwggSjAgEAAoIBAQC7\n-----END PRIVATE KEY-----\"\"\"\nreturn key\n"
+	out, n := MaskLines("s.groovy", in, "••••")
+	if n != 4 || out != "••••\n••••\n  ••••\n••••\nreturn key\n" {
+		t.Fatalf("got %d %q", n, out)
+	}
+}

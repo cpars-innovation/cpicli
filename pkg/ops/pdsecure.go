@@ -101,14 +101,16 @@ func (m *PDSecureMarks) Secure(pid, id string) bool {
 	if m.All {
 		return true
 	}
+	// in any case: a mark that misses by case would leak (cpicli#75)
+	pid, id = strings.ToLower(pid), strings.ToLower(id)
 	for _, e := range m.Entries {
-		if e.Pid == pid && e.ID == id {
+		if strings.ToLower(e.Pid) == pid && strings.ToLower(e.ID) == id {
 			return true
 		}
 	}
 	for _, e := range m.Patterns {
-		p, _ := path.Match(e.Pid, pid)
-		i, _ := path.Match(e.ID, id)
+		p, _ := path.Match(strings.ToLower(e.Pid), pid)
+		i, _ := path.Match(strings.ToLower(e.ID), id)
 		if p && i {
 			return true
 		}

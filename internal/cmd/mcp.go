@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"strings"
@@ -343,7 +346,11 @@ func loadMaskConfig(file string) (mask.Config, *mask.Masker, error) {
 	if err != nil {
 		return c, nil, output.Usagef("--mask-config: %v", err)
 	}
-	if err := yaml.Unmarshal(data, &c); err != nil {
+	// unknown keys are errors: a misspelt "Names:" or "builtins:" would drop
+	// rules silently (cpicli#75); JSON is YAML too
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&c); err != nil && !errors.Is(err, io.EOF) {
 		return c, nil, output.Usagef("--mask-config %s: %v", file, err)
 	}
 	m, err := mask.New(c)

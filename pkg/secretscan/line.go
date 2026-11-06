@@ -629,11 +629,19 @@ func MaskLines(path, text, masked string) (string, int) {
 	}
 	lines := strings.Split(text, "\n")
 	n := 0
+	inKey := false // inside a private key block: every line through END
 	for i, l := range lines {
 		body := strings.TrimSuffix(l, "\r")
-		if _, hit := LineSecret(path, body); hit {
+		kind, hit := LineSecret(path, body)
+		if inKey || hit {
 			n++
 			lines[i] = body[:len(body)-len(strings.TrimLeft(body, " \t"))] + masked + l[len(body):]
+		}
+		switch {
+		case inKey:
+			inKey = !strings.Contains(body, "-----END ")
+		case hit && kind == KindPrivateKey:
+			inKey = !strings.Contains(body[strings.Index(body, "-----BEGIN"):], "-----END ")
 		}
 	}
 	if n == 0 {

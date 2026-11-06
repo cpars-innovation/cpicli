@@ -110,3 +110,21 @@ func TestMaskCommand(t *testing.T) {
 	assert.Contains(t, res.stdout, `"detectors": [`)
 	assert.Contains(t, res.stdout, `"email"`)
 }
+
+// A rules file with an unknown key is an error, not silently fewer rules.
+func TestMaskConfigStrict(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"typo.yaml": "Names: [\"^x$\"]\n",
+		"case.yaml": "builtins: [email]\n",
+		"rule.json": `{"rules":[{"kind":"regex","patern":"x"}]}`,
+	} {
+		f := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(f, []byte(body), 0o600))
+		res := runMain(t, "mask", "config", "--mask-config", f)
+		assert.Equal(t, 2, res.code, "%s: %s", name, res.stderr)
+	}
+	ok := filepath.Join(dir, "ok.yaml")
+	require.NoError(t, os.WriteFile(ok, []byte("names: [\"^x$\"]\nbuiltIns: [email]\n"), 0o600))
+	assert.Equal(t, 0, runMain(t, "mask", "config", "--mask-config", ok).code)
+}

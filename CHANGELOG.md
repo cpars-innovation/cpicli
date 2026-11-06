@@ -64,7 +64,16 @@ access scope.
 - **A failed artifact download keeps the flow's parameters (#69).**
 - **Access scope (#66, #49):** a write body may have at most 256 keys (checked while it is read) and no U+FFFD or
   escaped surrogates. The tenant-wide `RuntimeLocationListCommand` read is documented and pinned by a test.
-- `iflow.SensitiveName` also covers `passphrase`, `api_key` and `private_key`.
+- `iflow.SensitiveName` also covers `passphrase`, `pwd`, `api_key` and `private_key`.
+- **From the verification of the release candidate (#75):** gateway mode always redacts (`--no-redact` is ignored
+  there); name/value pairs in any spelling (`key`/`value`, `id`/`value`, `Name`/`Value`) are masked; identifier
+  fields still pass the e-mail, IBAN, token and key detectors; private key blocks in scripts are masked whole;
+  IBAN and card numbers followed by more text are masked; new connection-string detector (`SharedAccessKey=`,
+  `AccountKey=`, …), short `Basic` credentials, `bearer:`, e-mail addresses with umlauts, URL passwords with `/`
+  or `@`, cut-off private keys; `set_masking` is atomic; unknown keys in `--mask-config` are errors; uploads of
+  files carrying `••••` are refused; nested write bodies under a scope are refused before they are read;
+  `RuntimeLocationListCommand` is GET only; Partner Directory marks match in any case; MCP error texts are
+  masked; `runtimes watch` is masked under `--redact`.
 
 ## 0.37.0
 

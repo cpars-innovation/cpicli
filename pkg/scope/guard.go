@@ -923,6 +923,9 @@ func (g *Guard) classifyOperations(r *httpclnt.GuardRequest, cmd string) (decisi
 	name, _, _ := strings.Cut(cmd, "?")
 	switch name {
 	case "com.sap.it.op.srv.web.cf.RuntimeLocationListCommand":
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			return decision{}, g.refuse(&Refusal{Reason: r.Method + " of the runtime locations is not available under a scope"})
+		}
 		// tenant-wide on purpose, the one tenant-wide read a scope allows
 		// (cpicli#49): the names of the runtimes (cloudintegration, an
 		// integration cell), no content and no credentials. Deploy status,
@@ -1599,7 +1602,10 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 	if !utf8.Valid(body) {
 		return nil, false
 	}
-	walk := func(b []byte) (map[string]json.RawMessage, []string, bool) {
+	// outer: the body's own object, where the first key may be the "d"
+	// wrapper; with flat any other object or array value is refused before
+	// it is read (a large nested value would cost seconds, cpicli#75)
+	walk := func(b []byte, outer bool) (map[string]json.RawMessage, []string, bool) {
 		dec := json.NewDecoder(bytes.NewReader(b))
 		if t, err := dec.Token(); err != nil || t != json.Delim('{') {
 			return nil, nil, false
@@ -1616,6 +1622,12 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 				return nil, nil, false
 			}
 			seen[strings.ToLower(k)] = true
+			if flat && !(outer && len(keys) == 0 && k == "d") {
+				rest := bytes.TrimLeft(b[dec.InputOffset():], " \t\r\n:")
+				if len(rest) > 0 && (rest[0] == '{' || rest[0] == '[') {
+					return nil, nil, false
+				}
+			}
 			var v json.RawMessage
 			if err := dec.Decode(&v); err != nil || replacementText(v) {
 				return nil, nil, false
@@ -1635,12 +1647,12 @@ func bodyObject(body []byte, flat bool) (fields map[string]any, ok bool) {
 		}
 		return raw, keys, true
 	}
-	raw, keys, ok := walk(body)
+	raw, keys, ok := walk(body, true)
 	if !ok {
 		return nil, false
 	}
 	if len(keys) == 1 && keys[0] == "d" && bytes.HasPrefix(bytes.TrimSpace(raw["d"]), []byte("{")) {
-		if raw, keys, ok = walk(raw["d"]); !ok {
+		if raw, keys, ok = walk(raw["d"], false); !ok {
 			return nil, false
 		}
 	}
@@ -1667,7 +1679,9 @@ const maxBodyKeys = 256
 
 // replacementText reports whether a JSON value holds U+FFFD or an escaped
 // surrogate (\ud800-\udfff): a lone surrogate decodes to U+FFFD, and the
-// tenant may read either differently (cpicli#66).
+// tenant may read either differently (cpicli#66). A valid escaped
+// surrogate pair (an emoji written as \ud83d\ude00) is refused too: that
+// fails closed, and cpictl's own bodies have none.
 func replacementText(v []byte) bool {
 	if bytes.ContainsRune(v, utf8.RuneError) {
 		return true

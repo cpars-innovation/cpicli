@@ -1,12 +1,16 @@
 package cpi
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/internal/file"
+	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"github.com/go-errors/errors"
 	"github.com/rs/zerolog/log"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -218,6 +222,9 @@ func deleteCall(id string, artifactType string, exe *httpclnt.HTTPExecuter) erro
 }
 
 func upsert(id string, name string, packageId string, artifactDir string, method string, urlPath string, successCode int, artifactType string, callType string, exe *httpclnt.HTTPExecuter) error {
+	if rel, found := maskedFile(artifactDir); found {
+		return output.Usagef("%s %s: %s holds the masked value %s (from an agent's masked view?): set the real value before uploading", artifactType, id, rel, mask.Dots)
+	}
 	// Zip directory and encode to base64
 	encoded, err := file.ZipDirToBase64(artifactDir)
 	if err != nil {
@@ -318,4 +325,23 @@ func DiffOptionalFile(srcDir string, tgtDir string, fileRelativePath string) boo
 	}
 	log.Info().Msgf("File %v does not exist in either source or target", fileRelativePath)
 	return true
+}
+
+// maskedFile finds a file below dir that holds mask.Dots: uploading it
+// would replace a real value on the tenant with the masked one (cpicli#75).
+func maskedFile(dir string) (string, bool) {
+	found := ""
+	_ = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || found != "" {
+			return nil
+		}
+		data, err := os.ReadFile(p)
+		if err == nil && bytes.Contains(data, []byte(mask.Dots)) {
+			found, _ = filepath.Rel(dir, p)
+			found = filepath.ToSlash(found)
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found, found != ""
 }

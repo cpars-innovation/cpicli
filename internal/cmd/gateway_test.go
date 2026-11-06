@@ -77,6 +77,17 @@ func TestGatewayMode(t *testing.T) {
 		assert.NotContains(t, stderr, "user-token", "the token is never logged")
 	})
 
+	t.Run("redaction cannot be turned off in gateway mode", func(t *testing.T) {
+		home := t.TempDir()
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\nno-redact: true\n", 0o600)
+		t.Setenv(gatewayTokenEnv, "user-token")
+		t.Setenv("CPICTL_NO_REDACT", "true")
+		code, stderr := projectRun(t, home, t.TempDir(), "--profile", "gw", "--no-redact", "undeploy", "--artifact-ids", "A")
+		assert.Equal(t, 0, code, stderr)
+		assert.Contains(t, stderr, "--no-redact is ignored in gateway mode")
+		t.Setenv("CPICTL_NO_REDACT", "")
+	})
+
 	t.Run("no token", func(t *testing.T) {
 		t.Setenv(gatewayTokenEnv, "")
 		code, stderr := projectRun(t, t.TempDir(), t.TempDir(), "--gateway", gw.URL+"/t/dev", "undeploy", "--artifact-ids", "A")
