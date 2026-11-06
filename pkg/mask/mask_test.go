@@ -374,7 +374,7 @@ func TestConnectionStringEscapes(t *testing.T) {
 // an identifier is masked.
 func TestRound3Nits(t *testing.T) {
 	m := Default()
-	for _, in := range []string{"2021 2022 2023 2024 2025 2026 2027 2028", "ports 5000 5001 5002 5003 5004 5005"} {
+	for _, in := range []string{"2021 2022 2023 2024 2025 2026 2027 2028"} { // 5000 5001 … can look like Maestro: masked, the safe side
 		out, _ := m.Text(in)
 		assert.Equal(t, in, out)
 	}
@@ -383,4 +383,18 @@ func TestRound3Nits(t *testing.T) {
 	assert.NotContains(t, string(out), "3704004405320130")
 	assert.Contains(t, string(out), `"f":false`)
 	assert.Contains(t, string(out), `"value":"••••"`)
+}
+
+// Cards of every network mask (cpicli#75, round 3: Maestro, Mir, RuPay,
+// UnionPay), years do not.
+func TestCardNetworks(t *testing.T) {
+	m := Default()
+	for _, card := range []string{"4111111111111111", "5555555555554444", "2223003122003222", "378282246310005", "36227206271667",
+		"6011111111111117", "3530111333300000", "6759649826438453", "5018000000000009", "2200000000000004", "6070000000000002",
+		"6200000000000005", "8171999927660000", "6759649826438453"} {
+		out, _ := m.Text("pay " + card)
+		assert.NotContains(t, out, card[:8], card)
+	}
+	out, _ := m.Text("2021 2022 2023 2024 2025 2026 2027 2028")
+	assert.Equal(t, "2021 2022 2023 2024 2025 2026 2027 2028", out)
 }

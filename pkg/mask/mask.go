@@ -525,23 +525,23 @@ func detect(d, s string, st Stats) string {
 	return s
 }
 
-// cardNetwork: digits start with the prefix of a card network (Visa 4,
-// Mastercard 51-55 and 2221-2720, American Express 34/37, Diners 300-305,
-// 36, 38, Discover 6011, 644-649, 65, JCB 3528-3589, UnionPay 62). Lists of
-// years or ports (2021 2022 …, 5000 5001 …) start with none.
+// cardNetwork: digits start with the prefix of a card network. 4, 5 and 6
+// are all card ranges (Visa; Mastercard, Maestro, RuPay 508; Maestro,
+// Discover, UnionPay, RuPay 60/652); on 2, 3 and 8 only the issued ranges
+// (Mir 2200-2204, Mastercard 2221-2720; American Express 34/37, Diners
+// 300-305/36/38, JCB 3528-3589; RuPay and UnionPay 81/82). Lists of years
+// (2021 2022 …) start with none.
 func cardNetwork(d string) bool {
 	p := func(n int) int { v, _ := strconv.Atoi(d[:n]); return v }
-	switch {
-	case d[0] == '4':
+	switch d[0] {
+	case '4', '5', '6':
 		return true
-	case p(2) >= 51 && p(2) <= 55, p(4) >= 2221 && p(4) <= 2720:
-		return true
-	case p(2) == 34 || p(2) == 37 || p(2) == 36 || p(2) == 38 || p(2) == 62 || p(2) == 65:
-		return true
-	case p(3) >= 300 && p(3) <= 305, p(3) >= 644 && p(3) <= 649:
-		return true
-	case p(4) == 6011, p(4) >= 3528 && p(4) <= 3589:
-		return true
+	case '2':
+		return p(4) >= 2200 && p(4) <= 2204 || p(4) >= 2221 && p(4) <= 2720
+	case '3':
+		return p(2) == 34 || p(2) == 37 || p(2) == 36 || p(2) == 38 || p(3) >= 300 && p(3) <= 305 || p(4) >= 3528 && p(4) <= 3589
+	case '8':
+		return p(2) == 81 || p(2) == 82
 	}
 	return false
 }
@@ -1159,7 +1159,8 @@ func CredentialContainer(k string) bool { return strings.Contains(strings.ToLowe
 // cpi.OAuth2Credential and the like).
 var credentialMeta = []string{"name", "kind", "type", "description", "user", "username", "companyid", "clientid",
 	"clientauthentication", "scope", "resource", "audience", "status", "deployedby", "deployedon", "modifiedby",
-	"modifiedon", "createdby", "createdon", "lastmodified", "expiry", "expires", "validuntil", "alias"}
+	"modifiedon", "createdby", "createdon", "lastmodified", "lastmodifiedby", "lastmodifiedtime", "expiry", "expires",
+	"validuntil", "alias", "secretenv"}
 
 // CredentialMetaKey: a field of a credential that is metadata, not the
 // secret: its name, kind, user, client ID, token URL and the like, and

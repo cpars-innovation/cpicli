@@ -86,7 +86,8 @@ access scope.
   value but metadata (name, kind, user, client ID, token URL, …) is masked, also under keys no rule knows;
   escaped quotes and braces in connection strings (`""`, `''`, `}}`) and unterminated values are masked to their
   end; configure files with `••••` are refused when loaded, before the batch path; a repository `cpictl.yaml` can
-  no longer set `mask-config`; card numbers need a card network's prefix (lists of years or ports are no cards);
+  no longer set `mask-config`; card numbers need a card network's prefix, every network included (Visa,
+  Mastercard, Maestro, Mir, RuPay, UnionPay, American Express, Diners, JCB, Discover; lists of years are no cards);
   an IBAN word in an identifier field is masked; a `d` value that is not an object is refused before it is read.
 
 ## 0.37.0
