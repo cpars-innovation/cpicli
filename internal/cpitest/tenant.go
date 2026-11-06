@@ -129,6 +129,9 @@ type Artifact struct {
 	// (and the content stored by create/update).
 	Resources map[string]Resource
 	Zip       []byte
+	// NoDownload answers 400 to the $value download, as a tenant does for
+	// "configure only" standard content.
+	NoDownload bool
 	// Uploads counts designtime creates and updates, Deploys the deploy
 	// triggers.
 	Uploads int
@@ -1604,6 +1607,10 @@ func (m *Tenant) handle(w http.ResponseWriter, r *http.Request) {
 		a := m.Artifacts[mm[2]]
 		if a == nil || a.Zip == nil || a.Type != mm[1] {
 			notFound(w)
+			return
+		}
+		if a.NoDownload {
+			odataError(w, http.StatusBadRequest, "Bad Request", "The artifact cannot be downloaded (configure only)")
 			return
 		}
 		_, _ = w.Write(a.Zip)

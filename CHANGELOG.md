@@ -5,6 +5,17 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`backup create` skips the zips of standard content (#69).** Artifacts of READ_ONLY packages (copied from
+  Discover) are backed up with their version and parameters only, marked `"skipped": "standard content"` in
+  index.json. SAP refuses to export "configure only" content (HTTP 400), so every backup of a tenant with it ended
+  with exit 7; a restore copies standard content from Discover anyway. This is no longer a warning; the manifest
+  counts it (`standardContentArtifacts`, `standardContentPackages`) and the output says "N artifacts in M
+  standard packages: parameters only".
+- **A failed artifact download keeps the parameters (#69).** Before, the flow's externalised parameters were
+  skipped too.
+
+## 0.37.0
+
 **Fixed (seen on real tenants):**
 
 - `keystore generate-key-pair`, `keystore generate-ssh-key` and `credentials apply` for SSH keys no longer send

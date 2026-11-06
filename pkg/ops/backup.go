@@ -101,7 +101,15 @@ type BackupArtifact struct {
 	// the checksum of their values.
 	Parameters       int    `json:"parameters,omitempty"`
 	ParametersSHA256 string `json:"parametersSha256,omitempty"`
+	// Skipped says why the zip is not in the backup on purpose:
+	// SkippedStandardContent for the artifacts of READ_ONLY packages, which
+	// a restore copies from Discover instead of uploading.
+	Skipped string `json:"skipped,omitempty"`
 }
+
+// SkippedStandardContent marks an artifact of a standard (READ_ONLY)
+// package: its parameters are backed up, its zip is not.
+const SkippedStandardContent = "standard content"
 
 // BackupCredential is a credential's metadata; the secret is never readable.
 type BackupCredential struct {
@@ -247,6 +255,14 @@ func CreateBackup(ctx context.Context, exe *httpclnt.HTTPExecuter, host string, 
 	b.man.Counts["packages"] = len(b.idx.Packages)
 	for _, p := range b.idx.Packages {
 		b.man.Counts["artifacts"] += len(p.Artifacts)
+		for _, a := range p.Artifacts {
+			if a.Skipped == SkippedStandardContent {
+				b.man.Counts["standardContentArtifacts"]++
+			}
+		}
+		if strings.EqualFold(p.Mode, "READ_ONLY") {
+			b.man.Counts["standardContentPackages"]++
+		}
 	}
 	b.man.Counts["deployed"] = len(b.idx.Runtime)
 	b.man.Counts["credentials"] = len(b.idx.Credentials)
@@ -361,8 +377,9 @@ func (b *backupBuilder) packages(ctx context.Context, opts BackupOptions) error 
 		wg.Go(func() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			pkg := b.idx.Packages[j.pkg].ID
-			results[i] = b.artifact(pkg, j.a)
+			p := b.idx.Packages[j.pkg]
+			results[i] = b.artifact(p.ID, strings.EqualFold(p.Mode, "READ_ONLY"), j.a)
+			pkg := p.ID
 			b.prog.report(len(jobs), "artifact %s/%s", pkg, j.a.Id)
 		})
 	}
@@ -374,7 +391,11 @@ func (b *backupBuilder) packages(ctx context.Context, opts BackupOptions) error 
 }
 
 // artifact downloads one artifact's zip and its externalised parameters.
-func (b *backupBuilder) artifact(pkg string, a *cpi.ArtifactDetails) BackupArtifact {
+// Of a standard (READ_ONLY) package only the parameters: a restore copies
+// the content from Discover, and "configure only" content cannot be
+// downloaded at all (cpicli#69). A failed download still keeps the
+// parameters.
+func (b *backupBuilder) artifact(pkg string, standard bool, a *cpi.ArtifactDetails) BackupArtifact {
 	r := BackupArtifact{ID: a.Id, Type: a.ArtifactType, Name: a.Name, Version: a.Version, Draft: a.IsDraft, ModifiedBy: a.ModifiedBy}
 	if !a.ModifiedAt.IsZero() {
 		at := a.ModifiedAt
@@ -383,47 +404,62 @@ func (b *backupBuilder) artifact(pkg string, a *cpi.ArtifactDetails) BackupArtif
 	if !b.content {
 		return r
 	}
+	if standard {
+		r.Skipped = SkippedStandardContent
+	} else {
+		b.download(pkg, a, &r)
+	}
+	if a.ArtifactType == "Integration" {
+		b.parameters(pkg, a.Id, &r)
+	}
+	return r
+}
+
+// download writes the artifact's zip into the backup.
+func (b *backupBuilder) download(pkg string, a *cpi.ArtifactDetails, r *BackupArtifact) {
 	dt := cpi.NewDesigntimeArtifact(a.ArtifactType, b.exe)
 	if dt == nil {
 		b.warn("artifact %s: type %s cannot be downloaded", a.Id, a.ArtifactType)
-		return r
+		return
 	}
 	rel := "packages/" + safeName(pkg) + "/" + safeName(a.Id) + ".zip"
 	target := filepath.Join(b.dir, filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		b.warn("artifact %s: %v", a.Id, err)
-		return r
+		return
 	}
 	if err := dt.Download(target, a.Id); err != nil {
+		_ = os.Remove(target)
 		b.warn("artifact %s of package %s could not be downloaded: %v", a.Id, pkg, err)
-		return r
+		return
 	}
 	sum, _, err := fileSHA256(target)
 	if err != nil {
 		b.warn("artifact %s: %v", a.Id, err)
-		return r
+		return
 	}
 	r.File, r.SHA256 = rel, sum
-	if a.ArtifactType != "Integration" {
-		return r
-	}
-	params, err := cpi.NewConfiguration(b.exe).Get(a.Id, "active")
+}
+
+// parameters writes the externalised parameters of an integration flow.
+func (b *backupBuilder) parameters(pkg, id string, r *BackupArtifact) {
+	params, err := cpi.NewConfiguration(b.exe).Get(id, "active")
 	if err != nil {
-		b.warn("parameters of %s could not be read: %v", a.Id, err)
-		return r
+		b.warn("parameters of %s could not be read: %v", id, err)
+		return
 	}
-	if params != nil && len(params.Root.Results) > 0 {
-		list := params.Root.Results
-		sort.Slice(list, func(i, j int) bool { return list[i].ParameterKey < list[j].ParameterKey })
-		data, _ := json.MarshalIndent(list, "", "  ")
-		if err := b.write("packages/"+safeName(pkg)+"/"+safeName(a.Id)+".parameters.json", append(data, '\n')); err != nil {
-			b.warn("parameters of %s: %v", a.Id, err)
-			return r
-		}
-		h := sha256.Sum256(data)
-		r.Parameters, r.ParametersSHA256 = len(list), hex.EncodeToString(h[:])
+	if params == nil || len(params.Root.Results) == 0 {
+		return
 	}
-	return r
+	list := params.Root.Results
+	sort.Slice(list, func(i, j int) bool { return list[i].ParameterKey < list[j].ParameterKey })
+	data, _ := json.MarshalIndent(list, "", "  ")
+	if err := b.write("packages/"+safeName(pkg)+"/"+safeName(id)+".parameters.json", append(data, '\n')); err != nil {
+		b.warn("parameters of %s: %v", id, err)
+		return
+	}
+	h := sha256.Sum256(data)
+	r.Parameters, r.ParametersSHA256 = len(list), hex.EncodeToString(h[:])
 }
 
 // partnerDirectory backs up every Partner Directory parameter (the files

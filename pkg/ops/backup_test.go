@@ -118,3 +118,57 @@ func TestBackupNames(t *testing.T) {
 	assert.Equal(t, "daily", BackupScheduleFolder(time.Date(2026, 10, 19, 2, 0, 0, 0, time.UTC)))
 	assert.Equal(t, "CPI_SECRET_OAUTH2_GRAPH_API", secretEnv("oauth2", "Graph-API"))
 }
+
+// Standard (READ_ONLY) packages: their parameters are backed up, their zips
+// are not, and that is no warning; a failed download elsewhere keeps the
+// parameters (cpicli#69).
+func TestBackupStandardContent(t *testing.T) {
+	zip := func(id string) []byte {
+		return zipOf(t, map[string]string{"META-INF/MANIFEST.MF": "Manifest-Version: 1.0\nBundle-SymbolicName: " + id + "\n"})
+	}
+	m := cpitest.NewTenant(t, map[string]*cpitest.Artifact{
+		"Std":  {Type: "Integration", Package: "SAPStd", DesignVersion: "1.0.3", Zip: zip("Std"), NoDownload: true, Parameters: map[string]string{"Host": "erp.example.com"}},
+		"Std2": {Type: "Integration", Package: "SAPStd", DesignVersion: "1.0.0", Zip: zip("Std2")},
+		"Own":  {Type: "Integration", Package: "P", DesignVersion: "1.0.0", Zip: zip("Own"), NoDownload: true, Parameters: map[string]string{"Url": "https://x"}},
+	})
+	m.Packages = []cpitest.Package{{ID: "SAPStd", Name: "SAP standard", Version: "1.0.3", ShortText: "s", Vendor: "SAP", Mode: "READ_ONLY"},
+		{ID: "P", Name: "P", Version: "1.0.0", ShortText: "p"}}
+	file := filepath.Join(t.TempDir(), "b.tar.gz")
+	res, err := CreateBackup(context.Background(), m.Executer(), "mytenant", BackupOptions{Output: file})
+	require.NoError(t, err)
+
+	man := res.Manifest
+	require.Len(t, man.Warnings, 1, "only the own flow's failed download: %v", man.Warnings)
+	assert.Contains(t, man.Warnings[0], "Own")
+	assert.Equal(t, 2, man.Counts["standardContentArtifacts"])
+	assert.Equal(t, 1, man.Counts["standardContentPackages"])
+	assert.NotContains(t, man.Files, "packages/SAPStd/Std.zip")
+	assert.NotContains(t, man.Files, "packages/SAPStd/Std2.zip", "downloadable standard content is skipped too")
+	assert.Contains(t, man.Files, "packages/SAPStd/Std.parameters.json")
+	assert.Contains(t, man.Files, "packages/P/Own.parameters.json", "a failed download keeps the parameters")
+	assert.Contains(t, man.Files, "packages/SAPStd/package.json")
+
+	_, idx, err := ReadBackup(file)
+	require.NoError(t, err)
+	byID := map[string]BackupArtifact{}
+	for _, p := range idx.Packages {
+		for _, a := range p.Artifacts {
+			byID[a.ID] = a
+		}
+	}
+	assert.Equal(t, SkippedStandardContent, byID["Std"].Skipped)
+	assert.Equal(t, "1.0.3", byID["Std"].Version)
+	assert.Equal(t, 1, byID["Std"].Parameters)
+	assert.Empty(t, byID["Own"].Skipped)
+	assert.Empty(t, byID["Own"].File)
+	assert.Equal(t, 1, byID["Own"].Parameters)
+
+	m.Artifacts["Own"].NoDownload = false
+	clean := filepath.Join(t.TempDir(), "c.tar.gz")
+	res, err = CreateBackup(context.Background(), m.Executer(), "mytenant", BackupOptions{Output: clean})
+	require.NoError(t, err)
+	assert.True(t, res.Manifest.Complete, "standard content is not a gap: %v", res.Manifest.Warnings)
+	v, err := VerifyBackup(clean)
+	require.NoError(t, err)
+	assert.True(t, v.OK, "%v", v.Problems)
+}

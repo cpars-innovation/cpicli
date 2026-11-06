@@ -82,6 +82,9 @@ when no archive could be written.`,
 			log.Info().Msgf("Backup %s (%s, sha256 %s): %d packages, %d artifacts, %d deployed, %d credentials, %d keystore entries, %d Partner Directory parameters",
 				res.File, humanSize(res.Size), res.SHA256[:12], m.Counts["packages"], m.Counts["artifacts"], m.Counts["deployed"],
 				m.Counts["credentials"], m.Counts["keystoreEntries"], m.Counts["partnerDirectoryParameters"])
+			if n := m.Counts["standardContentArtifacts"]; n > 0 {
+				log.Info().Msgf("%d artifacts in %d standard packages: parameters only (restore copies them from Discover)", n, m.Counts["standardContentPackages"])
+			}
 			if !m.Complete {
 				return output.Partial(fmt.Errorf("backup written, but %d item(s) could not be backed up (see warnings in the manifest)", len(m.Warnings)))
 			}

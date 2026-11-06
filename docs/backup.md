@@ -18,8 +18,8 @@ cpictl backup restore backups/daily/<today>.tar.gz --dry-run --plan-file restore
 | Content | In the archive | Restorable |
 |---------|----------------|------------|
 | Integration packages | `packages/<pkg>/package.json` | yes; packages from Discover (`mode` READ_ONLY) are copied from Discover again |
-| Artifacts (flows, script collections, message and value mappings) | `packages/<pkg>/<id>.zip`, as the tenant exports them | yes |
-| Externalised parameters | `packages/<pkg>/<id>.parameters.json` | yes |
+| Artifacts (flows, script collections, message and value mappings) | `packages/<pkg>/<id>.zip`, as the tenant exports them; **not** for standard packages (READ_ONLY): there only id and version, marked `"skipped": "standard content"` in index.json | yes; standard content is copied from Discover |
+| Externalised parameters | `packages/<pkg>/<id>.parameters.json`, also of standard content and of an artifact whose download failed | yes |
 | Partner Directory (string and binary parameters) | `partner-directory/` (the pd snapshot layout) | yes |
 | What is deployed, in which version and status (with `--cells` also on integration cells) | `runtime/deployed.json` | yes: deploy again what was running |
 | Credentials (user, OAuth2, secure parameters) | `security/credentials.yml`: metadata and one environment variable per secret | **the secrets come from your vault** (below) |
@@ -79,6 +79,9 @@ Everything for that is in **[vault.md](vault.md)**:
     for example a role missing on the service key). Pipelines should alert on 7.
   - An area the tenant doesn't offer (for example secure parameters on Cloud Foundry) is listed
     as `unavailable` and is not a warning.
+  - Standard content is not a warning either: SAP refuses to export "configure only" content, and a
+    restore copies it from Discover. The manifest counts it (`standardContentArtifacts`,
+    `standardContentPackages`).
 - **`backup verify`:** 5 when a checksum, a file or an artifact zip is wrong, or the backup was
   incomplete.
 - **`backup diff`:** 0. With `--fail-on-change`, 5 when something changed.
