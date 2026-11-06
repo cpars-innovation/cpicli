@@ -2,7 +2,7 @@ package iflow
 
 import (
 	"fmt"
-	"regexp"
+	valuemask "github.com/cpars-innovation/cpicli/pkg/mask"
 	"slices"
 	"sort"
 	"strings"
@@ -96,12 +96,11 @@ func (d *ModelDiff) Empty() bool {
 	return d == nil || len(d.Elements) == 0 && len(d.Flows) == 0 && len(d.Collaboration) == 0
 }
 
-var sensitiveName = regexp.MustCompile(`(?i)authorization|cookie|password|passwd|secret|token|credential|apikey|api-key`)
-
 // SensitiveName reports whether the value of a property, header or
 // parameter with this name is masked in results: authorization, cookies,
-// tokens, passwords, secrets, credentials and API keys.
-func SensitiveName(name string) bool { return sensitiveName.MatchString(name) }
+// tokens, passwords, passphrases, secrets, credentials, API keys and private
+// keys (pkg/mask SensitiveName).
+func SensitiveName(name string) bool { return valuemask.SensitiveName(name) }
 
 // DiffModels compares two .iflw models per element and per property; see
 // DiffModelsWith.

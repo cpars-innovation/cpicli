@@ -31,7 +31,10 @@ func NewPDCommand() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content, _ := cmd.Flags().GetBool("content")
-			opts := ops.PDGetOptions{IncludeContent: content, MaxBytes: contentLimit(cmd)}
+			opts := ops.PDGetOptions{IncludeContent: content, MaxBytes: contentLimit(cmd), Secure: ops.FindPDSecureMarks(".")}
+			if opts.Secure.Problem != "" {
+				log.Warn().Msg(opts.Secure.Problem)
+			}
 			if inspect, _ := cmd.Flags().GetBool("inspect"); inspect {
 				entry, _ := cmd.Flags().GetString("zip-entry")
 				opts.Inspect = &ops.PDInspectOptions{ZipEntry: entry, TextBytes: max(opts.MaxBytes, 0)}
@@ -43,9 +46,17 @@ func NewPDCommand() *cobra.Command {
 			}
 			output.SetResult(cmd.Context(), res)
 			for _, p := range res.Strings {
+				if p.Secure {
+					log.Info().Msgf("string %-30s %s (secure: set it on the tenant yourself)", p.ID, p.Value)
+					continue
+				}
 				log.Info().Msgf("string %-30s %s", p.ID, p.Value)
 			}
 			for _, b := range res.Binaries {
+				if b.Secure {
+					log.Info().Msgf("binary %-30s %s, %d bytes (secure: content withheld)", b.ID, b.ContentType, b.Size)
+					continue
+				}
 				log.Info().Msgf("binary %-30s %s, %d bytes, sha256 %s", b.ID, b.ContentType, b.Size, b.SHA256)
 				logPDInspection("  ", b.Inspection)
 			}

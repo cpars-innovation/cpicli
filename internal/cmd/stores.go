@@ -73,7 +73,7 @@ func NewDataStoreCommand() *cobra.Command {
 	entries.Flags().Int("top", 100, "Maximum entries")
 
 	get := &cobra.Command{
-		Use: "get", Short: "Download the content of a data store entry", SilenceUsage: true,
+		Use: "get", Short: "Download the content of a data store entry", SilenceUsage: true, Annotations: map[string]string{annotationPayload: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := ops.GetDataStoreEntry(tenantExecuter(cmd), config.GetString(cmd, "id"), dataStoreKey(cmd), contentLimit(cmd))
 			if err != nil {
@@ -128,7 +128,7 @@ func NewVariablesCommand() *cobra.Command {
 	}
 	c.Flags().String("artifact-id", "", "Only this flow's variables (plus global ones)")
 	get := &cobra.Command{
-		Use: "get", Short: "Read the value of a variable", SilenceUsage: true,
+		Use: "get", Short: "Read the value of a variable", SilenceUsage: true, Annotations: map[string]string{annotationPayload: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := ops.GetVariable(tenantExecuter(cmd), config.GetString(cmd, "name"), config.GetString(cmd, "artifact-id"), contentLimit(cmd))
 			if err != nil {

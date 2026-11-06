@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"io"
 	"os"
 	"os/signal"
@@ -50,6 +51,9 @@ Exit codes: 0 ok, 2 usage, 3 auth, 4 tenant HTTP error, 5 failed, 6 timeout,
 			if err := initializeConfig(cmd); err != nil {
 				return err
 			}
+			if err := applyRedaction(cmd); err != nil {
+				return err
+			}
 			if n, err := cmd.Flags().GetInt("read-retries"); err == nil {
 				if n < 0 {
 					return output.Usagef("--read-retries must not be negative")
@@ -62,6 +66,7 @@ Exit codes: 0 ok, 2 usage, 3 auth, 4 tenant HTTP error, 5 failed, 6 timeout,
 
 	rootCmd.PersistentFlags().String("config", "", "config file (default: the profile, else $CPICTL_CONFIG, else $HOME/cpictl.yaml plus ./cpictl.yaml of the repository)")
 	addScopeFlags(rootCmd)
+	addRedactFlags(rootCmd)
 	rootCmd.PersistentFlags().String("profile", "", "Profile to use: $HOME/.cpictl/<name>.yaml (default: $CPICTL_PROFILE, else the one chosen with 'cpictl profile use')")
 
 	// Define cobra flags, the default value has the lowest (least significant) precedence
@@ -185,7 +190,13 @@ func Execute(version, buildTime string) {
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, buildTime string) int {
 	begin := time.Now()
 	// logs and --events - share stderr: one lock for every writer
-	stderr = zerolog.SyncWriter(stderr)
+	// --redact masks what an agent reads: both streams pass a masking
+	// writer, off until the configuration is read (applyRedaction)
+	outMask, errMask := mask.NewWriter(stdout, mask.Default()), mask.NewWriter(stderr, mask.Default())
+	defer func() { _ = outMask.Flush(); _ = errMask.Flush() }()
+	stdout = outMask
+	stderr = zerolog.SyncWriter(errMask)
+	ctx = withRedaction(ctx, &redaction{out: outMask, err: errMask})
 	rootCmd := NewCLI(version)
 	rootCmd.SetVersionTemplate(fmt.Sprintf("cpictl version {{.Version}} (built %s)\n", buildTime))
 	rootCmd.SetArgs(args)
@@ -244,7 +255,7 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 		if cmd.Annotations[annotationNoStats] != "true" {
 			stats.Record(commandName(cmd), stats.SourceCLI, code, elapsed)
 		}
-		writeSummary(cmd, output.Result(ctx), code, elapsed)
+		writeSummary(cmd, redactResult(ctx, cmd, output.Result(ctx)), code, elapsed)
 		output.Emit(ctx, output.EventEnd, output.EndData{ExitCode: code, ErrorCategory: output.Category(code), DurationMs: elapsed.Milliseconds()})
 	}
 	output.CloseEvents(ctx)
@@ -253,9 +264,9 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, version, 
 	ownsStdout := cmd != nil && cmd.Annotations[annotationNoEnvelope] == "true" && started
 	if format == output.FormatJSON && (started || err != nil) && !ownsStdout {
 		env := output.Envelope{Command: commandName(cmd), OK: code == exitcode.OK, ExitCode: code, ErrorCategory: output.Category(code),
-			SchemaVersion: output.SchemaVersion, DurationMs: elapsed.Milliseconds(), Result: output.Result(ctx)}
+			SchemaVersion: output.SchemaVersion, DurationMs: elapsed.Milliseconds(), Result: redactResult(ctx, cmd, output.Result(ctx))}
 		if err != nil {
-			env.Error = err.Error()
+			env.Error = redactError(ctx, err.Error())
 		}
 		if werr := output.WriteEnvelope(stdout, env); werr != nil && code == exitcode.OK {
 			code = exitcode.Error

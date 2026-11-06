@@ -113,6 +113,7 @@ var lintRules = []lintRule{
 	// security material: read from the secure store, kept in named headers and properties, never logged or sent on
 	{id: "secret-target-name", group: GroupSecurity, severity: SevError, title: "Security material is put into a header or property not named for it (.cpi/lint.yaml security)", artifact: ruleSecretTarget},
 	{id: "secret-logged", group: GroupSecurity, severity: SevError, title: "Security material reaches the message processing log, an error text or standard output", artifact: ruleSecretLogged},
+	{id: "hard-coded-secret", group: GroupSecurity, severity: SevWarning, title: "A script holds a hard-coded secret literal (a key, a password, credentials in a URL)", artifact: ruleHardCodedSecret},
 	{id: "secret-in-body", group: GroupSecurity, severity: SevWarning, title: "Security material is written into the message body", artifact: ruleSecretInBody},
 	{id: "secret-header-sent", group: GroupSecurity, severity: SevError, title: "A receiver passes a secret header on (JMS, ProcessDirect, broker, or a wildcard in its request headers)", artifact: ruleSecretHeaderSent},
 	{id: "undeclared-auth-header", group: GroupSecurity, severity: SevWarning, title: "A header reads like an authentication header but is not declared in .cpi/lint.yaml security.secretHeaders", artifact: ruleUndeclaredAuthHeader},
@@ -988,6 +989,29 @@ func ruleUnsupportedScriptClass(lc *lintContext, a *lintArtifact) []Finding {
 	return scriptFindings(a, "unsupported-script-class", reUnsupportedClass,
 		"uses Thread; an integration cell refused a script using it once (\"There are unsupported classes [Thread] that are used in the script.\"), while a minimal Thread.sleep deployed on a cell later",
 		"to be safe on an integration cell sleep with TimeUnit.MILLISECONDS.sleep (accepted there) and start no own threads; the Cloud Integration runtime accepts Thread")
+}
+
+// ruleHardCodedSecret flags script lines with a hard-coded secret literal
+// (secretscan.LineSecret, cpicli#74): the line and the kind, never the
+// value. Runtime credential code (cred.getPassword(), "Bearer " + token)
+// is not a finding.
+func ruleHardCodedSecret(lc *lintContext, a *lintArtifact) []Finding {
+	var out []Finding
+	for _, file := range sortedKeys(a.Scripts) {
+		if !secretscan.IsScript(file) {
+			continue
+		}
+		for i, l := range strings.Split(string(a.Scripts[file]), "\n") {
+			kind, hit := secretscan.LineSecret(file, strings.TrimSuffix(l, "\r"))
+			if !hit {
+				continue
+			}
+			out = append(out, a.finding("hard-coded-secret", file, "", "", path.Base(file),
+				fmt.Sprintf("%s line %d holds a hard-coded secret (%s)", path.Base(file), i+1, kind),
+				"keep it in the tenant's secure store (user credentials, secure parameters, keystore) and read it at runtime, e.g. ITApiFactory.getService(SecureStoreService.class, null).getUserCredential(\"name\")"))
+		}
+	}
+	return out
 }
 
 // --- configuration -----------------------------------------------------------

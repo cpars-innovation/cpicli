@@ -124,7 +124,9 @@ server: [plugin.md](plugin.md).
 | `--loop-required` | `false` | Refuse tenant tools (errorCategory `loop_required`) while no loop is open, see [Build loops](#build-loops) |
 | `--loop-max-iterations`, `--loop-max-deploys`, `--loop-max-same-errors`, `--loop-max-minutes` | `0` (no cap) | Highest `max_iterations`, `max_deploys`, `same_error_limit`, `wall_clock_minutes` that `loop_start` accepts; they also lower the defaults |
 | `--mask-pattern` | none | Also mask the values of names matching this regular expression (case-insensitive, repeatable), see [Masking](#masking) |
-| `--redact-payloads` | `false` | Replace message bodies in results with a placeholder, size and sha256, see [Masking](#masking) |
+| `--redact-payloads` | `true` | Withhold message bodies and message error texts, mask business keys, see [Masking](#masking) |
+| `--send-payloads` | `false` | Send message bodies and error texts (still through the value masker): turns `--redact-payloads` off |
+| `--mask-config` | | Masking rules (YAML or JSON), see [ai-agents.md](ai-agents.md#masking-rules) |
 
 Every flag can also be set in `cpictl.yaml` (`loop-required: true`, `loop-max-deploys: 5`,
 `mask-pattern: ["^X-Customer", "iban"]`) or as an environment variable (`CPICTL_LOOP_REQUIRED=true`,
@@ -449,8 +451,8 @@ the Go API and the loop ledger see the result before it, unchanged.
   returns `{size, savedTo, sha256}` instead of the text. A result with several contents writes
   `<name>-2.<ext>`, ... `get_message_content {"response_of": "<messageGuid>"}` returns or saves
   the response of a `send_test_message` without sending it again.
-- **`--redact-payloads`:** nothing is stored; `save_to`, `get_content` and `response_of` are
-  refused.
+- **`--redact-payloads` (the default):** nothing is stored; `save_to`, `get_content` and
+  `response_of` are refused. Start the server with `--send-payloads` to use them.
 - **Staying in the root:** the store must resolve inside `--root` (a `.cpi` or `cache` folder that
   links elsewhere is refused). An entry is read only as a regular file whose content matches its
   hash. Without a root the store is in the user's cache directory. Files a test case references
@@ -593,30 +595,39 @@ for every tool, so the server's own directory never reaches the model.
 ### Masking
 
 Every tool result passes one post-processor in the server before it is sent, so new tools are
-covered without their own code:
+covered without their own code ([ai-agents.md](ai-agents.md) has the whole picture). A masked
+value reads `••••`.
 
-- **Name/value lists**: in every object with a string `name` and `value` (custom header
-  properties and adapter attributes of `get_message_log` and `send_test_message`'s log, step
-  properties of `get_message_log include_steps`, headers and exchange properties of `get_message_trace trace_id`, …)
-  the value is replaced by `***` when the name contains
-  `authorization`, `cookie`, `password`, `passwd`, `secret`, `token`, `credential`, `apikey` or
-  `api-key` (case-insensitive), or matches a `--mask-pattern`.
-- **Name/value maps** under `keys`, `headers` or `properties` (the key headers of
-  `get_trace_tree`): the same rule by key.
-- **Header search**: the `custom header <name> = "<value>"` filter text of
-  `find_messages_by_header` gets `"***"` as value when the name is masked.
-- **Payloads** (only with `--redact-payloads`): the bodies returned by `send_test_message`
-  (response), `get_message_content`, `get_message_trace` with `trace_id`
-  (payload), `get_data_store_entry` and `list_variables` with `name` become `{"size": …, "text": "[redacted]",
-  "sha256": "<hex>", "redacted": true}`; `size` is the full size, `sha256` is computed over the
-  bytes the tool returned (the first `max_bytes` when `truncated`). Resources, scripts and
-  Partner Directory values are content, not payloads, and stay readable.
+- **Payloads, withheld by default:** the bodies returned by `send_test_message` (response),
+  `get_message_content`, `get_message_trace` with `trace_id` (payload), `get_data_store_entry`
+  and `list_variables` with `name`, and the response excerpts of `run_tests` failures become
+  `{"size": …, "text": "[payload withheld: 12,345 bytes; start cpictl mcp with --send-payloads to
+  include it]", "redacted": true}`.
+- **Message error texts, withheld by default:** `errorText` (`get_message_log`,
+  `list_message_logs`, trace trees), a step's `error` and `failedStep.error`, and the `sample` of
+  `message_summary` error groups read `[error text withheld: … bytes; …]`. They often quote the
+  receiver's whole response.
+- **Business keys, masked by default:** the values of `customHeaderProperties` and of a trace
+  tree's `keys`; their names stay.
+- **Sensitive names, always:** in every object with a string `name` and `value`, in name → value
+  maps under `keys`, `headers` and `properties`, and in the filter text of
+  `find_messages_by_header`, the value is masked when the name contains `authorization`, `cookie`,
+  `password`, `passwd`, `passphrase`, `secret`, `token`, `credential`, `apikey`, `api-key`,
+  `api_key` or `private key` (case-insensitive), or matches a `--mask-pattern`.
+- **The value masker, always:** every other string passes `pkg/mask`: IBAN (mod-97 checked),
+  e-mail, phone numbers with a country code, payment cards (Luhn checked), JWTs, `Bearer`/`Basic`
+  credentials, private keys, credentials and signatures in URLs, and the rules of
+  `--mask-config`. JSON stays valid and numbers keep their digits.
+- **Scripts:** lines of a Groovy, JavaScript, Java or XSLT file that hold a hard-coded secret
+  literal read as their indentation and `••••` (the file keeps its lines).
+- **Partner Directory:** entries marked secure in `.cpi/secrets/partner-directory.json` return
+  `"value": "••••", "secure": true` ([ai-agents.md](ai-agents.md#secure-partner-directory-entries)).
 
-Not masked: error texts (`errorText`; the tenant's message may quote payload fragments), message
-IDs, artifact names, the business keys of `list_message_logs` (`applicationMessageId`,
-`correlationId`) and configuration parameters (`get_parameters` lists `key`/`value`: secure
-parameters name credentials, they do not hold secrets). Masking applies to results only; the loop
-ledger and the CLI see the original values.
+With `--send-payloads` payloads, error texts and business keys go through, masked by the value
+masker. A write tool refuses an argument that carries `••••`: a masked view must not be written
+back. Not masked: message IDs, artifact names and configuration parameters (secure parameters
+name credentials, they do not hold them). The server's debug log counts masked values per
+detector, never the values.
 
 ## Typical agent loop
 

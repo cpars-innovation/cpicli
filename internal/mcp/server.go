@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -349,6 +351,10 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		defer stop()
 	}
 
+	if EffectOf(p.Name) != EffectRead && carriesMasked(p.Arguments) {
+		err := output.Usagef("%s: an argument carries the masked value %s; a masked view cannot be written back. Use the real value, or ask the user to set it", p.Name, Masked)
+		return s.result(ToolResult{ExitCode: exitcode.Usage, ErrorCategory: Category(exitcode.Usage), Error: err.Error()})
+	}
 	args, full := splitDetail(p.Name, p.Arguments)
 	args, pc, err := s.payloadArgs(s.tools[idx], args)
 	if err != nil {
@@ -371,7 +377,11 @@ func (s *Server) callTool(ctx context.Context, params json.RawMessage) (any, *rp
 		log.Warn().Str("tool", p.Name).Msg(res.Notice)
 	}
 	if s.Redactor != nil {
-		res.Result = s.Redactor.Apply(p.Name, value)
+		var st mask.Stats
+		res.Result, st = s.Redactor.ApplyStats(p.Name, value)
+		if st.Total() > 0 {
+			log.Debug().Str("tool", p.Name).Str("masked", st.String()).Msg("Masked values in the result")
+		}
 	}
 	if res.Result != nil {
 		viewed, vErr := s.view(p.Name, full, pc, res.Result)
@@ -470,4 +480,33 @@ func (s *Server) writeMessage(msg any) {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	_, _ = s.out.Write(append(data, '\n'))
+}
+
+// carriesMasked reports whether a string in the arguments holds Masked.
+func carriesMasked(raw json.RawMessage) bool {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return strings.Contains(string(raw), Masked) || strings.Contains(strings.ToLower(string(raw)), `\u2022\u2022\u2022\u2022`)
+	}
+	var walk func(any) bool
+	walk = func(v any) bool {
+		switch t := v.(type) {
+		case string:
+			return strings.Contains(t, Masked)
+		case map[string]any:
+			for k, c := range t {
+				if strings.Contains(k, Masked) || walk(c) {
+					return true
+				}
+			}
+		case []any:
+			for _, c := range t {
+				if walk(c) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return walk(v)
 }

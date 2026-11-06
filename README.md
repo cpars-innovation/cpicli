@@ -408,6 +408,9 @@ as `.mcp.json` in the root of the integration content repository
 
 Limit what agents may do per server with `--read-only`, `--tools list_*,get_*` or
 `--disable-tools undeploy,pd_deploy` ([details](docs/mcp.md#limiting-tools)).
+Tenant data an agent reads goes to its model provider: `cpictl mcp` withholds message bodies and
+error texts and masks personal data and secrets by default; for agents with a shell, turn on
+`redact: true` in the profile. See [docs/ai-agents.md](docs/ai-agents.md).
 Full example with a read-only QA tenant: [docs/examples/claude-code.mcp.json](docs/examples/claude-code.mcp.json);
 for Cursor and OpenCode see [below](#codex-cursor-opencode-gemini-cli-and-other-agents), for
 other clients (Claude Desktop, ...): [docs/examples/mcp.json](docs/examples/mcp.json).

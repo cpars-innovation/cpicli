@@ -5,6 +5,46 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+**AI data protection (#70 to #74).** What an agent reads through cpictl goes to its model provider. cpictl now
+keeps tenant data out of it by default where it can ([docs/ai-agents.md](docs/ai-agents.md)).
+
+**What to do:**
+
+- **`cpictl mcp` withholds message bodies and error texts by default.** Payload tools return
+  `[payload withheld: N bytes; …]`, `errorText`, step errors and error group samples
+  `[error text withheld: …]`, business keys (custom header values) `••••`. If your agent needs them, start the server
+  with `--send-payloads` (they still pass the value masker). `save_to`, `get_content` and `response_of` need
+  `--send-payloads` too. Masked values now read `••••` instead of `***`, and a withheld payload has no `sha256`
+  any more.
+- **Agents with a shell:** set `redact: true` in the profile (or `CPICTL_REDACT=true`, `--redact`) so the CLI's
+  stdout and stderr get the same treatment. It is on by default in gateway mode; `--no-redact` turns it off.
+- **Mark secret Partner Directory entries** in `.cpi/secrets/partner-directory.json` of the content repository.
+- **CPI Studio, the cpictl gateway:** use `pkg/mask` for masking, so all three mask the same way.
+
+Details:
+
+- **`pkg/mask` (#70):** a value masker shared by cpictl, the gateway and CPI Studio (standard library only):
+  IBAN (mod-97), e-mail, phone, payment card (Luhn), JWT, `Bearer`/`Basic` credentials, private keys, credentials
+  and signatures in URLs, values under sensitive names, and the caller's path and regex rules (`--mask-config`).
+  `Text` keeps JSON valid and numbers exact, `InPlace` and `Writer` keep the line layout, `Stats` counts per
+  detector and never holds a value. `iflow.SensitiveName` now also covers `passphrase`, `api_key` and
+  `private_key`.
+- **`cpictl mcp` (#71):** payloads, error texts and business keys withheld by default (`--send-payloads` sends
+  them); every result through the value masker; write tools refuse arguments carrying `••••`; the debug log counts
+  masked values per detector.
+- **CLI (#72):** `--redact`, `--no-redact`, `--mask-config`; `redact: true` in a profile; on in gateway mode. Text
+  output is masked line by line on stdout and stderr, the JSON result like `cpictl mcp`'s. Under an agent with
+  redaction off, cpictl says so once on stderr.
+- **Secure Partner Directory entries (#73):** `.cpi/secrets/partner-directory.json` marks entries (exact or `*`
+  patterns); `get_pd_parameters` and `pd get` never return their values (`"secure": true`). A damaged marks file
+  withholds every value. `pd deploy` refuses local values carrying `••••`.
+- **Hard-coded secrets in scripts (#74):** `secretscan.LineSecret` judges literals only, so runtime credential code
+  is no finding. The lint rule `hard-coded-secret` flags such lines (line and kind, never the value); MCP results
+  and redacted CLI output show them as `••••`.
+- **Access scope (#66, #49):** a write body may have at most 256 keys and no U+FFFD or escaped surrogates; the
+  tenant-wide `RuntimeLocationListCommand` read is documented and pinned by a test.
+
+
 - **`backup create` skips the zips of standard content (#69).** Artifacts of READ_ONLY packages (copied from
   Discover) are backed up with their version and parameters only, marked `"skipped": "standard content"` in
   index.json. SAP refuses to export "configure only" content (HTTP 400), so every backup of a tenant with it ended

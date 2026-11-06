@@ -2,6 +2,8 @@ package ops
 
 import (
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
+	"os"
 	"slices"
 	"strings"
 
@@ -43,6 +45,9 @@ type PDDeployOptions struct {
 // result.
 func PDDeploy(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, opts PDDeployOptions) (*PDDeployResult, error) {
 	replace, fullSync, dryRun, pidsFilter := opts.Replace, opts.FullSync, opts.DryRun, str.TrimSlice(opts.PIDs)
+	if err := refuseMaskedPD(pdRepo); err != nil {
+		return nil, err
+	}
 	if keys := str.TrimSlice(opts.Keys); len(keys) > 0 {
 		if fullSync {
 			return nil, output.Usagef("keys cannot be combined with full sync (a single-key deployment never deletes)")
@@ -458,4 +463,29 @@ func filterPIDs(pids []string, filter []string) []string {
 		}
 	}
 	return result
+}
+
+// refuseMaskedPD refuses to deploy local files that carry the masked value:
+// a secure entry's view (PDSecureMarks) written back would replace the real
+// value on the tenant (cpicli#73).
+func refuseMaskedPD(pdRepo *pdrepo.Repo) error {
+	pids, err := pdRepo.GetLocalPIDs()
+	if err != nil {
+		return nil // reported by the deploy itself
+	}
+	for _, pid := range pids {
+		strs, _ := pdRepo.ReadStringParameters(pid)
+		for _, p := range strs {
+			if strings.Contains(p.Value, mask.Dots) {
+				return output.Usagef("Partner Directory %s/%s holds the masked value %s: a masked view cannot be deployed; set the real value", pid, p.ID, mask.Dots)
+			}
+		}
+		bins, _ := pdRepo.ReadBinaryFiles(pid)
+		for _, b := range bins {
+			if data, err := os.ReadFile(b.File); err == nil && strings.Contains(string(data), mask.Dots) {
+				return output.Usagef("Partner Directory %s/%s holds the masked value %s: a masked view cannot be deployed; set the real value", pid, b.ID, mask.Dots)
+			}
+		}
+	}
+	return nil
 }

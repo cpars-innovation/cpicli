@@ -3,8 +3,6 @@ package mcp
 import (
 	"archive/zip"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -260,7 +258,7 @@ func applyJSON(t *testing.T, r *Redactor, tool string, v any) map[string]any {
 }
 
 func TestRedactorMasksNameValueLists(t *testing.T) {
-	r, err := NewRedactor("", []string{"^order"}, false)
+	r, err := NewRedactor("", []string{"^order"}, false, nil)
 	require.NoError(t, err)
 	detail := &ops.MessageLogDetail{
 		CustomHeaderProperties: []cpi.NameValue{{Name: "OrderNo", Value: "4711"}, {Name: "Customer", Value: "ACME"}},
@@ -283,19 +281,19 @@ func TestRedactorMasksNameValueLists(t *testing.T) {
 
 	list := &ops.MessageLogList{Logs: []ops.MessageLog{}, Filter: `custom header OrderNo = "4711"`}
 	m = applyJSON(t, r, "find_messages_by_header", list)
-	assert.Equal(t, `custom header OrderNo = "***"`, m["filter"])
+	assert.Equal(t, `custom header OrderNo = "••••"`, m["filter"])
 
 	plain := &ops.MessageLogList{Logs: []ops.MessageLog{}, Filter: `custom header Region = "EU"`}
 	assert.Same(t, plain, r.Apply("find_messages_by_header", plain), "nothing to change: the value is returned as is")
 
-	_, err = NewRedactor("", []string{"("}, false)
+	_, err = NewRedactor("", []string{"("}, false, nil)
 	assert.Error(t, err)
 }
 
 // run_tests failures quote the response and stub bodies: masked with
 // --redact-payloads, the expectation and the expected value stay.
 func TestRedactorRedactsTestRunFailures(t *testing.T) {
-	r, err := NewRedactor("", nil, true)
+	r, err := NewRedactor("", nil, true, nil)
 	require.NoError(t, err)
 	res := map[string]any{"cases": []any{map[string]any{"case": "c", "failures": []any{
 		map[string]any{"expectation": "response_contains", "expected": "<ok/>", "actual": "<customer>ACME</customer>", "message": "response lacks <ok/>: <customer>ACME</customer>"},
@@ -304,8 +302,8 @@ func TestRedactorRedactsTestRunFailures(t *testing.T) {
 	m := applyJSON(t, r, "run_tests", res)
 	fs := m["cases"].([]any)[0].(map[string]any)["failures"].([]any)
 	resp := fs[0].(map[string]any)
-	assert.Equal(t, RedactedPayload, resp["actual"])
-	assert.Equal(t, RedactedPayload, resp["message"])
+	assert.Equal(t, "[payload withheld: 25 bytes; start cpictl mcp with --send-payloads to include it]", resp["actual"])
+	assert.Contains(t, resp["message"], RedactedPayload)
 	assert.Equal(t, "<ok/>", resp["expected"])
 	assert.Equal(t, "FAILED", fs[1].(map[string]any)["actual"], "statuses are no payload")
 
@@ -313,38 +311,37 @@ func TestRedactorRedactsTestRunFailures(t *testing.T) {
 	e := ops.NewContent([]byte("<customer>ACME</customer>"), 0)
 	m = applyJSON(t, r, "run_tests", map[string]any{"cases": []any{map[string]any{"case": "c", "response": e, "responseContentType": "application/xml"}}})
 	c := m["cases"].([]any)[0].(map[string]any)
-	assert.Equal(t, RedactedPayload, c["response"].(map[string]any)["text"])
+	assert.Contains(t, c["response"].(map[string]any)["text"], RedactedPayload)
 	assert.EqualValues(t, 25, c["response"].(map[string]any)["size"])
 	assert.Equal(t, "application/xml", c["responseContentType"])
 }
 
 func TestRedactorRedactsPayloads(t *testing.T) {
-	r, err := NewRedactor("", nil, true)
+	r, err := NewRedactor("", nil, true, nil)
 	require.NoError(t, err)
 	att := &ops.DownloadedContent{ID: "A1", Content: ops.NewContent([]byte("<secret/>"), 0)}
 	m := applyJSON(t, r, "get_message_content", att)
-	assert.Equal(t, RedactedPayload, m["text"])
+	assert.Equal(t, "[payload withheld: 9 bytes; start cpictl mcp with --send-payloads to include it]", m["text"])
 	assert.EqualValues(t, 9, m["size"])
-	sum := sha256.Sum256([]byte("<secret/>"))
-	assert.Equal(t, hex.EncodeToString(sum[:]), m["sha256"])
+	assert.Nil(t, m["sha256"], "size only: a hash of a short payload can be guessed")
 	assert.Equal(t, true, m["redacted"])
 
 	bin := &ops.DownloadedContent{ID: "A2", Content: ops.NewContent([]byte{0xff, 0x00, 0x01}, 0)}
 	m = applyJSON(t, r, "get_message_content", bin)
 	assert.Nil(t, m["base64"])
-	assert.Equal(t, RedactedPayload, m["text"])
+	assert.Contains(t, m["text"], RedactedPayload)
 
 	res := &ops.ResourceContent{ArtifactID: "X", Name: "script.groovy", Content: ops.NewContent([]byte("println 1"), 0)}
 	m = applyJSON(t, r, "get_resource", res)
 	assert.Equal(t, "println 1", m["text"], "resources are content, not payloads")
 
-	off, _ := NewRedactor("", nil, false)
+	off, _ := NewRedactor("", nil, false, nil)
 	assert.Same(t, att, off.Apply("get_message_content", att))
 }
 
 func TestRedactorMakesPathsRootRelative(t *testing.T) {
 	root := t.TempDir()
-	r, err := NewRedactor(root, nil, false)
+	r, err := NewRedactor(root, nil, false, nil)
 	require.NoError(t, err)
 	v := map[string]any{"dir": filepath.Join(root, "packages", "P", "Orders"), "root": root, "other": "/elsewhere/x", "n": 3}
 	m := applyJSON(t, r, "download_artifact", v)

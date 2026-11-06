@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +32,7 @@ func TestGetPDParameters(t *testing.T) {
 	_, api := pdTenant(t)
 	res, err := GetPDParameters(api, "ONE_OMS", nil, false, 0)
 	require.NoError(t, err)
-	assert.Equal(t, []PDString{{"endpoint", "https://oms"}, {"old", "x"}}, res.Strings)
+	assert.Equal(t, []PDString{{ID: "endpoint", Value: "https://oms"}, {ID: "old", Value: "x"}}, res.Strings)
 	require.Len(t, res.Binaries, 2)
 	b := res.Binaries[0]
 	assert.Equal(t, "now_email", b.ID)
@@ -179,4 +181,53 @@ func TestPDManyBinaries(t *testing.T) {
 			assert.GreaterOrEqual(t, mock.Count("GET /api/v1/BinaryParameters"), 3*3, "three pages per listing")
 		})
 	}
+}
+
+// Marked entries never return their value; a damaged marks file withholds
+// every value; deploying a masked value is refused (cpicli#73).
+func TestPDSecureMarks(t *testing.T) {
+	_, api := pdTenant(t)
+	root := t.TempDir()
+	write := func(s string) {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".cpi", "secrets"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, ".cpi", "secrets", "partner-directory.json"), []byte(s), 0o600))
+	}
+	assert.False(t, LoadPDSecureMarks(root).Secure("ONE_OMS", "endpoint"), "no file: nothing marked")
+
+	write(`{"entries":[{"pid":"ONE_OMS","id":"endpoint"}],"patterns":[{"pid":"*","id":"now_*"}]}`)
+	res, err := GetPDParametersWith(api, "ONE_OMS", nil, PDGetOptions{IncludeContent: true, Secure: LoadPDSecureMarks(root)})
+	require.NoError(t, err)
+	assert.Equal(t, []PDString{{ID: "endpoint", Value: mask.Dots, Secure: true}, {ID: "old", Value: "x"}}, res.Strings)
+	for _, b := range res.Binaries {
+		if b.ID == "now_email" {
+			assert.True(t, b.Secure)
+			assert.Nil(t, b.Content)
+			assert.Empty(t, b.SHA256)
+			assert.Equal(t, 17, b.Size, "kind and size stay visible")
+		} else {
+			assert.False(t, b.Secure)
+			assert.NotNil(t, b.Content)
+		}
+	}
+	data, _ := json.Marshal(res)
+	assert.NotContains(t, string(data), "https://oms")
+	assert.NotContains(t, string(data), "xsl:stylesheet")
+
+	for _, damaged := range []string{`{"entries":[`, `{"entries":[{"pid":"ONE_OMS"}]}`, `{"marks":[]}`, `{"patterns":[{"pid":"[","id":"x"}]}`} {
+		write(damaged)
+		m := LoadPDSecureMarks(root)
+		assert.True(t, m.All, damaged)
+		assert.Contains(t, m.Problem, "every Partner Directory value is withheld")
+		res, err := GetPDParametersWith(api, "ONE_OMS", nil, PDGetOptions{Secure: m})
+		require.NoError(t, err)
+		data, _ := json.Marshal(res)
+		assert.NotContains(t, string(data), "https://oms", damaged)
+	}
+
+	repo := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "ONE_OMS"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "ONE_OMS", "String.properties"), []byte("endpoint="+mask.Dots+"\n"), 0o600))
+	_, err = PDDeploy(api, pdrepo.New(repo), PDDeployOptions{DryRun: true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "a masked view cannot be deployed")
 }

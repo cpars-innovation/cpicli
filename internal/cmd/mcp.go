@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -9,10 +10,12 @@ import (
 	"github.com/cpars-innovation/cpicli/internal/logger"
 	"github.com/cpars-innovation/cpicli/internal/mcp"
 	"github.com/cpars-innovation/cpicli/internal/output"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"github.com/cpars-innovation/cpicli/pkg/scope"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 // annotationNoEnvelope marks commands that own stdout (no JSON envelope).
@@ -71,10 +74,14 @@ Loop policy (the model cannot change it):
                                   the highest limits loop_start accepts (higher: usage error);
                                   they also lower the defaults
 
-Masking: values of sensitive names (authorization, cookie, password, secret, token,
-credential, API key) in all name/value lists of results are masked as ***;
---mask-pattern adds name patterns, --redact-payloads replaces message bodies with
-a placeholder, size and sha256. Local paths in results are relative to --root.
+Masking (on by default): message bodies and message error texts are withheld
+(a placeholder with their size) and business keys read ••••; --send-payloads
+sends them, masked. Every result passes the value masker: personal data (IBAN,
+e-mail, phone, payment card), secret shapes (JWT, Bearer/Basic, private keys,
+credentials and signatures in URLs) and values of sensitive names (authorization,
+cookie, password, secret, token, credential, API key) read ••••. --mask-pattern
+adds name patterns, --mask-config rules (docs/ai-agents.md). A write tool refuses
+an argument that carries ••••. Local paths in results are relative to --root.
 All flags can also be set in cpictl.yaml (e.g. loop-required: true) or as
 CPICTL_* environment variables.`,
 		Example: `  # Claude Code / any MCP client configuration
@@ -104,10 +111,17 @@ CPICTL_* environment variables.`,
 				}
 			}
 			maskPatterns := stringListSetting(cmd, "mask-pattern")
-			redactPayloads := config.GetBool(cmd, "redact-payloads")
-			redactor, err := mcp.NewRedactor(root, maskPatterns, redactPayloads)
+			redactPayloads := config.GetBool(cmd, "redact-payloads") && !config.GetBool(cmd, "send-payloads")
+			masker, err := loadMasker(config.GetString(cmd, "mask-config"))
+			if err != nil {
+				return err
+			}
+			redactor, err := mcp.NewRedactor(root, maskPatterns, redactPayloads, masker)
 			if err != nil {
 				return output.Usagef("invalid --mask-pattern: %v", err)
+			}
+			if !redactPayloads {
+				fmt.Fprintln(cmd.ErrOrStderr(), "cpictl mcp: message payloads and error texts are sent to the client (--send-payloads); values are still masked")
 			}
 			exe := tenantExecuter(cmd)
 			levels := mcp.NewLogLevelReverter(exe)
@@ -263,7 +277,8 @@ CPICTL_* environment variables.`,
 	c.Flags().Int("loop-max-same-errors", 0, "Highest same_error_limit loop_start accepts (0: no cap); also lowers the default")
 	c.Flags().Int("loop-max-minutes", 0, "Highest wall_clock_minutes loop_start accepts (0: no cap); also lowers the default")
 	c.Flags().StringArray("mask-pattern", nil, "Also mask the values of names (headers, properties, attributes, parameters) matching this regular expression (case-insensitive; repeatable)")
-	c.Flags().Bool("redact-payloads", false, "Replace message bodies in results (test message responses, attachments, message store entries, trace payloads, data store entries, variables) with a placeholder, size and sha256")
+	c.Flags().Bool("redact-payloads", true, "Withhold message bodies (test message responses, attachments, message store entries, trace payloads, data store entries, variables) and message error texts, and mask business keys (default on; see --send-payloads)")
+	c.Flags().Bool("send-payloads", false, "Send message bodies and error texts to the client (masked by the value masker): turns --redact-payloads off")
 	addRuntimeAuthFlags(c)
 	return c
 }
@@ -297,4 +312,25 @@ func gatewayScopeForMCP(cmd *cobra.Command, gw string) *scope.Scope {
 		return &scope.Scope{Version: 1}
 	}
 	return t.Scope
+}
+
+// loadMasker reads a --mask-config file (YAML or JSON); "" masks with every
+// built-in detector.
+func loadMasker(file string) (*mask.Masker, error) {
+	if file == "" {
+		return mask.Default(), nil
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, output.Usagef("--mask-config: %v", err)
+	}
+	var c mask.Config
+	if err := yaml.Unmarshal(data, &c); err != nil {
+		return nil, output.Usagef("--mask-config %s: %v", file, err)
+	}
+	m, err := mask.New(c)
+	if err != nil {
+		return nil, output.Usagef("--mask-config %s: %v", file, err)
+	}
+	return m, nil
 }

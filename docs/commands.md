@@ -205,6 +205,8 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
       --debug                       Show debug logs
       --events string               Write progress events as JSON lines (start, one per artifact, end) to this file, or to stderr with "-" (see the README, Output)
       --gateway string              URL of a cpictl gateway including the SAP tenant (https://gw.example.com/t/dev), instead of --tmn-host and a service key; the token comes from $CPICTL_GATEWAY_TOKEN
+      --mask-config string          Masking rules for --redact and cpictl mcp (YAML or JSON: builtIns, names, rules of kind path or regex); default: every built-in detector
+      --no-redact                   Turn output redaction off, also where it is on by default
       --oauth-clientid string       Client ID for using OAuth
       --oauth-clientsecret string   Client Secret for using OAuth
       --oauth-host string           OAuth token server host
@@ -212,6 +214,7 @@ Every flag can also be set with an environment variable (`CPICTL_` + flag name i
       --output string               Output format: text or json. With json the result is written to stdout as one JSON document and logs are written to stderr as JSON lines (default "text")
       --profile string              Profile to use: $HOME/.cpictl/<name>.yaml (default: $CPICTL_PROFILE, else the one chosen with 'cpictl profile use')
       --read-retries int            Retries of a tenant read (GET) answered with 429, 502, 503 or 504, with backoff 2s, 4s, 8s ... (0: none). Writes are never retried (default 3)
+      --redact                      Redact output for AI agents: withhold message bodies and error texts, mask business keys, personal data and secrets (on by default in gateway mode or with redact: true in the profile)
       --scope-actions strings       Access scope without a file: actions (read, download, upload, deploy, configure, test, log-level, delete, pd-write)
       --scope-artifacts strings     Access scope without a file: artifact patterns (!X excludes)
       --scope-file string           Access scope (JSON or YAML): packages, artifacts, partners, tenant areas and actions this process may use; everything else is refused or hidden. Fixed for the process; not read from config files
@@ -2665,10 +2668,14 @@ Loop policy (the model cannot change it):
                                   the highest limits loop_start accepts (higher: usage error);
                                   they also lower the defaults
 
-Masking: values of sensitive names (authorization, cookie, password, secret, token,
-credential, API key) in all name/value lists of results are masked as ***;
---mask-pattern adds name patterns, --redact-payloads replaces message bodies with
-a placeholder, size and sha256. Local paths in results are relative to --root.
+Masking (on by default): message bodies and message error texts are withheld
+(a placeholder with their size) and business keys read ••••; --send-payloads
+sends them, masked. Every result passes the value masker: personal data (IBAN,
+e-mail, phone, payment card), secret shapes (JWT, Bearer/Basic, private keys,
+credentials and signatures in URLs) and values of sensitive names (authorization,
+cookie, password, secret, token, credential, API key) read ••••. --mask-pattern
+adds name patterns, --mask-config rules (docs/ai-agents.md). A write tool refuses
+an argument that carries ••••. Local paths in results are relative to --root.
 All flags can also be set in cpictl.yaml (e.g. loop-required: true) or as
 CPICTL_* environment variables.
 ```
@@ -2695,13 +2702,14 @@ CPICTL_* environment variables.
       --opt-in strings                      Also offer these opt-in tools (exact names: unlock_artifact, delete_*), without limiting the other tools as --tools does
       --poll-interval int                   Default seconds between deploy/undeploy status checks (default 10)
       --read-only                           Offer only tools that do not change the tenant or trigger processing
-      --redact-payloads                     Replace message bodies in results (test message responses, attachments, message store entries, trace payloads, data store entries, variables) with a placeholder, size and sha256
+      --redact-payloads                     Withhold message bodies (test message responses, attachments, message store entries, trace payloads, data store entries, variables) and message error texts, and mask business keys (default on; see --send-payloads) (default true)
       --root string                         Directory that local paths of tool calls are confined to (default ".")
       --runtime-oauth-clientid string       OAuth client ID for runtime endpoints (default: the API credentials)
       --runtime-oauth-clientsecret string   OAuth client secret for runtime endpoints
       --runtime-oauth-host string           OAuth token server host for runtime endpoints (default: --oauth-host)
       --runtime-password string             Password for Basic Auth on runtime endpoints
       --runtime-userid string               User ID for Basic Auth on runtime endpoints
+      --send-payloads                       Send message bodies and error texts to the client (masked by the value masker): turns --redact-payloads off
       --structured-content                  Also send each result as structuredContent, in the verbose envelope (for SDK clients that read it)
       --tools strings                       Offer only these tools (names or patterns such as list_*)
       --toolset strings                     Offer only the tools of these tasks: build, improve, inspect, monitor, partner-directory, promote, security, test (combined with --tools; the mode still applies)

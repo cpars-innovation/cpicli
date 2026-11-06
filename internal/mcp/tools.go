@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -1502,7 +1503,10 @@ func toolList(cfg Config, readOnly map[string]any, tenant ops.Tenant, endpoints 
 				if err := checkMaxBytes(a.MaxBytes); err != nil {
 					return nil, err
 				}
-				opts := ops.PDGetOptions{IncludeContent: a.IncludeContent, MaxBytes: a.MaxBytes}
+				opts := ops.PDGetOptions{IncludeContent: a.IncludeContent, MaxBytes: a.MaxBytes, Secure: ops.LoadPDSecureMarks(cfg.Root)}
+				if opts.Secure.Problem != "" {
+					log.Warn().Msg(opts.Secure.Problem)
+				}
 				if a.Inspect {
 					opts.Inspect = &ops.PDInspectOptions{ZipEntry: a.ZipEntry, TextBytes: cmp.Or(a.MaxBytes, 65536)}
 				}

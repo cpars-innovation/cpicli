@@ -20,6 +20,9 @@ import (
 type PDString struct {
 	ID    string `json:"id"`
 	Value string `json:"value"`
+	// Secure: the entry is marked secure (PDSecureMarks), its value
+	// withheld. Set it on the tenant yourself.
+	Secure bool `json:"secure,omitempty"`
 }
 
 // PDBinary describes a binary parameter; Content only on request.
@@ -31,6 +34,9 @@ type PDBinary struct {
 	Content     *Content `json:"content,omitempty"`
 	// Inspection only with PDGetOptions.Inspect.
 	Inspection *PDInspection `json:"inspection,omitempty"`
+	// Secure: the entry is marked secure (PDSecureMarks); content, sha256
+	// and inspection are withheld.
+	Secure bool `json:"secure,omitempty"`
 }
 
 // PDGetOptions are the options of GetPDParametersWith.
@@ -41,6 +47,8 @@ type PDGetOptions struct {
 	MaxBytes       int
 	// Inspect runs InspectPDBinary on every binary with these options.
 	Inspect *PDInspectOptions
+	// Secure withholds the values of marked entries (cpicli#73).
+	Secure *PDSecureMarks
 }
 
 // PDParameters are the parameters of one partner ID.
@@ -103,6 +111,7 @@ func GetPDParametersWith(api *cpi.PartnerDirectory, pid string, keys []string, o
 	}
 	sort.Slice(res.Strings, func(i, j int) bool { return res.Strings[i].ID < res.Strings[j].ID })
 	sort.Slice(res.Binaries, func(i, j int) bool { return res.Binaries[i].ID < res.Binaries[j].ID })
+	opts.Secure.withhold(res)
 	return res, nil
 }
 

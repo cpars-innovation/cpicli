@@ -34,6 +34,9 @@
         "inspection": {
           "$ref": "#/$defs/ops.PDInspection"
         },
+        "secure": {
+          "type": "boolean"
+        },
         "sha256": {
           "type": "string"
         },
@@ -246,6 +249,9 @@
       "properties": {
         "id": {
           "type": "string"
+        },
+        "secure": {
+          "type": "boolean"
         },
         "value": {
           "type": "string"

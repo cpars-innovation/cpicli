@@ -123,6 +123,7 @@ be run; otherwise the cause of the cases that could not be run (2 usage, 3 auth,
   cpictl test run --flow Orders_Route --apply-config`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
+		Annotations:  map[string]string{annotationPayload: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tier, allow := config.GetString(cmd, "tier"), config.GetBool(cmd, "allow-production")
 			if err := ops.GuardProduction(tier, allow, "a test run"); err != nil {

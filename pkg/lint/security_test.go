@@ -200,3 +200,17 @@ message.setHeader("X-Correlation", "abc")
 	assert.True(t, defaultSecurity().withDefaults().secretHeader("x-api-key"))
 	assert.Len(t, SecurityConfig{SecretHeaders: []string{"authorization", "X-Own"}}.withDefaults().SecretHeaders, 5, "added to the defaults, no duplicates")
 }
+
+// Hard-coded secret literals are found per line, without the value;
+// runtime credential code is not (cpicli#74).
+func TestHardCodedSecret(t *testing.T) {
+	a := &lintArtifact{Scripts: map[string][]byte{
+		"script/auth.groovy": []byte(secretScript + "\ndef apiKey = \"k9Xq2LmP4vR7tZ1w\"\n"),
+		"script/ok.js":       []byte("var t = 'Bearer ' + token;\n"),
+	}}
+	fs := ruleHardCodedSecret(nil, a)
+	require.Len(t, fs, 1)
+	assert.Equal(t, "hard-coded-secret", fs[0].Rule)
+	assert.Contains(t, fs[0].Message, "auth.groovy line 29 holds a hard-coded secret (named-like-a-secret)")
+	assert.NotContains(t, fs[0].Message, "k9Xq2LmP4vR7tZ1w")
+}

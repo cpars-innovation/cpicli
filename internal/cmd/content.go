@@ -3,6 +3,8 @@ package cmd
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/cpars-innovation/cpicli/pkg/mask"
+	"github.com/cpars-innovation/cpicli/pkg/secretscan"
 	"os"
 	"strings"
 	"time"
@@ -198,6 +200,14 @@ func emitContent(cmd *cobra.Command, result any, c ops.Content) error {
 	if outputFormat(cmd) == output.FormatJSON {
 		output.SetResult(cmd.Context(), result)
 		return nil
+	}
+	if rc, ok := result.(*ops.ResourceContent); ok && redactionOf(cmd.Context()).on {
+		masked, _ := secretscan.MaskLines(rc.Name, string(raw), mask.Dots)
+		raw = []byte(masked)
+	}
+	if redactionOf(cmd.Context()).on && cmd.Annotations[annotationPayload] == "true" {
+		_, err := fmt.Fprintf(cmd.OutOrStdout(), "[payload withheld: %d bytes; %s, or write it to a file with --out]\n", c.Size, hintCLI)
+		return err
 	}
 	_, err := fmt.Fprint(cmd.OutOrStdout(), string(raw))
 	return err

@@ -69,7 +69,7 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 					if l.LogEnd != nil {
 						end = l.LogEnd.Local().Format(time.DateTime)
 					}
-					log.Info().Str("messageGuid", l.MessageGuid).Msgf("%s  %-10s %s  %s%s", end, l.Status, l.ArtifactID, l.MessageGuid, errSuffix(firstLine(l.ErrorText)))
+					log.Info().Str("messageGuid", l.MessageGuid).Msgf("%s  %-10s %s  %s%s", end, l.Status, l.ArtifactID, l.MessageGuid, errSuffix(messageText(cmd, firstLine(l.ErrorText))))
 				}
 				log.Info().Msgf("%d of %d message(s)", len(res.Logs), res.Total)
 				if res.Scanned > 0 {
@@ -106,10 +106,10 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 			output.SetResult(cmd.Context(), d)
 			log.Info().Msgf("%s  %s  %s", d.MessageGuid, d.Status, d.ArtifactID)
 			if d.ErrorText != "" {
-				log.Info().Msgf("Error: %s", d.ErrorText)
+				log.Info().Msgf("Error: %s", messageText(cmd, d.ErrorText))
 			}
 			for _, h := range d.CustomHeaderProperties {
-				log.Info().Msgf("Header %s = %s", h.Name, h.Value)
+				log.Info().Msgf("Header %s = %s", h.Name, businessKey(cmd, h.Value))
 			}
 			if d.ErrorInformation != nil && d.ErrorInformation.LastErrorModelStepID != "" {
 				log.Info().Msgf("Failed at model step %s", d.ErrorInformation.LastErrorModelStepID)
@@ -138,14 +138,14 @@ Statuses: ` + strings.Join(cpi.MessageLogStatuses, ", "),
 			output.SetResult(cmd.Context(), res)
 			for _, r := range res.Runs {
 				for _, st := range r.Steps {
-					log.Info().Msgf("%-10s %-30s %s%s", st.Status, st.ModelStepID, st.Activity, errSuffix(st.Error))
+					log.Info().Msgf("%-10s %-30s %s%s", st.Status, st.ModelStepID, st.Activity, errSuffix(messageText(cmd, st.Error)))
 					for _, p := range st.Properties {
 						log.Info().Msgf("%-10s   %s = %s", "", p.Name, p.Value)
 					}
 				}
 			}
 			if res.FailedStep != nil {
-				log.Warn().Msgf("Failed step: %s (%s)%s", res.FailedStep.ModelStepID, res.FailedStep.Activity, errSuffix(res.FailedStep.Error))
+				log.Warn().Msgf("Failed step: %s (%s)%s", res.FailedStep.ModelStepID, res.FailedStep.Activity, errSuffix(messageText(cmd, res.FailedStep.Error)))
 			}
 			return nil
 		},
@@ -196,7 +196,7 @@ result. Tenants without that entity set are scanned instead, which needs
 				if l.LogEnd != nil {
 					end = l.LogEnd.Local().Format(time.DateTime)
 				}
-				log.Info().Str("messageGuid", l.MessageGuid).Msgf("%s  %-10s %s  %s%s", end, l.Status, l.ArtifactID, l.MessageGuid, errSuffix(firstLine(l.ErrorText)))
+				log.Info().Str("messageGuid", l.MessageGuid).Msgf("%s  %-10s %s  %s%s", end, l.Status, l.ArtifactID, l.MessageGuid, errSuffix(messageText(cmd, firstLine(l.ErrorText))))
 			}
 			log.Info().Msgf("%d of %d message(s) with %s", len(res.Logs), res.Total, res.Filter)
 			return nil
@@ -216,6 +216,7 @@ result. Tenants without that entity set are scanned instead, which needs
 		Use:          "attachment",
 		Short:        "Download a log attachment (ID from 'logs get')",
 		SilenceUsage: true,
+		Annotations:  map[string]string{annotationPayload: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := ops.GetMessageAttachment(tenantExecuter(cmd), config.GetString(cmd, "id"), contentLimit(cmd))
 			if err != nil {
@@ -231,6 +232,7 @@ result. Tenants without that entity set are scanned instead, which needs
 		Use:          "payload",
 		Short:        "Download a persisted message (message store entry ID from 'logs get')",
 		SilenceUsage: true,
+		Annotations:  map[string]string{annotationPayload: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := ops.GetMessageStoreEntry(tenantExecuter(cmd), config.GetString(cmd, "id"), contentLimit(cmd))
 			if err != nil {
@@ -273,6 +275,7 @@ Set the level with 'cpictl log-level --level TRACE' (active for 10 minutes).`,
 		Use:          "trace-message",
 		Short:        "Show payload, headers and exchange properties of a traced step (ID from 'logs trace')",
 		SilenceUsage: true,
+		Annotations:  map[string]string{annotationPayload: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := ops.GetTraceMessage(tenantExecuter(cmd), config.GetString(cmd, "id"), contentLimit(cmd))
 			if err != nil {
@@ -343,7 +346,7 @@ is the same for every message taking the same route.`,
 			output.SetResult(cmd.Context(), res)
 			var print func(n *ops.TraceNode, depth int)
 			print = func(n *ops.TraceNode, depth int) {
-				log.Info().Msgf("%s%-10s %s  %s%s", strings.Repeat("  ", depth), n.Status, n.ArtifactID, n.MessageGuid, errSuffix(firstLine(n.ErrorText)))
+				log.Info().Msgf("%s%-10s %s  %s%s", strings.Repeat("  ", depth), n.Status, n.ArtifactID, n.MessageGuid, errSuffix(messageText(cmd, firstLine(n.ErrorText))))
 				for _, c := range n.Children {
 					print(c, depth+1)
 				}
@@ -355,7 +358,7 @@ is the same for every message taking the same route.`,
 				log.Info().Msgf("hop  %s -> %s (%s)", h.From, h.To, h.Link)
 			}
 			if res.FirstFailure != nil {
-				log.Warn().Msgf("First failure: %s %s%s", res.FirstFailure.ArtifactID, res.FirstFailure.MessageGuid, errSuffix(firstLine(res.FirstFailure.ErrorText)))
+				log.Warn().Msgf("First failure: %s %s%s", res.FirstFailure.ArtifactID, res.FirstFailure.MessageGuid, errSuffix(messageText(cmd, firstLine(res.FirstFailure.ErrorText))))
 			}
 			return nil
 		},
@@ -427,7 +430,7 @@ first and last occurrence. Reads at most --max-messages, newest first.`,
 				if g.Step != "" {
 					at += " at " + g.Step
 				}
-				log.Warn().Msgf("%dx %s %s (last %s, %s)", g.Count, at, firstLine(g.Sample), g.Last.Format(time.RFC3339), g.MessageGuid)
+				log.Warn().Msgf("%dx %s %s (last %s, %s)", g.Count, at, messageText(cmd, firstLine(g.Sample)), g.Last.Format(time.RFC3339), g.MessageGuid)
 			}
 			trunc := ""
 			if res.Truncated {
