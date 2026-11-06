@@ -24,6 +24,7 @@ Only the latest release gets security fixes. Pin a release; update when an advis
    reviewer on the mock tenant. The release workflow enforces it: it refuses such a release unless it is started
    with **security_verified** set, which records that the verification was done.
    - `pkg/scope`, `pkg/httpclnt`, `pkg/pdaddress`
+   - masking: `pkg/mask`, `pkg/secretscan`, `internal/cmd/redact.go`
    - `internal/auth`, `internal/mcp`
    - credential handling: `internal/cmd/root.go`, `internal/cmd/service_details.go`, `internal/cmd/profile*.go`,
      `pkg/ops/security*.go`, `pkg/ops/keymaterial.go`

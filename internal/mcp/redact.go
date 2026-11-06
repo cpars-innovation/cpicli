@@ -329,7 +329,8 @@ func (w walker) walk(node any, key string) (any, bool) {
 			}
 			// under a sensitive key the whole value is masked, whatever its type
 			// (mask.HidesWhole: a list of credential metadata is walked instead)
-			if child != nil && child != "" && child != Masked && (w.m.HidesWhole(k, child) || !w.m.Sensitive(k) && r.sensitiveWith(w.m, k) && !mask.ReferenceKey(k)) {
+			if child != nil && child != "" && child != Masked && !(w.cred && mask.CredentialMetaKey(k)) &&
+				(w.m.HidesWhole(k, child) || !w.m.Sensitive(k) && r.sensitiveWith(w.m, k) && !mask.ReferenceKey(k)) {
 				n[k], changed = Masked, true
 				w.st[mask.CountName]++
 				continue

@@ -5,6 +5,19 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.38.1
+
+Masking in 0.38.0 masked a few values that are no secrets (#76). Nothing leaked; this makes the output usable again.
+
+- `secretEnv` (the variable a credential's secret comes from) and other metadata of a credential stay readable
+  inside credential lists, even when their name holds a sensitive word.
+- Lists of consecutive 4-digit numbers (`ports 5000 5001 5002 …`) are no card numbers.
+- Digits inside hex IDs and GUIDs (`…-0049-1771-53ff-…`) are neither card nor phone numbers.
+- The release gate now also requires an independent verification for changes to the masking code (`pkg/mask`,
+  `pkg/secretscan`, `internal/cmd/redact.go`).
+
+**What to do:** nothing; update from 0.38.0 when convenient.
+
 ## 0.38.0
 
 **AI data protection.** Whatever an AI agent reads through cpictl goes to its model provider. From this release

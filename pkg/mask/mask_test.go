@@ -374,7 +374,7 @@ func TestConnectionStringEscapes(t *testing.T) {
 // an identifier is masked.
 func TestRound3Nits(t *testing.T) {
 	m := Default()
-	for _, in := range []string{"2021 2022 2023 2024 2025 2026 2027 2028"} { // 5000 5001 … can look like Maestro: masked, the safe side
+	for _, in := range []string{"2021 2022 2023 2024 2025 2026 2027 2028", "ports 5000 5001 5002 5003 5004 5005"} {
 		out, _ := m.Text(in)
 		assert.Equal(t, in, out)
 	}
@@ -397,4 +397,38 @@ func TestCardNetworks(t *testing.T) {
 	}
 	out, _ := m.Text("2021 2022 2023 2024 2025 2026 2027 2028")
 	assert.Equal(t, "2021 2022 2023 2024 2025 2026 2027 2028", out)
+}
+
+// cpicli#76: no over-masking of secretEnv, port lists or hex GUIDs; real
+// cards still mask.
+func TestOverMasking(t *testing.T) {
+	m := Default()
+	out, _, err := m.JSON([]byte(`{"credentials":[{"name":"SFTP","secretEnv":"CRED_SFTP_PASSWORD","password":"hunter2"}]}`))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `"secretEnv":"CRED_SFTP_PASSWORD"`)
+	assert.NotContains(t, string(out), "hunter2")
+	for _, in := range []string{"id 3c1ae2bd-6978-4339-1512-40b9ce02be89", "ports 5000 5001 5002 5003 5004 5005"} {
+		got, _ := m.Text(in)
+		assert.Equal(t, in, got)
+	}
+	for _, in := range []string{"card 4111 1111 1111 1111", "card 5555-5555-5555-4444", "x 4111111111111111 y"} {
+		got, _ := m.Text(in)
+		assert.NotEqual(t, in, got, in)
+	}
+}
+
+// Random hex GUIDs in free text keep their value (the verifier found 2 in
+// 20,000 masked).
+func TestGUIDsKeepTheirValue(t *testing.T) {
+	m := Default()
+	changed := 0
+	for i := range 20000 {
+		h := sha256.Sum256([]byte(fmt.Sprint("guid", i)))
+		x := hex.EncodeToString(h[:16])
+		g := x[:8] + "-" + x[8:12] + "-" + x[12:16] + "-" + x[16:20] + "-" + x[20:32]
+		if out, _ := m.Text("id " + g); out != "id "+g {
+			changed++
+		}
+	}
+	assert.Zero(t, changed)
 }

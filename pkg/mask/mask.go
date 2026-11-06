@@ -488,13 +488,27 @@ func detect(d, s string, st Stats) string {
 	case DetectEmail:
 		return emailRE.ReplaceAllStringFunc(s, func(string) string { st[d]++; return Dots + "@" + Dots })
 	case DetectPhone:
-		return phoneRE.ReplaceAllStringFunc(s, func(x string) string {
-			if n := len(nonDig.ReplaceAllString(x, "")); n >= 8 && n <= 16 {
-				st[d]++
-				return "+•• " + Dots + " " + Dots
+		var b strings.Builder
+		last := 0
+		for _, loc := range phoneRE.FindAllStringIndex(s, -1) {
+			// a number that runs straight on into a letter is part of a
+			// hex ID (…-0049-1771-53ff-…), not a phone number (cpicli#76)
+			if loc[1] < len(s) && (isLetter(s[loc[1]]) || s[loc[1]] == '_') || inHexWord(s, loc[0], loc[1]) {
+				continue
 			}
-			return x
-		})
+			if n := len(digitsOf(s[loc[0]:loc[1]])); n < 8 || n > 16 {
+				continue
+			}
+			st[d]++
+			b.WriteString(s[last:loc[0]])
+			b.WriteString("+•• " + Dots + " " + Dots)
+			last = loc[1]
+		}
+		if last == 0 {
+			return s
+		}
+		b.WriteString(s[last:])
+		return b.String()
 	case DetectCard:
 		var b strings.Builder
 		last := 0
@@ -506,7 +520,8 @@ func detect(d, s string, st Stats) string {
 			// the longest card-shaped, Luhn-valid part that starts and ends
 			// at a group boundary: "qty 12 4111…", "4111 … 1111 12/27".
 			// A number glued to a name (ORD_4111…, Flow4111…) is no card.
-			start, end := cardIn(x, loc[0] > 0 && (isLetter(s[loc[0]-1]) || s[loc[0]-1] == '_'))
+			start, end := cardIn(x, loc[0] > 0 && (isLetter(s[loc[0]-1]) || s[loc[0]-1] == '_'),
+				loc[1] < len(s) && (isLetter(s[loc[1]]) || s[loc[1]] == '_'))
 			if start < 0 {
 				continue
 			}
@@ -549,7 +564,7 @@ func cardNetwork(d string) bool {
 // cardIn finds the longest card number in x, a run of digit groups, that
 // starts and ends at a group boundary; glued: x follows a letter or _, so
 // its first group cannot start a card. -1 when there is none.
-func cardIn(x string, glued bool) (start, end int) {
+func cardIn(x string, glued, gluedEnd bool) (start, end int) {
 	var starts, ends []int
 	for i := 0; i < len(x); i++ {
 		if !isDigit(x[i]) {
@@ -558,7 +573,9 @@ func cardIn(x string, glued bool) (start, end int) {
 		if i == 0 && !glued || i > 0 && !isDigit(x[i-1]) {
 			starts = append(starts, i)
 		}
-		if i == len(x)-1 || !isDigit(x[i+1]) {
+		// a run that goes straight on into a letter (inside a hex GUID) does
+		// not end there (cpicli#76)
+		if i == len(x)-1 && !gluedEnd || i < len(x)-1 && !isDigit(x[i+1]) {
 			ends = append(ends, i+1)
 		}
 	}
@@ -572,12 +589,51 @@ func cardIn(x string, glued bool) (start, end int) {
 				continue
 			}
 			digits := digitsOf(x[a:z])
-			if len(digits) >= 13 && cardShaped(x[a:z], digits) && luhnValid(digits) {
+			if len(digits) >= 13 && cardShaped(x[a:z], digits) && luhnValid(digits) && !consecutiveGroups(x[a:z]) {
 				best, bs, be = z-a, a, z
 			}
 		}
 	}
 	return bs, be
+}
+
+// consecutiveGroups: three or more groups of four digits that count up by
+// one (ports 5000 5001 5002 5003): a list, not a card (cpicli#76).
+func consecutiveGroups(x string) bool {
+	groups := strings.FieldsFunc(x, func(r rune) bool { return r == ' ' || r == '-' })
+	if len(groups) < 3 {
+		return false
+	}
+	prev := -1
+	for i, g := range groups {
+		if len(g) != 4 {
+			return false
+		}
+		n, err := strconv.Atoi(g)
+		if err != nil || i > 0 && n != prev+1 {
+			return false
+		}
+		prev = n
+	}
+	return true
+}
+
+// inHexWord: s[a:b] sits in a word of letters, digits, - and _ that holds
+// letters around it, such as a GUID (3cd90e4d-0049-1771-53ff-…): an ID, not
+// a phone number.
+func inHexWord(s string, a, b int) bool {
+	word := func(c byte) bool { return isLetter(c) || isDigit(c) || c == '-' || c == '_' }
+	for i := a - 1; i >= 0 && word(s[i]); i-- {
+		if isLetter(s[i]) {
+			return true
+		}
+	}
+	for i := b; i < len(s) && word(s[i]); i++ {
+		if isLetter(s[i]) {
+			return true
+		}
+	}
+	return false
 }
 
 // digitsOf returns the ASCII digits of s.
@@ -968,7 +1024,10 @@ func (m *Masker) writeJSONKey(b *bytes.Buffer, v any, stack []string, indent boo
 			if indent {
 				b.WriteByte(' ')
 			}
-			hideChild := hide || pair && IsPairValue(e.k) || m.HidesWhole(e.k, e.v) || cred && isScalar(e.v) && !CredentialMetaKey(e.k)
+			// inside a credential container its metadata wins over a sensitive
+			// word in the key (secretEnv names a variable, cpicli#76)
+			meta := cred && CredentialMetaKey(e.k)
+			hideChild := hide || pair && IsPairValue(e.k) || !meta && m.HidesWhole(e.k, e.v) || cred && isScalar(e.v) && !meta
 			childCred := cred || !hideChild && isContainer(e.v) && CredentialContainer(e.k)
 			m.writeJSONKey(b, e.v, append(slices.Clone(stack), e.k), indent, depth+1, hideChild, !hideChild && IdentifierKey(e.k), childCred, st)
 		}

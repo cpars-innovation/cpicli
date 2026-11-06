@@ -81,7 +81,7 @@ jobs:
           last="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD^ 2>/dev/null || true)"
           [ -n "${last}" ] || exit 0
           changed="$(git diff --name-only "${last}" HEAD -- \
-            pkg/scope pkg/httpclnt pkg/pdaddress internal/auth internal/mcp \
+            pkg/scope pkg/httpclnt pkg/pdaddress pkg/mask pkg/secretscan internal/auth internal/mcp internal/cmd/redact.go \
             internal/cmd/root.go internal/cmd/service_details.go 'internal/cmd/profile*.go' \
             'pkg/ops/security*.go' pkg/ops/keymaterial.go pkg/testrun/refpath.go \
             | grep -v '_test\.go$' || true)"
