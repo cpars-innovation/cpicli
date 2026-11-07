@@ -644,9 +644,20 @@ func unsafeQuery(q url.Values, parseErr error) string {
 			return "repeated query parameter " + k + " is not accepted under a scope"
 		}
 		seen[lk] = true
+		// system query options only as cpictl writes them: the guard checks
+		// $expand by name, and a tenant that read $EXPAND or an option the
+		// guard does not know would get past that check (cpicli#77)
+		if strings.HasPrefix(k, "$") && !slices.Contains(systemQueryOptions, k) {
+			return "query option " + k + " is not accepted under a scope"
+		}
 	}
 	return ""
 }
+
+// systemQueryOptions are the OData system query options a request may carry
+// under a scope, in this spelling only.
+var systemQueryOptions = []string{"$expand", "$filter", "$select", "$top", "$skip", "$skiptoken", "$inlinecount",
+	"$format", "$orderby", "$count"}
 
 // messageSubPaths and runtimeSubPaths are the sub-paths of a message and a
 // runtime artifact a scope allows: the lists cpictl reads. Anything below

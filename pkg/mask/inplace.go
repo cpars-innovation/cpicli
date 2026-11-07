@@ -32,6 +32,14 @@ var (
 // Text for JSON and XML documents.
 func (m *Masker) InPlace(s string) (string, Stats) {
 	st := Stats{}
+	out := m.inPlace(s, st)
+	if st.Total() == 0 {
+		return s, st
+	}
+	return out, st
+}
+
+func (m *Masker) inPlace(s string, st Stats) string {
 	lines := strings.Split(s, "\n")
 	inKey := false
 	for i, line := range lines {
@@ -57,10 +65,7 @@ func (m *Masker) InPlace(s string) (string, Stats) {
 		}
 		lines[i] = body
 	}
-	if st.Total() == 0 {
-		return s, st
-	}
-	return strings.Join(lines, "\n"), st
+	return strings.Join(lines, "\n")
 }
 
 func (m *Masker) has(detector string) bool {

@@ -1416,3 +1416,15 @@ func TestGuardWrappedNestedBodyIsCheap(t *testing.T) {
 	}
 	assert.NoError(t, g.Before(req("POST", "/api/v1/IntegrationPackages", `{"d":{"Id":"SD_New","Name":"N","ShortText":"x"}}`)), "the wrapper still works")
 }
+
+// System query options only in their known spelling (cpicli#77): $EXPAND
+// would get past the $expand check if the tenant read it.
+func TestGuardSystemQueryOptions(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	for _, q := range []string{"$EXPAND=CustomHeaderProperties", "$Expand=CustomHeaderProperties", "$expand=CustomHeaderProperties",
+		"$levels=2", "$apply=x", "%24EXPAND=CustomHeaderProperties"} {
+		refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('G1')?"+q, "")))
+	}
+	assert.NoError(t, g.Before(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints&$top=10", "")))
+	assert.NoError(t, g.Before(req("GET", "/api/v1/IntegrationPackages?$select=Id&$skip=10&$format=json", "")))
+}

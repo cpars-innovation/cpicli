@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"regexp"
 	"slices"
@@ -255,6 +256,10 @@ func (m *Masker) Mask(s string) (string, bool) {
 }
 
 func (m *Masker) text(s string, stack []string, st Stats) string {
+	// a byte order mark stays where it was; the document after it is masked
+	if rest, ok := strings.CutPrefix(s, "\ufeff"); ok {
+		return "\ufeff" + m.text(rest, stack, st)
+	}
 	t := strings.TrimSpace(s)
 	if (strings.HasPrefix(t, "{") && strings.HasSuffix(t, "}")) || (strings.HasPrefix(t, "[") && strings.HasSuffix(t, "]")) {
 		if v, err := decodeOrdered(t); err == nil {
@@ -263,10 +268,84 @@ func (m *Masker) text(s string, stack []string, st Stats) string {
 			return buf.String()
 		}
 	}
+	if strings.HasPrefix(t, "{") || strings.HasPrefix(t, "[") {
+		// JSON that does not parse as one document: a sequence (NDJSON),
+		// trailing data or a truncated document. Mask each document of a
+		// sequence by keys; anything else line by line, which still masks
+		// "name": "value" pairs (cpicli#77).
+		if out, ok := m.jsonSeq(s, stack, st); ok {
+			return out
+		}
+		return m.quotedTail(m.inPlace(s, st), st)
+	}
 	if strings.HasPrefix(t, "<") {
 		s = m.xml(s, st)
 	}
+	if strings.Contains(s, `"`) {
+		s = m.quotedTail(m.quotedPairs(s, st), st)
+	}
 	return m.plain(s, st)
+}
+
+// jsonSeq masks a sequence of JSON documents (NDJSON, or a document
+// followed by others) and keeps what lies between them. It reports false
+// when the text is not entirely such a sequence.
+func (m *Masker) jsonSeq(s string, stack []string, st Stats) (string, bool) {
+	dec := json.NewDecoder(strings.NewReader(s))
+	var b strings.Builder
+	last := 0
+	for n := 0; ; n++ {
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			if err != io.EOF || n < 2 {
+				return "", false
+			}
+			break
+		}
+		end := int(dec.InputOffset())
+		doc := strings.TrimSpace(s[last:end])
+		start := end - len(doc)
+		if start < last || s[start:end] != doc {
+			return "", false
+		}
+		v, err := decodeOrdered(doc)
+		if err != nil {
+			return "", false
+		}
+		b.WriteString(s[last:start])
+		var buf bytes.Buffer
+		m.writeJSON(&buf, v, stack, strings.Contains(doc, "\n"), 0, false, st)
+		b.WriteString(buf.String())
+		last = end
+	}
+	b.WriteString(s[last:])
+	return b.String(), true
+}
+
+// quotedPairs masks "name": "value" pairs under sensitive names in text
+// that is not a JSON document, such as a log line carrying a body.
+func (m *Masker) quotedPairs(s string, st Stats) string {
+	return reQuotedPair.ReplaceAllStringFunc(s, func(x string) string {
+		p := reQuotedPair.FindStringSubmatch(x)
+		if p[3] == "" || p[3] == Dots || !m.Sensitive(p[2]) {
+			return x
+		}
+		st[CountName]++
+		return p[1] + `"` + Dots + `"`
+	})
+}
+
+// a value cut off at the end of truncated JSON: "password": "hunt
+var reQuotedTail = regexp.MustCompile(`("([^"\\]*)"\s*:\s*)"((?:[^"\\]|\\.)*)\\?$`)
+
+// quotedTail masks a value under a sensitive name that the text cuts off.
+func (m *Masker) quotedTail(s string, st Stats) string {
+	p := reQuotedTail.FindStringSubmatchIndex(s)
+	if p == nil || p[6] == p[7] || !m.Sensitive(s[p[4]:p[5]]) {
+		return s
+	}
+	st[CountName]++
+	return s[:p[3]] + `"` + Dots
 }
 
 // JSON masks a JSON document, such as a tool result: every string leaf as

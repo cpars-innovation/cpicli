@@ -5,6 +5,17 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+Two gaps the cpictl gateway found while reviewing its server-side masking (#77).
+
+- **Scope guard:** system query options are accepted only in the case cpictl writes them (`$filter`, `$expand`,
+  …). An option in another case (`$EXPAND`), which SAP may still honour, is refused under a scope.
+- **Masking:** JSON that does not parse as one document kept its `"password": "…"` values readable. A leading byte
+  order mark, NDJSON (one document per line), trailing data after a document and truncated JSON are now masked by
+  key: each document of a sequence as JSON, anything else line by line, including a value cut off at the end.
+  `"name": "value"` pairs under sensitive names inside other text (a log line with a body) are masked too.
+
+**What to do:** nothing.
+
 ## 0.38.2
 
 - **Release archives carry the third-party licenses.** cpictl's binary contains about 40 open-source libraries

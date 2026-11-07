@@ -489,3 +489,45 @@ func TestHexIDLinearAndStrict(t *testing.T) {
 	assert.NotContains(t, string(got), "HUNTER2")
 	assert.Contains(t, string(got), "CPI_SECRET_OAUTH2_GRAPH")
 }
+
+// JSON that is not one document still masks values by key (cpicli#77).
+func TestTextJSONFallback(t *testing.T) {
+	m, err := New(Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]struct{ in, want string }{
+		"bom":       {"\xef\xbb\xbf{\"password\":\"hunter2\"}", "\xef\xbb\xbf{\"password\":\"" + Dots + "\"}"},
+		"ndjson":    {"{\"password\":\"hunter2\"}\n{\"token\":\"abcdef12\"}\n", "{\"password\":\"" + Dots + "\"}\n{\"token\":\"" + Dots + "\"}\n"},
+		"trailing":  {`{"password":"hunter2"} trailing`, `{"password":"` + Dots + `"} trailing`},
+		"truncated": {`{"user":"a","password":"hunter2","more":[1,`, `{"user":"a","password":"` + Dots + `","more":[1,`},
+		"cut value": {`{"a":1,"password":"hunt`, `{"a":1,"password":"` + Dots},
+		"log line":  {`POST failed: body={"client_secret":"s3cr3tvalue"}`, `POST failed: body={"client_secret":"` + Dots + `"}`},
+		"pretty":    {"{\n  \"password\": \"hunter2\",\n  \"n\": 1\n", "{\n  \"password\": \"" + Dots + "\",\n  \"n\": 1\n"},
+	}
+	for name, c := range cases {
+		got, st := m.Text(c.in)
+		if got != c.want || strings.Contains(got, "hunt") || strings.Contains(got, "s3cr3t") {
+			t.Errorf("%s: got %q, want %q", name, got, c.want)
+		}
+		if st.Total() == 0 {
+			t.Errorf("%s: no count", name)
+		}
+	}
+	// a plain value next to a harmless one is unchanged
+	if got, _ := m.Text(`{"a":"b"} {"c":"d"}`); got != `{"a":"b"} {"c":"d"}` {
+		t.Errorf("unchanged sequence: %q", got)
+	}
+}
+
+func TestTextJSONFallbackLinear(t *testing.T) {
+	m, _ := New(Config{})
+	big := `{"password":"` + strings.Repeat(`a\"b `, 200000)
+	start := time.Now()
+	if got, _ := m.Text(big); strings.Contains(got, "a\\\"b") {
+		t.Error("cut-off value not masked")
+	}
+	if d := time.Since(start); d > 2*time.Second*raceSlowdown {
+		t.Errorf("took %v", d)
+	}
+}
