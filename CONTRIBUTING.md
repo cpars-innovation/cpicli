@@ -51,3 +51,6 @@ Review the diff of regenerated files before committing.
 cpictl contains code from [FlashPipe](https://github.com/engswee/flashpipe) (remote
 `upstream`). Fixes from there are taken over by cherry-pick only; never rebase onto it.
 Keep the attribution in NOTICE and in the copyright headers of files that came from it.
+
+After a dependency change, regenerate the third-party notices that every release archive carries:
+`scripts/third-party-notices.sh` (licenses/THIRD_PARTY_NOTICES.md and licenses/third-party/).

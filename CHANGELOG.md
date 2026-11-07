@@ -5,6 +5,17 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.38.2
+
+- **Release archives carry the third-party licenses.** cpictl's binary contains about 40 open-source libraries
+  (BSD, MIT, Apache-2.0, one MPL-2.0). Their licenses ask binary distributions to include their notices, which the
+  archives up to 0.38.1 did not. Every archive now has `licenses/`: [THIRD_PARTY_NOTICES.md](licenses/THIRD_PARTY_NOTICES.md)
+  lists each library with version and license, `licenses/third-party/` holds the license texts and the NOTICE
+  files of Apache-2.0 libraries. `scripts/third-party-notices.sh` regenerates both from what the binary links.
+  No change to cpictl itself.
+
+**What to do:** nothing; redistributors of cpictl binaries should ship the archive's `licenses/` folder with them.
+
 ## 0.38.1
 
 Masking in 0.38.0 masked a few values that are no secrets (#76). Nothing leaked; this makes the output usable again.

@@ -558,4 +558,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Apache License 2.0, see [LICENSE](LICENSE). cpictl contains code originally developed as
 [FlashPipe](https://github.com/engswee/flashpipe) by Eng Swee Yeoh; see [NOTICE](NOTICE).
-Third-party licenses: [licenses/](licenses).
+Third-party software in the binary and its licenses: [licenses/THIRD_PARTY_NOTICES.md](licenses/THIRD_PARTY_NOTICES.md)
+(also in every release archive).
