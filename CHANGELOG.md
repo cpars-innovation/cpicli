@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.38.5
+
+Verified by the cpictl gateway's independent verifier before the tag.
+
 - Masking: a `…Required` field stays readable only with `true` or `false`, a `…ExpiresIn` field only with a whole
   number of up to ten digits. Broken text (`"passwordRequired": thisIsMySecret`), card numbers and PINs under them
   are masked; in JSON that does not parse, a bare value under a sensitive name is masked whatever its first
