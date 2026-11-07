@@ -375,6 +375,12 @@ func (m *Masker) otherValues(s string, st Stats) string {
 		}
 		if c == '[' || c == '{' {
 			end = closing(s, loc[1])
+		} else if end < len(s) && s[end] == '"' {
+			// a token cut by a quote (ab\"cd): mask on to the next
+			// delimiter, which no later key is looked for before (cpicli#80)
+			for end < len(s) && !strings.ContainsRune(",}] \t\r\n", rune(s[end])) {
+				end++
+			}
 		}
 		st[CountName]++
 		b.WriteString(s[last:loc[1]])

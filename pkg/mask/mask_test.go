@@ -566,7 +566,7 @@ func TestTextOtherValuesLinear(t *testing.T) {
 // every unclosed "a": [ scanned to the end of the text).
 func TestTextOtherValuesUnclosedLinear(t *testing.T) {
 	m, _ := New(Config{})
-	for _, unit := range []string{`"a":[`, `"a":{`, `"a":[1,`, `"secret":[`, `"a":[{"secret":[1]},`, `"a":1`, `"secret":x`, `"passwordRequired":tru`} {
+	for _, unit := range []string{`"a":[`, `"a":{`, `"a":[1,`, `"secret":[`, `"a":[{"secret":[1]},`, `"a":1`, `"secret":x`, `"passwordRequired":tru`, `"secret":a"`} {
 		for _, prefix := range []string{"[", "x "} { // the JSON fallback and quoted text
 			assertLinear(t, prefix+unit, 50000/len(unit), func(n int) string { return prefix + strings.Repeat(unit, n) }, func(s string) { m.Text(s) })
 		}
@@ -609,6 +609,21 @@ func TestFlagValuesStrict(t *testing.T) {
 	for _, in := range readable {
 		if got, _ := m.Text(in); got != in {
 			t.Errorf("%s: changed to %q", in, got)
+		}
+	}
+}
+
+// A bare token cut by a quote is masked to the next delimiter (cpicli#80).
+func TestBareTokenAfterQuote(t *testing.T) {
+	m, _ := New(Config{})
+	cases := map[string]string{
+		`{"passwordRequired": ab\"cd, "x":1`: `{"passwordRequired": "` + Dots + `", "x":1`,
+		`{"password": \"hunter2\", "x":1`:    `{"password": "` + Dots + `", "x":1`,
+		`{"secret": a"b"c}x`:                 `{"secret": "` + Dots + `"}x`,
+	}
+	for in, want := range cases {
+		if got, _ := m.Text(in); got != want {
+			t.Errorf("%s: got %q, want %q", in, got, want)
 		}
 	}
 }
