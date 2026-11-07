@@ -8,6 +8,7 @@ All notable changes to cpictl. Coming from FlashPipe? See
 ## 0.38.1
 
 Masking in 0.38.0 masked a few values that are no secrets (#76). Nothing leaked; this makes the output usable again.
+Verified by the cpictl gateway's independent verifier before the tag (three rounds, no leaks, linear time).
 
 - `secretEnv` (the variable a credential's secret comes from) and other metadata of a credential stay readable
   inside credential lists, even when their name holds a sensitive word.
