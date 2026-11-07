@@ -1428,3 +1428,13 @@ func TestGuardSystemQueryOptions(t *testing.T) {
 	assert.NoError(t, g.Before(req("GET", "/api/v1/ServiceEndpoints?$expand=EntryPoints&$top=10", "")))
 	assert.NoError(t, g.Before(req("GET", "/api/v1/IntegrationPackages?$select=Id&$skip=10&$format=json", "")))
 }
+
+// Keys that a tenant could read as a system query option: blanks, an
+// encoded or look-alike dollar (cpicli#77, verifier round 1).
+func TestGuardLookalikeQueryOptions(t *testing.T) {
+	g := testGuard(t, grantsRW)
+	for _, q := range []string{"%20$expand=CustomHeaderProperties", "+$expand=CustomHeaderProperties", "%24expand%20=x",
+		"%EF%BC%84expand=CustomHeaderProperties", "%2524expand=CustomHeaderProperties", "%FE%A9expand=x", "a$b=1"} {
+		refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('G1')?"+q, "")))
+	}
+}

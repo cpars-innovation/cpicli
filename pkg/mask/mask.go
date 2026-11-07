@@ -276,13 +276,13 @@ func (m *Masker) text(s string, stack []string, st Stats) string {
 		if out, ok := m.jsonSeq(s, stack, st); ok {
 			return out
 		}
-		return m.quotedTail(m.inPlace(s, st), st)
+		return m.quotedTail(m.inPlace(m.otherValues(s, st), st), st)
 	}
 	if strings.HasPrefix(t, "<") {
 		s = m.xml(s, st)
 	}
 	if strings.Contains(s, `"`) {
-		s = m.quotedTail(m.quotedPairs(s, st), st)
+		s = m.quotedTail(m.quotedPairs(m.otherValues(s, st), st), st)
 	}
 	return m.plain(s, st)
 }
@@ -293,6 +293,7 @@ func (m *Masker) text(s string, stack []string, st Stats) string {
 func (m *Masker) jsonSeq(s string, stack []string, st Stats) (string, bool) {
 	dec := json.NewDecoder(strings.NewReader(s))
 	var b strings.Builder
+	seq := Stats{} // counted into st only when the whole text is a sequence
 	last := 0
 	for n := 0; ; n++ {
 		var raw json.RawMessage
@@ -314,11 +315,12 @@ func (m *Masker) jsonSeq(s string, stack []string, st Stats) (string, bool) {
 		}
 		b.WriteString(s[last:start])
 		var buf bytes.Buffer
-		m.writeJSON(&buf, v, stack, strings.Contains(doc, "\n"), 0, false, st)
+		m.writeJSON(&buf, v, stack, strings.Contains(doc, "\n"), 0, false, seq)
 		b.WriteString(buf.String())
 		last = end
 	}
 	b.WriteString(s[last:])
+	st.Add(seq)
 	return b.String(), true
 }
 
@@ -327,12 +329,80 @@ func (m *Masker) jsonSeq(s string, stack []string, st Stats) (string, bool) {
 func (m *Masker) quotedPairs(s string, st Stats) string {
 	return reQuotedPair.ReplaceAllStringFunc(s, func(x string) string {
 		p := reQuotedPair.FindStringSubmatch(x)
-		if p[3] == "" || p[3] == Dots || !m.Sensitive(p[2]) {
+		if p[3] == "" || p[3] == Dots || !m.Sensitive(p[2]) || ReferenceKey(p[2]) {
 			return x
 		}
 		st[CountName]++
 		return p[1] + `"` + Dots + `"`
 	})
+}
+
+// a "name": key in JSON-like text
+var reQuotedKey = regexp.MustCompile(`"([^"\\]*)"\s*:\s*`)
+
+// otherValues masks numbers, booleans, lists and objects under sensitive
+// names in JSON-like text that does not parse, as JSON masking hides them
+// whole (HidesWhole): "pin": 1234, "password": ["x"]. A list or object
+// that is not closed is masked to the end of the text.
+func (m *Masker) otherValues(s string, st Stats) string {
+	var b strings.Builder
+	last := 0
+	for _, loc := range reQuotedKey.FindAllStringSubmatchIndex(s, -1) {
+		if loc[0] < last || loc[1] >= len(s) {
+			continue
+		}
+		c := s[loc[1]]
+		if c == '"' || c == 'n' { // strings are masked elsewhere; null holds nothing
+			continue
+		}
+		var v any = ""
+		end := loc[1]
+		switch {
+		case c == '[' || c == '{':
+			v = []any{}
+			end = closing(s, loc[1])
+		case c == '-' || c == 't' || c == 'f' || c >= '0' && c <= '9':
+			for end < len(s) && !strings.ContainsRune(",}] \t\r\n", rune(s[end])) {
+				end++
+			}
+		default:
+			continue
+		}
+		if !m.HidesWhole(s[loc[2]:loc[3]], v) {
+			continue
+		}
+		st[CountName]++
+		b.WriteString(s[last:loc[1]])
+		b.WriteString(`"` + Dots + `"`)
+		last = end
+	}
+	if last == 0 {
+		return s
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// closing returns the end of the list or object starting at i, or the end
+// of s when it is not closed.
+func closing(s string, i int) int {
+	depth, inStr := 0, false
+	for ; i < len(s); i++ {
+		switch c := s[i]; {
+		case inStr && c == '\\':
+			i++
+		case c == '"':
+			inStr = !inStr
+		case inStr:
+		case c == '[' || c == '{':
+			depth++
+		case c == ']' || c == '}':
+			if depth--; depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return len(s)
 }
 
 // a value cut off at the end of truncated JSON: "password": "hunt

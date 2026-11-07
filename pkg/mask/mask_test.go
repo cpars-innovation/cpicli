@@ -531,3 +531,45 @@ func TestTextJSONFallbackLinear(t *testing.T) {
 		t.Errorf("took %v", d)
 	}
 }
+
+// The fallback counts what it masks, once, and masks values that are no
+// strings under sensitive names (cpicli#77, verifier round 1).
+func TestTextJSONFallbackCounts(t *testing.T) {
+	m, _ := New(Config{})
+	cases := map[string]struct {
+		in, want string
+		n        int
+	}{
+		"string":       {`{"password":"hunter2"}x`, `{"password":"` + Dots + `"}x`, 1},
+		"list":         {`{"password":["hunter2"]}x`, `{"password":"` + Dots + `"}x`, 1},
+		"number":       {`{"password":12345}x`, `{"password":"` + Dots + `"}x`, 1},
+		"bool":         {`{"a":1,"apiKey":true} x`, `{"a":1,"apiKey":"` + Dots + `"} x`, 1},
+		"object":       {`{"secret":{"a":"b]}"},"n":1`, `{"secret":"` + Dots + `","n":1`, 1},
+		"open list":    {`{"token":["abc","de`, `{"token":"` + Dots + `"`, 1},
+		"log number":   {`failed: {"secret": 123456}`, `failed: {"secret": "` + Dots + `"}`, 1},
+		"null":         {`{"password":null}x`, `{"password":null}x`, 0},
+		"credentials":  {`{"userCredentials":[{"name":"svc"}]}x`, `{"userCredentials":[{"name":"svc"}]}x`, 0},
+		"reference":    {`{"credentialName":"svc-user"}x`, `{"credentialName":"svc-user"}x`, 0},
+		"ref in text":  {`body={"passwordType":"plain"}`, `body={"passwordType":"plain"}`, 0},
+		"seq then bad": {"{\"password\":\"a1\"}\n{\"password\":\"b2\"}\nx", "{\"password\":\"" + Dots + "\"}\n{\"password\":\"" + Dots + "\"}\nx", 2},
+	}
+	for name, c := range cases {
+		got, st := m.Text(c.in)
+		if got != c.want || st[CountName] != c.n || st.Total() != c.n {
+			t.Errorf("%s: got %q %v, want %q name %d", name, got, st, c.want, c.n)
+		}
+	}
+}
+
+func TestTextOtherValuesLinear(t *testing.T) {
+	m, _ := New(Config{})
+	for _, big := range []string{"[" + strings.Repeat(`{"secret":[`, 100000), "[" + strings.Repeat(`{"x":1,"secret":2},`, 100000)} {
+		start := time.Now()
+		if got, _ := m.Text(big); strings.Contains(got, `"secret":2`) {
+			t.Error("value not masked")
+		}
+		if d := time.Since(start); d > 2*time.Second*raceSlowdown {
+			t.Errorf("took %v", d)
+		}
+	}
+}

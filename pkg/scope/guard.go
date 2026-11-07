@@ -646,9 +646,12 @@ func unsafeQuery(q url.Values, parseErr error) string {
 		seen[lk] = true
 		// system query options only as cpictl writes them: the guard checks
 		// $expand by name, and a tenant that read $EXPAND or an option the
-		// guard does not know would get past that check (cpicli#77)
-		if strings.HasPrefix(k, "$") && !slices.Contains(systemQueryOptions, k) {
-			return "query option " + k + " is not accepted under a scope"
+		// guard does not know would get past that check (cpicli#77); so would
+		// one with blanks around it, a look-alike dollar or an encoded one
+		if strings.ContainsAny(k, "$\uff04\ufe69") || strings.Contains(strings.ToLower(k), "%24") || strings.TrimSpace(k) != k {
+			if !slices.Contains(systemQueryOptions, k) {
+				return "query option " + k + " is not accepted under a scope"
+			}
 		}
 	}
 	return ""

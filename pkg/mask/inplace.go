@@ -84,7 +84,7 @@ func leadingSpace(s string) string { return s[:len(s)-len(strings.TrimLeft(s, " 
 func (m *Masker) line(s string, st Stats) string {
 	s = reQuotedPair.ReplaceAllStringFunc(s, func(x string) string {
 		p := reQuotedPair.FindStringSubmatch(x)
-		if p[3] == "" || p[3] == Dots || !m.Sensitive(p[2]) {
+		if p[3] == "" || p[3] == Dots || !m.Sensitive(p[2]) || ReferenceKey(p[2]) {
 			return x
 		}
 		st[CountName]++
