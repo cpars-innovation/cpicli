@@ -566,7 +566,7 @@ func TestTextOtherValuesLinear(t *testing.T) {
 // every unclosed "a": [ scanned to the end of the text).
 func TestTextOtherValuesUnclosedLinear(t *testing.T) {
 	m, _ := New(Config{})
-	for _, unit := range []string{`"a":[`, `"a":{`, `"a":[1,`, `"secret":[`, `"a":[{"secret":[1]},`} {
+	for _, unit := range []string{`"a":[`, `"a":{`, `"a":[1,`, `"secret":[`, `"a":[{"secret":[1]},`, `"a":1`, `"secret":x`, `"passwordRequired":tru`} {
 		for _, prefix := range []string{"[", "x "} { // the JSON fallback and quoted text
 			assertLinear(t, prefix+unit, 50000/len(unit), func(n int) string { return prefix + strings.Repeat(unit, n) }, func(s string) { m.Text(s) })
 		}
@@ -584,6 +584,31 @@ func TestReferenceKeyFlags(t *testing.T) {
 		in = `{"passwordRequired":"hunter2","tokenExpiresIn":"opaque-token-abcdef"}` + end
 		if got, _ := m.Text(in); got != `{"passwordRequired":"`+Dots+`","tokenExpiresIn":"`+Dots+`"}`+end {
 			t.Errorf("got %q", got)
+		}
+	}
+}
+
+// Flags only as true/false under …Required and as a short whole number
+// under …ExpiresIn; broken text and long numbers are masked (cpicli#79).
+func TestFlagValuesStrict(t *testing.T) {
+	m, _ := New(Config{})
+	masked := []string{
+		`{"passwordRequired": thisIsMySecret}x`, `{"passwordRequired": fHunter2}x`, `{"tokenExpiresIn": 9Xk$secretTok}x`,
+		`{"tokenExpiresIn":4111111111111111}`, `{"tokenExpiresIn":4111111111111111}x`, `{"secretRequired":1234}`,
+		`{"secretRequired":1234}x`, `{"tokenExpiresIn":-5}`, `{"tokenExpiresIn":1.5}x`, `{"password": nHunter2}x`,
+	}
+	for _, in := range masked {
+		if got, _ := m.Text(in); !strings.Contains(got, Dots) {
+			t.Errorf("%s: not masked: %q", in, got)
+		}
+	}
+	readable := []string{
+		`{"passwordRequired":true,"tokenExpiresIn":3600}`, `{"passwordRequired": false, "tokenExpiresIn": 3600}x`,
+		`{"password":null}x`, `{"tokenExpiresIn":0}x`,
+	}
+	for _, in := range readable {
+		if got, _ := m.Text(in); got != in {
+			t.Errorf("%s: changed to %q", in, got)
 		}
 	}
 }

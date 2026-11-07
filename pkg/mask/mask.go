@@ -352,33 +352,29 @@ func (m *Masker) otherValues(s string, st Stats) string {
 			continue
 		}
 		c := s[loc[1]]
-		if c == '"' || c == 'n' { // strings are masked elsewhere; null holds nothing
+		if c == '"' { // strings are masked elsewhere
 			continue
 		}
-		var v any
-		switch {
-		case c == '[' || c == '{':
-			v = []any{}
-		case c == 't' || c == 'f':
-			v = true
-		case c == '-' || c >= '0' && c <= '9':
-			v = json.Number("0")
-		default:
-			continue
+		var v any = []any{}
+		end := loc[1]
+		if c != '[' && c != '{' {
+			// a bare token: true, false, a number or broken text. It ends at
+			// a delimiter or a quote, so no later key lies inside it.
+			for end < len(s) && !strings.ContainsRune(",}] \t\r\n\"", rune(s[end])) {
+				end++
+			}
+			if v = scalar(s[loc[1]:end]); end == loc[1] || v == nil { // null holds nothing
+				continue
+			}
 		}
-		// the name decides before the value is scanned: a value is scanned
-		// only when it is masked, and the next key is looked for after it,
-		// so every byte is scanned at most once
+		// the name decides before a list or object is scanned: it is
+		// scanned only when it is masked, and the next key is looked for
+		// after it, so every byte is scanned at most once
 		if !m.HidesWhole(s[loc[2]:loc[3]], v) {
 			continue
 		}
-		end := loc[1]
 		if c == '[' || c == '{' {
 			end = closing(s, loc[1])
-		} else {
-			for end < len(s) && !strings.ContainsRune(",}] \t\r\n", rune(s[end])) {
-				end++
-			}
 		}
 		st[CountName]++
 		b.WriteString(s[last:loc[1]])
@@ -1375,7 +1371,7 @@ func (m *Masker) Identifier(s string, st Stats) string {
 // under a collection key like userCredentials is walked instead: its own
 // keys decide (credential metadata stays readable, its secrets do not).
 func (m *Masker) HidesWhole(k string, v any) bool {
-	if !m.Sensitive(k) || ReferenceKey(k) || flagKey(k) && isFlag(v) {
+	if !m.Sensitive(k) || ReferenceKey(k) || flagKey(k) && isFlag(k, v) {
 		return false
 	}
 	switch v.(type) {
@@ -1393,12 +1389,46 @@ func flagKey(k string) bool {
 	return strings.HasSuffix(l, "required") || strings.HasSuffix(l, "expiresin")
 }
 
-func isFlag(v any) bool {
-	switch v.(type) {
-	case bool, json.Number, float64, int, int64:
-		return true
+// isFlag: v is what a flagKey k may show (cpicli#79): a boolean under
+// …Required, a whole number of at most ten digits under …ExpiresIn (no card
+// number or PIN).
+func isFlag(k string, v any) bool {
+	if strings.HasSuffix(strings.ToLower(k), "required") {
+		_, ok := v.(bool)
+		return ok
+	}
+	switch n := v.(type) {
+	case json.Number:
+		return reSeconds.MatchString(string(n))
+	case int:
+		return n >= 0 && n < 1e10
+	case int64:
+		return n >= 0 && n < 1e10
+	case float64:
+		return n >= 0 && n < 1e10 && n == float64(int64(n))
 	}
 	return false
+}
+
+var (
+	reSeconds    = regexp.MustCompile(`^\d{1,10}$`)
+	reJSONNumber = regexp.MustCompile(`^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$`)
+)
+
+// scalar reads a bare token of JSON-like text: a boolean, a number, null,
+// or else a string (broken text is no flag).
+func scalar(t string) any {
+	switch {
+	case t == "true":
+		return true
+	case t == "false":
+		return false
+	case t == "null":
+		return nil
+	case reJSONNumber.MatchString(t):
+		return json.Number(t)
+	}
+	return t
 }
 
 // CredentialContainer: a key whose list or object holds credentials
