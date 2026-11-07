@@ -9,7 +9,7 @@ rm -rf licenses/third-party && mkdir -p licenses/third-party
 {
   echo "# Third-party software in cpictl"
   echo
-  echo "The cpictl binary links the following modules. Each module's license text is in [third-party/](third-party/)."
+  echo "The cpictl binary links the following modules. Each module's license text, and its NOTICE file where it has one (Apache-2.0), is in [third-party/](third-party/)."
   echo
   echo "| Module | Version | License |"
   echo "|---|---|---|"
@@ -18,8 +18,13 @@ go list -deps -f '{{if not .Standard}}{{with .Module}}{{.Path}} {{.Version}} {{.
   sort -u | grep -v '^github.com/cpars-innovation/cpicli ' |
   while read -r path ver dir; do
     kind=""
-    for f in $(ls "$dir" | grep -i -E '^(licen[cs]e|copying|unlicense)' || true); do
+    for f in $(ls "$dir" | grep -i -E '^(licen[cs]e|copying|unlicense|notice)' || true); do
       t="$(head -c 3000 "$dir/$f")"
+      case "$f" in [Nn][Oo][Tt][Ii][Cc][Ee]*)
+        # Apache-2.0: a module's NOTICE file is passed on, not a license
+        cp "$dir/$f" "licenses/third-party/$(echo "$path" | tr '/' '_')__$f"
+        continue ;;
+      esac
       case "$t" in
         *"Apache License"*) k=Apache-2.0 ;;
         *"Mozilla Public License"*) k=MPL-2.0 ;;

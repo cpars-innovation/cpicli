@@ -1,6 +1,6 @@
 # Third-party software in cpictl
 
-The cpictl binary links the following modules. Each module's license text is in [third-party/](third-party/).
+The cpictl binary links the following modules. Each module's license text, and its NOTICE file where it has one (Apache-2.0), is in [third-party/](third-party/).
 
 | Module | Version | License |
 |---|---|---|
