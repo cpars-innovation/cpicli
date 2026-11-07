@@ -6,9 +6,9 @@ another's flows, so security fixes follow the process below.
 
 ## Reporting a vulnerability
 
-Report it privately through GitHub: **Security → Report a vulnerability** on this repository. Please don't
-open a public issue. Include a test against the mock tenant (`internal/cpitest`, `cpictl mock-tenant`) where you
-can. Never use a real tenant or real credentials to prove a finding.
+Report it privately to security@cpars.de (DRAFT: confirm the address before merging). Include a test against the
+mock tenant (`internal/cpitest`, `cpictl mock-tenant`) where you can. Never use a real tenant or real credentials
+to prove a finding.
 
 ## Supported versions
 
@@ -29,8 +29,8 @@ Only the latest release gets security fixes. Pin a release; update when an advis
    - credential handling: `internal/cmd/root.go`, `internal/cmd/service_details.go`, `internal/cmd/profile*.go`,
      `pkg/ops/security*.go`, `pkg/ops/keymaterial.go`
    - `pkg/testrun/refpath.go`
-3. **Advisory.** Each fix gets a GitHub Security Advisory with the affected and fixed versions, so consumers
-   (the cpictl gateway, CPI Studio, Dependabot users) are told through GitHub. The CHANGELOG entry says
-   **What to do**.
-4. **Signed release.** Archives and `SHA256SUMS` carry build provenance and a Sigstore signature (README,
-   Install).
+3. **Advisory.** Each fix is announced to customers and internal consumers (the cpictl gateway, CPI Studio)
+   with the affected and fixed versions; the CHANGELOG entry says **What to do**. Versions up to 0.38.1 are
+   public: fixes that affect them are also published as GitHub Security Advisories.
+4. **Signed release.** `SHA256SUMS` is signed with the cpictl release key (cosign); archives carry build
+   provenance where the GitHub plan offers attestations for private repositories (README, Install).

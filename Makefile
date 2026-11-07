@@ -113,7 +113,7 @@ dist: ## Build release archives for all platforms into dist/ (VERSION=v1.2.3)
 		mkdir -p $(RELEASE_DIR)/$$name; \
 		CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch go build -trimpath $(RELEASE_LDFLAGS) \
 			-o $(RELEASE_DIR)/$$name/$(BINARY_NAME)$$ext ./$(CMD_DIR) || exit 1; \
-		cp LICENSE NOTICE README.md CHANGELOG.md $(RELEASE_DIR)/$$name/; \
+		cp LICENSE NOTICE README.md CHANGELOG.md $(RELEASE_DIR)/$$name/ && cp -r licenses $(RELEASE_DIR)/$$name/; \
 		if [ "$$os" = "windows" ]; then \
 			(cd $(RELEASE_DIR) && zip -qr $$name.zip $$name) || exit 1; \
 		else \

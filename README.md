@@ -39,28 +39,28 @@ cpictl status --artifact-ids OrderIntake --output json
 
 ## Install
 
-Download a binary for your platform from the
-[releases](https://github.com/cpars-innovation/cpicli/releases), or install with Go 1.26 or later:
+cpictl is distributed to customers of cpars innovation. With access to the repository, download a release with
+`gh` or install with Go 1.26 or later ([docs/private-distribution.md](docs/private-distribution.md)):
 
 ```bash
-go install github.com/cpars-innovation/cpicli/cmd/cpictl@latest   # or @v0.1.0
+gh release download --repo cpars-innovation/cpicli --pattern 'cpictl_*_linux_amd64.tar.gz' --pattern 'SHA256SUMS*'
+go env -w GOPRIVATE=github.com/cpars-innovation/*
+go install github.com/cpars-innovation/cpicli/cmd/cpictl@latest
 cpictl --version
 cpictl doctor          # after the configuration below: connection, authentication, roles
 ```
 
 The binary lands in `$(go env GOPATH)/bin` (usually `~/go/bin`), which must be on your `PATH`.
 
-Release downloads are signed: each archive and `SHA256SUMS` carries a build provenance attestation, and
-`SHA256SUMS` a keyless Sigstore signature (`SHA256SUMS.sigstore.json`). Check that a download was built by this
-repository's release workflow:
+Release downloads are signed with the cpictl release key (`cosign.pub`):
 
 ```bash
-gh attestation verify cpictl_<version>_linux_amd64.tar.gz --repo cpars-innovation/cpicli
-cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/cpars-innovation/cpicli/.github/workflows/release.yml@' \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com
 sha256sum -c SHA256SUMS --ignore-missing
+cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json --key cosign.pub --insecure-ignore-tlog
 ```
+
+Versions up to and including 0.38.1 are public under the Apache License 2.0, with keyless signatures and build
+provenance (`gh attestation verify … --repo cpars-innovation/cpicli`).
 
 From source:
 
@@ -556,6 +556,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Apache License 2.0, see [LICENSE](LICENSE). cpictl contains code originally developed as
-[FlashPipe](https://github.com/engswee/flashpipe) by Eng Swee Yeoh; see [NOTICE](NOTICE).
-Third-party licenses: [licenses/](licenses).
+Proprietary, see [LICENSE](LICENSE). Versions up to and including 0.38.1 were published under the Apache License
+2.0 and remain available under it. cpictl contains code originally developed as
+[FlashPipe](https://github.com/engswee/flashpipe) by Eng Swee Yeoh under the Apache License 2.0; see
+[NOTICE](NOTICE). Third-party licenses: [licenses/THIRD_PARTY_NOTICES.md](licenses/THIRD_PARTY_NOTICES.md).
