@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.38.6
+
+Verified by the cpictl gateway's independent verifier before the tag.
+
 - Masking: in JSON that does not parse, a bare value under a sensitive name that an escaped quote cuts
   (`"password": ab\"cd`) is masked to the next delimiter, not only up to the quote (#80).
 
