@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -348,10 +347,7 @@ func TestIBANFalsePositives(t *testing.T) {
 
 // A long run of digit groups costs linear time.
 func TestCardRunIsLinear(t *testing.T) {
-	s := strings.Repeat("1 ", 200000)
-	start := time.Now()
-	Default().Text(s)
-	assert.Less(t, time.Since(start), raceSlowdown*2*time.Second)
+	assertLinear(t, "digit groups", 25000, func(n int) string { return strings.Repeat("1 ", n) }, func(s string) { Default().Text(s) })
 }
 
 // Escapes in connection-string values (cpicli#75, round 3).
@@ -472,10 +468,8 @@ func TestOverMaskingFixesKeepMasking(t *testing.T) {
 // is masked; secretEnv only in cpictl's format.
 func TestHexIDLinearAndStrict(t *testing.T) {
 	m := Default()
-	for _, s := range []string{strings.Repeat("4111111111111111-a-", 20000), strings.Repeat("x-0049151234567-", 25000)} {
-		start := time.Now()
-		m.Text(s)
-		assert.Less(t, time.Since(start), raceSlowdown*2*time.Second)
+	for _, unit := range []string{"4111111111111111-a-", "x-0049151234567-"} {
+		assertLinear(t, unit, 3000, func(n int) string { return strings.Repeat(unit, n) }, func(s string) { m.Text(s) })
 	}
 	out, _ := m.Text("pan 4111111111111111" + strings.Repeat("ab", 16))
 	assert.NotContains(t, out, "4111111111111111")
@@ -522,14 +516,11 @@ func TestTextJSONFallback(t *testing.T) {
 
 func TestTextJSONFallbackLinear(t *testing.T) {
 	m, _ := New(Config{})
-	big := `{"password":"` + strings.Repeat(`a\"b `, 200000)
-	start := time.Now()
-	if got, _ := m.Text(big); strings.Contains(got, "a\\\"b") {
+	build := func(n int) string { return `{"password":"` + strings.Repeat(`a\"b `, n) }
+	if got, _ := m.Text(build(1000)); strings.Contains(got, "a\\\"b") {
 		t.Error("cut-off value not masked")
 	}
-	if d := time.Since(start); d > 2*time.Second*raceSlowdown {
-		t.Errorf("took %v", d)
-	}
+	assertLinear(t, "cut-off value", 25000, build, func(s string) { m.Text(s) })
 }
 
 // The fallback counts what it masks, once, and masks values that are no
@@ -563,14 +554,11 @@ func TestTextJSONFallbackCounts(t *testing.T) {
 
 func TestTextOtherValuesLinear(t *testing.T) {
 	m, _ := New(Config{})
-	for _, big := range []string{"[" + strings.Repeat(`{"secret":[`, 100000), "[" + strings.Repeat(`{"x":1,"secret":2},`, 100000)} {
-		start := time.Now()
-		if got, _ := m.Text(big); strings.Contains(got, `"secret":2`) {
-			t.Error("value not masked")
-		}
-		if d := time.Since(start); d > 2*time.Second*raceSlowdown {
-			t.Errorf("took %v", d)
-		}
+	if got, _ := m.Text("[" + strings.Repeat(`{"x":1,"secret":2},`, 100)); strings.Contains(got, `"secret":2`) {
+		t.Error("value not masked")
+	}
+	for _, unit := range []string{`{"secret":[`, `{"x":1,"secret":2},`} {
+		assertLinear(t, unit, 12500, func(n int) string { return "[" + strings.Repeat(unit, n) }, func(s string) { m.Text(s) })
 	}
 }
 
@@ -580,12 +568,7 @@ func TestTextOtherValuesUnclosedLinear(t *testing.T) {
 	m, _ := New(Config{})
 	for _, unit := range []string{`"a":[`, `"a":{`, `"a":[1,`, `"secret":[`, `"a":[{"secret":[1]},`} {
 		for _, prefix := range []string{"[", "x "} { // the JSON fallback and quoted text
-			big := prefix + strings.Repeat(unit, 400000/len(unit))
-			start := time.Now()
-			m.Text(big)
-			if d := time.Since(start); d > time.Second*raceSlowdown {
-				t.Errorf("%q x %d: took %v", unit, 400000/len(unit), d)
-			}
+			assertLinear(t, prefix+unit, 50000/len(unit), func(n int) string { return prefix + strings.Repeat(unit, n) }, func(s string) { m.Text(s) })
 		}
 	}
 }
