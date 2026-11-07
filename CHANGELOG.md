@@ -5,7 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
-Two gaps the cpictl gateway found while reviewing its server-side masking (#77).
+## 0.38.3
+
+Two gaps the cpictl gateway found while reviewing its server-side masking (#77). Verified by the gateway's
+independent verifier before the tag (three rounds; no masking lost, linear time).
 
 - **Scope guard:** system query options are accepted only in the spelling cpictl writes them (`$filter`, `$expand`,
   …). An option in another case (`$EXPAND`), with blanks around it, or with an encoded or look-alike dollar is
