@@ -13,9 +13,9 @@ Two gaps the cpictl gateway found while reviewing its server-side masking (#77).
 - **Masking:** JSON that does not parse as one document kept its `"password": "…"` values readable. A leading byte
   order mark, NDJSON (one document per line), trailing data after a document and truncated JSON are now masked by
   key: each document of a sequence as JSON, anything else line by line, including a value cut off at the end.
-  Numbers, lists and objects under sensitive names are masked whole, as in JSON; reference names (`credentialName`)
-  stay readable. `"name": "value"` pairs under sensitive names inside other text (a log line with a body) are
-  masked too. Masking counts report only what was masked.
+  Numbers, lists and objects under sensitive names are masked whole, as in JSON; reference names (`credentialName`,
+  `tokenExpiresIn`, `passwordRequired`) stay readable. `"name": "value"` pairs under sensitive names inside other
+  text (a log line with a body) are masked too. Masking counts report only what was masked.
 
 **What to do:** nothing.
 

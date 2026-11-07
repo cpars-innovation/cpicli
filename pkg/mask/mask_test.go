@@ -573,3 +573,27 @@ func TestTextOtherValuesLinear(t *testing.T) {
 		}
 	}
 }
+
+// Values under names that are not masked are not scanned (verifier round 2:
+// every unclosed "a": [ scanned to the end of the text).
+func TestTextOtherValuesUnclosedLinear(t *testing.T) {
+	m, _ := New(Config{})
+	for _, unit := range []string{`"a":[`, `"a":{`, `"a":[1,`, `"secret":[`, `"a":[{"secret":[1]},`} {
+		for _, prefix := range []string{"[", "x "} { // the JSON fallback and quoted text
+			big := prefix + strings.Repeat(unit, 400000/len(unit))
+			start := time.Now()
+			m.Text(big)
+			if d := time.Since(start); d > time.Second*raceSlowdown {
+				t.Errorf("%q x %d: took %v", unit, 400000/len(unit), d)
+			}
+		}
+	}
+}
+
+func TestReferenceKeyFlags(t *testing.T) {
+	m, _ := New(Config{})
+	in := `{"tokenExpiresIn":3600,"passwordRequired":true,"password":"x1"}x`
+	if got, _ := m.Text(in); got != `{"tokenExpiresIn":3600,"passwordRequired":true,"password":"`+Dots+`"}x` {
+		t.Errorf("got %q", got)
+	}
+}

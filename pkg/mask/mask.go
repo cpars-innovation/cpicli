@@ -356,20 +356,26 @@ func (m *Masker) otherValues(s string, st Stats) string {
 			continue
 		}
 		var v any = ""
-		end := loc[1]
 		switch {
 		case c == '[' || c == '{':
 			v = []any{}
-			end = closing(s, loc[1])
 		case c == '-' || c == 't' || c == 'f' || c >= '0' && c <= '9':
-			for end < len(s) && !strings.ContainsRune(",}] \t\r\n", rune(s[end])) {
-				end++
-			}
 		default:
 			continue
 		}
+		// the name decides before the value is scanned: a value is scanned
+		// only when it is masked, and the next key is looked for after it,
+		// so every byte is scanned at most once
 		if !m.HidesWhole(s[loc[2]:loc[3]], v) {
 			continue
+		}
+		end := loc[1]
+		if c == '[' || c == '{' {
+			end = closing(s, loc[1])
+		} else {
+			for end < len(s) && !strings.ContainsRune(",}] \t\r\n", rune(s[end])) {
+				end++
+			}
 		}
 		st[CountName]++
 		b.WriteString(s[last:loc[1]])
@@ -1271,11 +1277,12 @@ func IdentifierKey(k string) bool {
 }
 
 // ReferenceKey: a field that names security material instead of holding it
-// (credentialName, keyAlias, tokenServiceUrl, passwordType): a sensitive
-// name does not mask it whole; the detectors still run.
+// (credentialName, keyAlias, tokenServiceUrl, passwordType, tokenExpiresIn,
+// passwordRequired): a sensitive name does not mask it whole; the detectors
+// still run.
 func ReferenceKey(k string) bool {
 	l := strings.ToLower(k)
-	for _, suffix := range []string{"name", "alias", "url", "uri", "type", "kind", "count", "expiry", "expires", "length"} {
+	for _, suffix := range []string{"name", "alias", "url", "uri", "type", "kind", "count", "expiry", "expires", "expiresin", "length", "required"} {
 		if strings.HasSuffix(l, suffix) {
 			return true
 		}
