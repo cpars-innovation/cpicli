@@ -355,11 +355,14 @@ func (m *Masker) otherValues(s string, st Stats) string {
 		if c == '"' || c == 'n' { // strings are masked elsewhere; null holds nothing
 			continue
 		}
-		var v any = ""
+		var v any
 		switch {
 		case c == '[' || c == '{':
 			v = []any{}
-		case c == '-' || c == 't' || c == 'f' || c >= '0' && c <= '9':
+		case c == 't' || c == 'f':
+			v = true
+		case c == '-' || c >= '0' && c <= '9':
+			v = json.Number("0")
 		default:
 			continue
 		}
@@ -1277,12 +1280,11 @@ func IdentifierKey(k string) bool {
 }
 
 // ReferenceKey: a field that names security material instead of holding it
-// (credentialName, keyAlias, tokenServiceUrl, passwordType, tokenExpiresIn,
-// passwordRequired): a sensitive name does not mask it whole; the detectors
-// still run.
+// (credentialName, keyAlias, tokenServiceUrl, passwordType): a sensitive
+// name does not mask it whole; the detectors still run.
 func ReferenceKey(k string) bool {
 	l := strings.ToLower(k)
-	for _, suffix := range []string{"name", "alias", "url", "uri", "type", "kind", "count", "expiry", "expires", "expiresin", "length", "required"} {
+	for _, suffix := range []string{"name", "alias", "url", "uri", "type", "kind", "count", "expiry", "expires", "length"} {
 		if strings.HasSuffix(l, suffix) {
 			return true
 		}
@@ -1373,7 +1375,7 @@ func (m *Masker) Identifier(s string, st Stats) string {
 // under a collection key like userCredentials is walked instead: its own
 // keys decide (credential metadata stays readable, its secrets do not).
 func (m *Masker) HidesWhole(k string, v any) bool {
-	if !m.Sensitive(k) || ReferenceKey(k) {
+	if !m.Sensitive(k) || ReferenceKey(k) || flagKey(k) && isFlag(v) {
 		return false
 	}
 	switch v.(type) {
@@ -1381,6 +1383,22 @@ func (m *Masker) HidesWhole(k string, v any) bool {
 		return !strings.Contains(strings.ToLower(k), "credential")
 	}
 	return true
+}
+
+// flagKey: a field that says something about security material with a
+// number or a boolean (tokenExpiresIn: 3600, passwordRequired: true). Only
+// such values stay readable; a string under it is masked (cpicli#78).
+func flagKey(k string) bool {
+	l := strings.ToLower(k)
+	return strings.HasSuffix(l, "required") || strings.HasSuffix(l, "expiresin")
+}
+
+func isFlag(v any) bool {
+	switch v.(type) {
+	case bool, json.Number, float64, int, int64:
+		return true
+	}
+	return false
 }
 
 // CredentialContainer: a key whose list or object holds credentials

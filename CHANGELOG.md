@@ -5,6 +5,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Masking: `…Required` and `…ExpiresIn` fields stay readable only with a number or a boolean
+  (`passwordRequired: true`, `tokenExpiresIn: 3600`); a string under them is masked again, as up to 0.38.2 (#78).
+
 ## 0.38.3
 
 Two gaps the cpictl gateway found while reviewing its server-side masking (#77). Verified by the gateway's

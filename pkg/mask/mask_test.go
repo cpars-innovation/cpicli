@@ -575,8 +575,15 @@ func TestTextOtherValuesUnclosedLinear(t *testing.T) {
 
 func TestReferenceKeyFlags(t *testing.T) {
 	m, _ := New(Config{})
-	in := `{"tokenExpiresIn":3600,"passwordRequired":true,"password":"x1"}x`
-	if got, _ := m.Text(in); got != `{"tokenExpiresIn":3600,"passwordRequired":true,"password":"`+Dots+`"}x` {
-		t.Errorf("got %q", got)
+	for _, end := range []string{"", "x"} { // JSON and the fallback
+		in := `{"tokenExpiresIn":3600,"passwordRequired":true,"password":"x1"}` + end
+		if got, _ := m.Text(in); got != `{"tokenExpiresIn":3600,"passwordRequired":true,"password":"`+Dots+`"}`+end {
+			t.Errorf("got %q", got)
+		}
+		// a string under them is no flag (cpicli#78)
+		in = `{"passwordRequired":"hunter2","tokenExpiresIn":"opaque-token-abcdef"}` + end
+		if got, _ := m.Text(in); got != `{"passwordRequired":"`+Dots+`","tokenExpiresIn":"`+Dots+`"}`+end {
+			t.Errorf("got %q", got)
+		}
 	}
 }
