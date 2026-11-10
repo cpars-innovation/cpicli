@@ -114,6 +114,12 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "partners": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "type": "object"
@@ -151,6 +157,12 @@
               "type": "null"
             }
           ]
+        },
+        "partners": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "required": [

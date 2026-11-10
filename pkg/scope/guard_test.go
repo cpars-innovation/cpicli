@@ -1438,3 +1438,72 @@ func TestGuardLookalikeQueryOptions(t *testing.T) {
 		refused(t, g.Before(req("GET", "/api/v1/MessageProcessingLogs('G1')?"+q, "")))
 	}
 }
+
+// Partner grants with their own actions and partner denies, as the cpictl
+// gateway builds them from a policy rule's partners (pd deploy, snapshot).
+func TestGuardPartnerGrants(t *testing.T) {
+	g := testGuard(t, `{"version":1,"grants":[
+		{"packages":["UtilitiesBase*"],"actions":["read","download","upload","deploy","configure"]},
+		{"partners":["ONE_*"],"actions":["read","pd-write"]},
+		{"partners":["SAP_*"],"actions":["read"]}],
+		"deny":[{"partners":["ONE_SECRET*"]},{"partners":["SAP_TPM*"],"actions":["read"]},{"packages":["ONE_*"]}]}`)
+	allowed := []*httpclnt.GuardRequest{
+		req("GET", "/api/v1/Partners('ONE_ROUTING')", ""),
+		req("GET", "/api/v1/Partners('ONE_ROUTING')/StringParameters", ""),
+		req("GET", "/api/v1/StringParameters(Pid='ONE_ROUTING',Id='x')/$value", ""),
+		req("POST", "/api/v1/StringParameters", `{"Pid":"ONE_ROUTING","Id":"x","Value":"v"}`),
+		req("PUT", "/api/v1/StringParameters(Pid='ONE_ROUTING',Id='x')", `{"Value":"v"}`),
+		req("DELETE", "/api/v1/StringParameters(Pid='ONE_ROUTING',Id='x')", ""),
+		req("DELETE", "/api/v1/BinaryParameters(Pid='ONE_EDM',Id='y')", ""),
+		req("GET", "/api/v1/StringParameters(Pid='SAP_X',Id='x')", ""),
+		req("GET", "/api/v1/IntegrationPackages('UtilitiesBase_A')", ""), // a deny of packages ONE_* does not hit partners, nor this
+	}
+	for _, r := range allowed {
+		assert.NoError(t, g.Before(r), "%s %s", r.Method, r.Path)
+	}
+	for _, r := range []*httpclnt.GuardRequest{
+		req("DELETE", "/api/v1/StringParameters(Pid='SAP_X',Id='x')", ""), // read only
+		req("POST", "/api/v1/StringParameters", `{"Pid":"SAP_X","Id":"x"}`),
+		req("GET", "/api/v1/Partners('SAP_TPM_X')", ""),                         // denied read
+		req("DELETE", "/api/v1/StringParameters(Pid='ONE_SECRETS',Id='x')", ""), // denied every action
+		req("GET", "/api/v1/StringParameters(Pid='ONE_SECRETS',Id='x')/$value", ""),
+		req("DELETE", "/api/v1/StringParameters(Pid='HR_X',Id='x')", ""), // not granted
+		req("DELETE", "/api/v1/StringParameters", ""),                    // no PID: no delete across partners
+		req("DELETE", "/api/v1/Partners('ONE_ROUTING')/StringParameters", ""),
+		req("GET", "/api/v1/IntegrationPackages('ONE_Pkg')", ""),                                   // partners grant no packages
+		req("POST", "/api/v1/Partners('ONE_ROUTING')/StringParameters", `{"Pid":"HR_X","Id":"x"}`), // the body names another partner
+	} {
+		refused(t, g.Before(r))
+	}
+	pd := `{"d":{"results":[{"Pid":"ONE_ROUTING","Id":"x"},{"Pid":"ONE_SECRETS","Id":"s"},{"Pid":"SAP_TPM_X","Id":"y"},{"Pid":"SAP_X","Id":"z"},{"Pid":"HR_X","Id":"h"}]}}`
+	for _, path := range []string{"/api/v1/StringParameters", "/api/v1/Partners", "/api/v1/BinaryParameters?$filter=Pid%20eq%20'HR_X'"} {
+		out, err := g.After(req("GET", path, ""), 200, nil, []byte(pd))
+		require.NoError(t, err)
+		assert.Contains(t, string(out), "ONE_ROUTING", path)
+		assert.Contains(t, string(out), "SAP_X", path)
+		for _, hidden := range []string{"ONE_SECRETS", "SAP_TPM_X", "HR_X"} {
+			assert.NotContains(t, string(out), hidden, path)
+		}
+	}
+	// an old scope without partners: every partner refused, lists empty
+	old := testGuard(t, `{"version":1,"grants":[{"packages":["UtilitiesBase*"],"actions":["read","pd-write"]}]}`)
+	refused(t, old.Before(req("GET", "/api/v1/Partners('ONE_ROUTING')", "")))
+	refused(t, old.Before(req("DELETE", "/api/v1/StringParameters(Pid='ONE_ROUTING',Id='x')", "")))
+	out, err := old.After(req("GET", "/api/v1/StringParameters", ""), 200, nil, []byte(pd))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "ONE_ROUTING")
+}
+
+func TestParsePartnerGrants(t *testing.T) {
+	_, err := Parse([]byte(`{"version":1,"grants":[{"partners":["ONE_*"],"actions":["read","pd-write"]}],"deny":[{"partners":["!ONE_*"]}]}`))
+	require.NoError(t, err)
+	for _, bad := range []string{
+		`{"version":1,"grants":[{"partners":["ONE_*"]}]}`,
+		`{"version":1,"grants":[{"partners":["ONE_*"],"artifacts":["x"],"actions":["read"]}]}`,
+		`{"version":1,"grants":[{"partners":["ONE'*"],"actions":["read"]}]}`,
+		`{"version":1,"deny":[{"actions":["read"]}]}`,
+	} {
+		_, err := Parse([]byte(bad))
+		assert.Error(t, err, bad)
+	}
+}

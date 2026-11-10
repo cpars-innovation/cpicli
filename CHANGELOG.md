@@ -5,6 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Scope: partner grants with their own actions.** A scope grant can name Partner Directory partners
+  (`grants: [{partners: ["ONE_*"], actions: [read, pd-write]}]`) besides or instead of packages, and `deny` can
+  name partners (`deny: [{partners: ["SAP_*"]}]`). Until now partners took the top-level actions only, so a scope
+  with packages and partners could not give them different actions. This is the form the cpictl gateway needs to
+  grant Partner Directory access per policy rule. Scopes without partner grants behave as before.
+- **Scope: no writes below a partner.** `POST`, `PUT` and `DELETE` below `Partners('X')/…` are refused under a
+  scope: they were decided by the partner in the URL, while a create there could name another partner in its body.
+  cpictl writes parameters by their own URLs, so no command is affected.
+
 ## 0.38.6
 
 Verified by the cpictl gateway's independent verifier before the tag.

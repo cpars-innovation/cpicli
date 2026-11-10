@@ -55,18 +55,30 @@ grants:
     actions: [read, download, upload, deploy, test]
   - packages: ["FI_Shared"]
     actions: [read]
+  - partners: ["ONE_*"]               # Partner Directory partners (PIDs), with their own actions
+    actions: [read, pd-write]
 deny:
   - packages: ["HR_*"]                # every action; also hides the packages
   - packages: ["SD_*"]
     artifacts: ["*_Keys"]
     actions: [download]
+  - partners: ["ONE_SECRET*"]         # every action on these partners; also hides them in lists
 ```
 
-- Each grant needs `packages` and `actions`. The top level counts as one more grant; grants add up.
-- A `deny` entry names `packages`, `artifacts` or both, and optionally `actions` (none: every action). It is applied
-  after all grants and cannot be overridden. An entry that names artifacts applies to those artifacts only, not to
-  the package that holds them.
-- Partners and tenant areas take the top-level `actions` only.
+- Each grant needs `packages` or `partners` (or both), and `actions`. `artifacts` narrows `packages` and needs them.
+  The top level counts as one more grant; grants add up.
+- A `deny` entry names `packages`, `artifacts`, `partners` or several, and optionally `actions` (none: every
+  action). It is applied after all grants and cannot be overridden. An entry that names artifacts applies to those
+  artifacts only, not to the package that holds them. Partners are denied only by `partners` patterns: a package
+  deny never hides a partner of the same name, and a partner deny never hides a package.
+- For partners, `read` covers the partner lists, the partner, its string and binary parameters (also their
+  `$value`), alternative partners and authorized users; `pd-write` covers creating, changing and deleting them.
+  Lists are filtered to the partners the scope may read. Every write and delete names its partner (the body's `Pid`
+  for a create, the URL key otherwise, an alternative partner's or authorized user's `Pid` read from the tenant),
+  so there is no write across partners: a write to a list URL or below a partner (`Partners('X')/StringParameters`)
+  is refused. `pd deploy --full-sync` lists the remote parameters (filtered) and deletes them one at a time, each
+  needing `pd-write` on its partner.
+- Tenant areas have their own `:read` and `:write` modes.
 - Message contents (attachments, payloads, traces) and test messages are decided per flow: reading `FI_Shared`'s
   message logs does not allow downloading their payloads, and seeing its entry points does not allow sending to them.
 

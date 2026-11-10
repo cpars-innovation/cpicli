@@ -181,12 +181,12 @@ func TestGrantsAndDeny(t *testing.T) {
 
 func TestParseGrants(t *testing.T) {
 	for in, msg := range map[string]string{
-		`{"version":1,"grants":[{"actions":["read"]}]}`:                         "grants[0]: packages and actions are required",
-		`{"version":1,"grants":[{"packages":["A"]}]}`:                           "grants[0]: packages and actions are required",
+		`{"version":1,"grants":[{"actions":["read"]}]}`:                         "grants[0]: packages or partners, and actions are required",
+		`{"version":1,"grants":[{"packages":["A"]}]}`:                           "grants[0]: packages or partners, and actions are required",
 		`{"version":1,"grants":[{"packages":["A/B"],"actions":["read"]}]}`:      "only letters",
 		`{"version":1,"grants":[{"packages":["A"],"actions":["publish"]}]}`:     `unknown action "publish"`,
 		`{"version":1,"grants":[{"packages":["A"],"actions":["read"],"x":1}]}`:  "field x not found",
-		`{"version":1,"deny":[{"actions":["read"]}]}`:                           "deny[0]: packages or artifacts are required",
+		`{"version":1,"deny":[{"actions":["read"]}]}`:                           "deny[0]: packages, artifacts or partners are required",
 		`{"version":1,"deny":[{"packages":["HR_*"],"artifacts":["Ä"]}]}`:        "only letters",
 		`{"version":1,"deny":[{"packages":["HR_*"],"except":{"roles":["x"]}}]}`: "field except not found",
 	} {

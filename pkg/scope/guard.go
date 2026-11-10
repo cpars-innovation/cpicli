@@ -905,6 +905,13 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 		mm := rePartner.FindStringSubmatch(p)
 		action := ActionRead
 		if write(m) {
+			if mm[2] != "" {
+				// below a partner only reads: a write there (POST of a parameter
+				// whose body names another partner, a delete of the whole list)
+				// is not decided by the partner in the URL; cpictl writes
+				// parameters by their own URLs
+				return decision{}, g.refuse(&Refusal{Reason: "a write below a partner (" + p + ") is not accepted under a scope"})
+			}
 			action = ActionPDWrite
 		}
 		// the partner itself; below it (its parameters) only for partners

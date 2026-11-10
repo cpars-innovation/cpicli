@@ -49,9 +49,10 @@ var TenantAreas = []string{"keystore", "credentials", "jms", "variables", "numbe
 // The top-level packages, artifacts and actions are one grant. Grants add
 // more, each with its own actions, so different packages can carry
 // different actions (deploy on SD_*, only read on FI_Shared): a gateway
-// builds one grant per matching policy rule. Deny is applied after all of
-// them and cannot be overridden. Partners and tenant areas use the
-// top-level actions only.
+// builds one grant per matching policy rule. A grant may name Partner
+// Directory partners instead of or besides packages, with its own actions.
+// Deny is applied after all of them and cannot be overridden. Tenant areas
+// have their own read/write modes.
 type Scope struct {
 	Version       int      `json:"version" yaml:"version"`
 	Packages      []string `json:"packages,omitempty" yaml:"packages,omitempty"`
@@ -64,20 +65,24 @@ type Scope struct {
 }
 
 // Grant allows its actions on the packages it names and their artifacts
-// (all of them, or those the artifact patterns match).
+// (all of them, or those the artifact patterns match), and on the Partner
+// Directory partners it names (by PID).
 type Grant struct {
 	Packages  []string `json:"packages" yaml:"packages"`
 	Artifacts []string `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Partners  []string `json:"partners,omitempty" yaml:"partners,omitempty"`
 	Actions   []string `json:"actions" yaml:"actions"`
 }
 
-// Deny refuses actions (empty: every action) on the packages and artifacts
-// it names, whatever the scope grants. With both packages and artifacts, an
-// artifact is denied only when both match; a deny that names artifacts
-// does not apply to packages themselves.
+// Deny refuses actions (empty: every action) on the packages, artifacts
+// and partners it names, whatever the scope grants. With both packages and
+// artifacts, an artifact is denied only when both match; a deny that names
+// artifacts does not apply to packages themselves. Partners are denied by
+// the partner patterns only; packages and artifacts never deny a partner.
 type Deny struct {
 	Packages  []string `json:"packages,omitempty" yaml:"packages,omitempty"`
 	Artifacts []string `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Partners  []string `json:"partners,omitempty" yaml:"partners,omitempty"`
 	Actions   []string `json:"actions,omitempty" yaml:"actions,omitempty"`
 }
 
@@ -131,18 +136,21 @@ func Parse(data []byte) (*Scope, error) {
 		return nil, fmt.Errorf("scope: %w", err)
 	}
 	for i, g := range s.PackageGrants {
-		if len(g.Packages) == 0 || len(g.Actions) == 0 {
-			return nil, fmt.Errorf("scope: grants[%d]: packages and actions are required", i)
+		if len(g.Packages) == 0 && len(g.Partners) == 0 || len(g.Actions) == 0 {
+			return nil, fmt.Errorf("scope: grants[%d]: packages or partners, and actions are required", i)
 		}
-		if err := checkGrant(g.Packages, g.Artifacts, g.Actions); err != nil {
+		if len(g.Artifacts) > 0 && len(g.Packages) == 0 {
+			return nil, fmt.Errorf("scope: grants[%d]: artifacts need packages", i)
+		}
+		if err := checkGrant(slices.Concat(g.Packages, g.Partners), g.Artifacts, g.Actions); err != nil {
 			return nil, fmt.Errorf("scope: grants[%d]: %w", i, err)
 		}
 	}
 	for i, d := range s.Deny {
-		if len(d.Packages) == 0 && len(d.Artifacts) == 0 {
-			return nil, fmt.Errorf("scope: deny[%d]: packages or artifacts are required", i)
+		if len(d.Packages) == 0 && len(d.Artifacts) == 0 && len(d.Partners) == 0 {
+			return nil, fmt.Errorf("scope: deny[%d]: packages, artifacts or partners are required", i)
 		}
-		if err := checkGrant(d.Packages, d.Artifacts, d.Actions); err != nil {
+		if err := checkGrant(slices.Concat(d.Packages, d.Partners), d.Artifacts, d.Actions); err != nil {
 			return nil, fmt.Errorf("scope: deny[%d]: %w", i, err)
 		}
 	}
@@ -253,7 +261,9 @@ func (s *Scope) Allows(r Resource, action string) bool {
 		}
 		return slices.Contains(s.Tenant, r.ID+":"+mode) || (mode == "read" && slices.Contains(s.Tenant, r.ID+":write"))
 	case KindPartner:
-		return slices.Contains(s.Actions, action) && matches(s.Partners, r.ID)
+		granted := slices.Contains(s.Actions, action) && matches(s.Partners, r.ID) ||
+			slices.ContainsFunc(s.PackageGrants, func(g Grant) bool { return slices.Contains(g.Actions, action) && matches(g.Partners, r.ID) })
+		return granted && !slices.ContainsFunc(s.Deny, func(d Deny) bool { return d.deniesPartner(r.ID, action) })
 	case KindPackage, KindArtifact:
 		if r.Kind == KindArtifact && r.Package == "" {
 			return false // package unknown: refuse
@@ -281,9 +291,16 @@ func (g Grant) allows(r Resource, action string) bool {
 	return matches(g.Packages, r.Package)
 }
 
+func (d Deny) deniesPartner(pid, action string) bool {
+	return (len(d.Actions) == 0 || slices.Contains(d.Actions, action)) && matches(d.Partners, pid)
+}
+
 func (d Deny) denies(r Resource, action string) bool {
 	if len(d.Actions) > 0 && !slices.Contains(d.Actions, action) {
 		return false
+	}
+	if len(d.Packages) == 0 && len(d.Artifacts) == 0 {
+		return false // a partner deny
 	}
 	pkg := r.ID
 	if r.Kind == KindArtifact {
