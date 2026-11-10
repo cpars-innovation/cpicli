@@ -77,8 +77,11 @@ deny:
   for a create, the URL key otherwise, an alternative partner's or authorized user's `Pid` read from the tenant),
   so there is no write across partners: a write to a list URL is refused, and so is every request below a partner
   (`Partners('X')/StringParameters…`): a key there could name another partner, and its answers are not filtered.
-  Parameters are read and written by their own URLs. `pd deploy --full-sync` lists the remote parameters (filtered) and deletes them one at a time, each
-  needing `pd-write` on its partner.
+  Parameters are read and written by their own URLs. `pd deploy --full-sync` lists the remote parameters of each
+  partner it deploys and deletes them one at a time, each needing `pd-write` on its partner.
+- `pd deploy` itself stays inside the grant: under a scope, or in gateway mode with the scope the gateway's
+  `/whoami` reports for the SAP tenant, it deploys only the local partners the scope grants `pd-write` (a dry run:
+  `read`) and lists the others as skipped. A `--pids` entry outside it is refused (exit 9) before any request.
 - Tenant areas have their own `:read` and `:write` modes.
 - Message contents (attachments, payloads, traces) and test messages are decided per flow: reading `FI_Shared`'s
   message logs does not allow downloading their payloads, and seeing its entry points does not allow sending to them.

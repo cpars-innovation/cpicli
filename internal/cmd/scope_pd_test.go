@@ -69,20 +69,37 @@ func TestScopePartnerGrantsSnapshotAndFullSync(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(pd, "SAP_TPM_X", "String.properties"), []byte("key=t\n"), 0o600))
 	before := mock.Count("DELETE /api/v1/StringParameters") + mock.Count("PUT /api/v1/StringParameters") + mock.Count("POST /api/v1/StringParameters")
 	doc, code = runScoped(t, mock, "pd", "deploy", "--pids", "SAP_TPM_X", "--full-sync", "--resources-path", pd, "--scope-file", scope)
-	assert.Equal(t, exitcode.Partial, code, doc)
-	assert.Contains(t, fmt.Sprint(doc["error"]), "scope: ")
-	assert.Contains(t, fmt.Sprint(doc), "SAP_TPM_X")
+	assert.Equal(t, exitcode.Scope, code, doc)
+	assert.Equal(t, "scope", doc["errorCategory"])
+	assert.Contains(t, fmt.Sprint(doc["error"]), "pd-write of partner(s) SAP_TPM_X is not granted")
 	assert.Equal(t, before, mock.Count("DELETE /api/v1/StringParameters")+mock.Count("PUT /api/v1/StringParameters")+mock.Count("POST /api/v1/StringParameters"))
 	assert.Equal(t, "s", mock.PDStrings["SAP_TPM_X/key"])
+
+	// without --pids, a full sync of the whole local tree syncs the granted
+	// partners and skips the others, without a request for them
+	mock.PDStrings["ONE_ROUTING/stale"] = "x"
+	before = mock.Count("DELETE /api/v1/StringParameters") + mock.Count("PUT /api/v1/StringParameters") + mock.Count("POST /api/v1/StringParameters")
+	doc, code = runScoped(t, mock, "pd", "deploy", "--full-sync", "--resources-path", pd, "--scope-file", scope)
+	require.Equal(t, exitcode.OK, code, doc)
+	assert.NotContains(t, mock.PDStrings, "ONE_ROUTING/stale", "the granted partner is synced")
+	assert.Equal(t, "s", mock.PDStrings["SAP_TPM_X/key"], "the skipped partner is untouched")
+	assert.Equal(t, before+1, mock.Count("DELETE /api/v1/StringParameters")+mock.Count("PUT /api/v1/StringParameters")+mock.Count("POST /api/v1/StringParameters"), "one delete, nothing for SAP_TPM_X")
+	assert.NotContains(t, fmt.Sprint(doc["result"]), "SAP_TPM_X")
 
 	// read only: pd-write refused
 	ro := filepath.Join(dir, "ro.json")
 	require.NoError(t, os.WriteFile(ro, []byte(`{"version":1,"grants":[{"partners":["ONE_*"],"actions":["read"]}]}`), 0o600))
 	mock.PDStrings["ONE_ROUTING/new"] = "remote only"
 	doc, code = runScoped(t, mock, "pd", "deploy", "--pids", "ONE_ROUTING", "--full-sync", "--resources-path", pd, "--scope-file", ro)
-	assert.Equal(t, exitcode.Partial, code, doc)
-	assert.Contains(t, fmt.Sprint(doc["error"]), "scope: ")
+	assert.Equal(t, exitcode.Scope, code, doc)
 	assert.Contains(t, mock.PDStrings, "ONE_ROUTING/new", "no delete without pd-write")
+	doc, code = runScoped(t, mock, "pd", "deploy", "--full-sync", "--resources-path", pd, "--scope-file", ro)
+	assert.Equal(t, exitcode.Scope, code, doc)
+	assert.Contains(t, fmt.Sprint(doc["error"]), "none of the local partners is granted pd-write")
+	// a dry run needs read only
+	doc, code = runScoped(t, mock, "pd", "deploy", "--pids", "ONE_ROUTING", "--full-sync", "--dry-run", "--resources-path", pd, "--scope-file", ro)
+	assert.Equal(t, exitcode.OK, code, doc)
+	assert.Contains(t, mock.PDStrings, "ONE_ROUTING/new")
 }
 
 // Behind the scope's filter, pages of hidden partners in front of the

@@ -108,6 +108,24 @@ func TestGatewayMode(t *testing.T) {
 		}
 	})
 
+	t.Run("pd deploy stays inside the grant that /whoami reports", func(t *testing.T) {
+		home := t.TempDir()
+		writeModeFile(t, filepath.Join(home, ".cpictl", "gw.yaml"), "gateway: "+gw.URL+"/t/dev\n", 0o600)
+		t.Setenv(gatewayTokenEnv, "user-token")
+		pd := filepath.Join(t.TempDir(), "pd")
+		require.NoError(t, os.MkdirAll(filepath.Join(pd, "ONE_ROUTING"), 0o755))
+		writeModeFile(t, filepath.Join(pd, "ONE_ROUTING", "String.properties"), "target=erp\n", 0o600)
+		before := len(seen())
+		for _, args := range [][]string{{"--full-sync"}, {"--pids", "ONE_ROUTING", "--full-sync"}, {}} {
+			code, stderr := projectRun(t, home, t.TempDir(), append([]string{"--profile", "gw", "pd", "deploy", "--resources-path", pd}, args...)...)
+			assert.Equal(t, exitcode.Scope, code, stderr)
+			assert.Contains(t, stderr, "pd-write", args)
+		}
+		for _, s := range seen()[before:] {
+			assert.Contains(t, s, " /whoami", "no Partner Directory request reaches the gateway")
+		}
+	})
+
 	t.Run("no token", func(t *testing.T) {
 		t.Setenv(gatewayTokenEnv, "")
 		code, stderr := projectRun(t, t.TempDir(), t.TempDir(), "--gateway", gw.URL+"/t/dev", "undeploy", "--artifact-ids", "A")
