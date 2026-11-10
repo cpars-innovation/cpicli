@@ -42,6 +42,12 @@ func TestScopePartnerGrantsSnapshotAndFullSync(t *testing.T) {
 	}
 	assert.Equal(t, []string{"ONE_ROUTING"}, pids)
 
+	// a partner outside the scope: refused, not an empty answer
+	for _, args := range [][]string{{"pd", "get", "--pid", "SAP_TPM_X"}, {"pd", "snapshot", "--pids", "SAP_TPM_X", "--resources-path", filepath.Join(dir, "x")}} {
+		doc, code := runScoped(t, mock, append(args, "--scope-file", scope)...)
+		assert.Equal(t, exitcode.Scope, code, doc)
+	}
+
 	// pd partners lists only the granted partners
 	doc, code = runScoped(t, mock, "pd", "list", "--scope-file", scope)
 	require.Equal(t, exitcode.OK, code, doc)

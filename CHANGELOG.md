@@ -17,9 +17,14 @@ All notable changes to cpictl. Coming from FlashPipe? See
 - **Partner Directory lists behind a scope's filter page correctly.** `pd snapshot`, `pd list` and full sync
   stepped `$skip` by the entries left after the filter: a page holding only other partners ended the list
   (`pd snapshot --pids ONE_R` wrote nothing when 1,200 other parameters sorted first) and short pages were read
-  again (`pd list` repeated rows). The guard now adds `__next` while the tenant has more entries, a list without
-  count and `__next` ends, and `pd snapshot --pids` and full sync ask the tenant for each partner's parameters
+  again (`pd list` repeated rows). The guard now adds `__next` while the tenant has more entries (only to a list
+  that selects nothing, or a Partner Directory list filtered by a partner of the scope), a list without count and
+  `__next` ends, and `pd snapshot --pids` and full sync ask the tenant for each partner's parameters
   (`$filter=Pid eq …`).
+- **Scope: Partner Directory lists take only `$filter=Pid eq '<partner>'`** for a partner the scope reads. Another
+  filter (`startswith(Pid,…)`, `Value eq …`, a partner outside the scope) is refused: it asked the tenant about
+  hidden partners and values. `pd get` and `pd snapshot --pids` on a partner outside the scope are refused (exit 9)
+  instead of returning nothing.
 - **`pd deploy` keeps masked values.** A value that is only `••••` (a secure entry as a snapshot through a masking
   MCP server or the cpictl gateway writes it) is kept on the tenant: neither written nor, with `--full-sync`,
   deleted, so a snapshot deploys back as it is. A value with `••••` inside it is still refused.

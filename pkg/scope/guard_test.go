@@ -1479,13 +1479,20 @@ func TestGuardPartnerGrants(t *testing.T) {
 		refused(t, g.Before(r))
 	}
 	pd := `{"d":{"results":[{"Pid":"ONE_ROUTING","Id":"x"},{"Pid":"ONE_SECRETS","Id":"s"},{"Pid":"SAP_TPM_X","Id":"y"},{"Pid":"SAP_X","Id":"z"},{"Pid":"HR_X","Id":"h"}]}}`
-	for _, path := range []string{"/api/v1/StringParameters", "/api/v1/Partners", "/api/v1/BinaryParameters?$filter=Pid%20eq%20'HR_X'"} {
+	for _, path := range []string{"/api/v1/StringParameters", "/api/v1/Partners", "/api/v1/BinaryParameters?$filter=Pid%20eq%20'ONE_ROUTING'"} {
 		out, err := g.After(req("GET", path, ""), 200, nil, []byte(pd))
 		require.NoError(t, err)
 		assert.Contains(t, string(out), "ONE_ROUTING", path)
 		assert.Contains(t, string(out), "SAP_X", path)
 		for _, hidden := range []string{"ONE_SECRETS", "SAP_TPM_X", "HR_X"} {
 			assert.NotContains(t, string(out), hidden, path)
+		}
+	}
+	// filters that could ask about hidden partners or values (cpicli#82)
+	for _, f := range []string{"Pid%20eq%20'SAP_TPM_X'", "Pid%20eq%20'HR_X'", "Pid%20eq%20'ONE_SECRETS'", "startswith(Pid,'SAP')",
+		"Value%20eq%20'x'", "Pid%20eq%20'ONE_ROUTING'%20or%20Pid%20eq%20'HR_X'", "Pid%20ne%20'ONE_ROUTING'"} {
+		for _, list := range []string{"StringParameters", "BinaryParameters", "Partners", "AlternativePartners", "AuthorizedUsers"} {
+			refused(t, g.Before(req("GET", "/api/v1/"+list+"?$top=1&$filter="+f, "")))
 		}
 	}
 	// an old scope without partners: every partner refused, lists empty
@@ -1531,4 +1538,17 @@ func TestGuardFilteredListNext(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(out), "ONE_R")
 	assert.NotContains(t, string(out), "__next", "the last page")
+
+	// no page link where the query selects: it would tell whether hidden
+	// entries match (custom search on another list, a tooling partner)
+	tooling := testGuard(t, `{"version":1,"grants":[{"packages":["SD_*"],"actions":["read","test"]}]}`)
+	out, err = tooling.After(req("GET", "/api/v1/StringParameters?$inlinecount=allpages&$top=1&$filter=Pid%20eq%20'CPICTL_Stub'", ""), 200, nil, page(1, "CPICTL_Stub", 5))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "__next")
+	logs := testGuard(t, sdRW)
+	out, err = logs.After(req("GET", "/api/v1/MessageProcessingLogs?$inlinecount=allpages&$top=1&$filter=IntegrationArtifact/Id%20eq%20'FI_B'", ""), 200, nil,
+		[]byte(`{"d":{"__count":"5","results":[{"MessageGuid":"G2","IntegrationArtifact":{"Id":"FI_B","PackageId":"FI_Billing"}}]}}`))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "__next")
+	assert.NotContains(t, string(out), "G2")
 }

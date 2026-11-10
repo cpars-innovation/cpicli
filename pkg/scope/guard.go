@@ -133,6 +133,10 @@ type decision struct {
 	filter func(g *Guard, body []byte) ([]byte, error)
 	record func(g *Guard, r *httpclnt.GuardRequest, body []byte) // remember IDs from an allowed answer
 	allow  bool                                                  // no check needed (metadata, CSRF token)
+	// paged: a filtered answer may carry the guard's __next (nextPage): the
+	// request selects nothing but pages (no $filter or other selection, or
+	// on a Partner Directory list $filter=Pid eq a partner the scope reads)
+	paged bool
 }
 
 type need struct {
@@ -209,7 +213,10 @@ func (g *Guard) After(r *httpclnt.GuardRequest, status int, _ http.Header, body 
 		return nil, err
 	}
 	if d.filter != nil {
-		next := nextPage(r.Path, body)
+		next := ""
+		if d.paged {
+			next = nextPage(r.Path, body)
+		}
 		if body, err = d.filter(g, body); err != nil {
 			return nil, err
 		}
@@ -476,6 +483,45 @@ func nextPage(path string, body []byte) string {
 	q.Set("$skip", strconv.Itoa(skip+len(v.D.Results)))
 	u.RawQuery = strings.ReplaceAll(q.Encode(), "%24", "$")
 	return u.String()
+}
+
+// pageOnly are the query options that page or shape a list without
+// selecting entries: the guard's __next on such a list says only how many
+// entries a page held, never whether entries matching a condition exist.
+var pageOnly = []string{"$top", "$skip", "$inlinecount", "$select", "$orderby", "$format"}
+
+// reFilterPid is the one $filter a Partner Directory list takes under a
+// scope, as cpictl sends it.
+var reFilterPid = regexp.MustCompile(`^Pid eq '((?:[^']|'')*)'$`)
+
+// pdListQuery decides the query of a Partner Directory list: a $filter
+// only as Pid eq '<partner>' for a partner the scope reads (or a tooling
+// partner, with test). Any other filter could ask the tenant about hidden
+// partners and values (startswith(Pid,…), Value eq …): the filtered answer
+// hides the rows, but a page link or the answer's timing would still tell
+// (cpicli#82). paged reports whether the answer may carry __next.
+func (g *Guard) pdListQuery(q url.Values) (paged bool, reason string) {
+	for k := range q {
+		if k != "$filter" && !slices.Contains(pageOnly, k) {
+			return false, ""
+		}
+	}
+	f, ok := q["$filter"]
+	if !ok {
+		return true, ""
+	}
+	m := reFilterPid.FindStringSubmatch(f[0])
+	if m == nil {
+		return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>'"
+	}
+	pid := strings.ReplaceAll(m[1], "''", "'")
+	if toolingPartner(pid) && g.Scope.Grants(ActionTest) {
+		return false, "" // shared by teams: rows of others stay hidden, without a page link
+	}
+	if !g.allowsPartner(pid, ActionRead) {
+		return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>' for a partner of the scope"
+	}
+	return true, ""
 }
 
 // withNext sets d.__next of a filtered list answer.
@@ -945,7 +991,11 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 			return decision{need: []need{{res: Resource{Kind: KindPartner, ID: bodyField(r.Body, "Pid")}, action: ActionPDWrite, toolingWrite: param && m == http.MethodPost,
 				param: bodyField(r.Body, "Id")}}}, nil
 		}
-		return decision{filter: func(g *Guard, b []byte) ([]byte, error) {
+		paged, reason := g.pdListQuery(q)
+		if reason != "" {
+			return decision{}, g.refuse(&Refusal{Reason: reason})
+		}
+		return decision{paged: paged, filter: func(g *Guard, b []byte) ([]byte, error) {
 			return filterResults(b, func(e map[string]any) bool {
 				if pid := str(e, "Pid"); toolingPartner(pid) && p != "Partners" {
 					return g.Scope.Grants(ActionTest) && g.toolingParamOwned(r.Ctx, str(e, "Id"))
