@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,4 +77,45 @@ func TestScopePartnerGrantsSnapshotAndFullSync(t *testing.T) {
 	assert.Equal(t, exitcode.Partial, code, doc)
 	assert.Contains(t, fmt.Sprint(doc["error"]), "scope: ")
 	assert.Contains(t, mock.PDStrings, "ONE_ROUTING/new", "no delete without pd-write")
+}
+
+// Behind the scope's filter, pages of hidden partners in front of the
+// granted ones neither stop nor repeat the listing (cpicli#82).
+func TestScopePartnerListsPageBehindTheFilter(t *testing.T) {
+	mock := scopeTenant(t)
+	mock.PDStrings = map[string]string{"ONE_ROUTING/target": "erp"}
+	mock.PDBinaries = map[string]cpitest.PDBinary{}
+	for i := range 1200 {
+		mock.PDStrings[fmt.Sprintf("AAA_%04d/k", i)] = "v"
+	}
+	for i := range 70 {
+		mock.PDBinaries[fmt.Sprintf("AAA_%04d/b", i)] = cpitest.PDBinary{ContentType: "txt", Content: []byte("x")}
+	}
+	mock.PDBinaries["ONE_ROUTING/map"] = cpitest.PDBinary{ContentType: "txt", Content: []byte("m")}
+	dir := t.TempDir()
+	scope := filepath.Join(dir, "scope.json")
+	require.NoError(t, os.WriteFile(scope, []byte(`{"version":1,"grants":[{"partners":["ONE_*"],"actions":["read"]}]}`), 0o600))
+
+	for _, args := range [][]string{{"--pids", "ONE_ROUTING"}, nil} {
+		out := filepath.Join(dir, fmt.Sprint(len(args)))
+		doc, code := runScoped(t, mock, append([]string{"pd", "snapshot", "--resources-path", out, "--scope-file", scope}, args...)...)
+		require.Equal(t, exitcode.OK, code, doc)
+		entries, _ := os.ReadDir(out)
+		require.Len(t, entries, 1, args)
+		assert.Equal(t, "ONE_ROUTING", entries[0].Name())
+		bins, _ := filepath.Glob(filepath.Join(out, "ONE_ROUTING", "Binary", "*"))
+		assert.NotEmpty(t, bins, "the binary behind 70 hidden ones (pages of 30)")
+		props, err := os.ReadFile(filepath.Join(out, "ONE_ROUTING", "String.properties"))
+		require.NoError(t, err)
+		assert.Contains(t, string(props), "target=erp")
+	}
+
+	doc, code := runScoped(t, mock, "pd", "list", "--scope-file", scope)
+	require.Equal(t, exitcode.OK, code, doc)
+	res, _ := doc["result"].(map[string]any)
+	partners, _ := res["partners"].([]any)
+	require.Len(t, partners, 1, "one row, no repeats")
+	row, _ := partners[0].(map[string]any)
+	assert.EqualValues(t, 1, row["strings"])
+	assert.EqualValues(t, 1, row["binaries"])
 }

@@ -17,6 +17,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -208,8 +209,12 @@ func (g *Guard) After(r *httpclnt.GuardRequest, status int, _ http.Header, body 
 		return nil, err
 	}
 	if d.filter != nil {
+		next := nextPage(r.Path, body)
 		if body, err = d.filter(g, body); err != nil {
 			return nil, err
+		}
+		if next != "" {
+			body = withNext(body, next)
 		}
 	}
 	if d.record != nil {
@@ -440,6 +445,60 @@ func results(body []byte) []map[string]any {
 
 // filterResults keeps the collection entries keep accepts; a single entity
 // passes only if keep accepts it.
+// nextPage is the link to the page after a list answer while the tenant
+// has more entries (by its __count) and sent no __next of its own. The
+// filter removes the count, and the entries it hides make a page shorter:
+// without the link a client stepping by what it received would read
+// entries again or stop in front of a page of hidden ones (cpicli#82). It
+// says only that more entries follow, and how many the tenant put in this
+// page; the total stays hidden.
+func nextPage(path string, body []byte) string {
+	var v struct {
+		D struct {
+			Results []json.RawMessage `json:"results"`
+			Count   string            `json:"__count"`
+			Next    string            `json:"__next"`
+		} `json:"d"`
+	}
+	if json.Unmarshal(body, &v) != nil || v.D.Next != "" || len(v.D.Results) == 0 {
+		return ""
+	}
+	u, err := url.Parse(path)
+	if err != nil {
+		return ""
+	}
+	q := u.Query()
+	skip, _ := strconv.Atoi(q.Get("$skip"))
+	total, err := strconv.Atoi(v.D.Count)
+	if err != nil || skip < 0 || skip+len(v.D.Results) >= total {
+		return ""
+	}
+	q.Set("$skip", strconv.Itoa(skip+len(v.D.Results)))
+	u.RawQuery = strings.ReplaceAll(q.Encode(), "%24", "$")
+	return u.String()
+}
+
+// withNext sets d.__next of a filtered list answer.
+func withNext(body []byte, next string) []byte {
+	var v map[string]any
+	if json.Unmarshal(body, &v) != nil {
+		return body
+	}
+	d, _ := v["d"].(map[string]any)
+	if d == nil {
+		return body
+	}
+	if _, list := d["results"].([]any); !list {
+		return body
+	}
+	d["__next"] = next
+	out, err := json.Marshal(v)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
 func filterResults(body []byte, keep func(map[string]any) bool) ([]byte, error) {
 	var v map[string]any
 	if err := json.Unmarshal(body, &v); err != nil {
@@ -904,14 +963,15 @@ func (g *Guard) classifyAPIPath(r *httpclnt.GuardRequest, p string, q url.Values
 	case rePartner.MatchString(p):
 		mm := rePartner.FindStringSubmatch(p)
 		action := ActionRead
+		if mm[2] != "" {
+			// nothing below a partner: its parameters there (also by a key
+			// naming another partner, Partners('X')/StringParameters(Pid='Y',…))
+			// are not decided by the partner in the URL, and the answers are
+			// not filtered. cpictl reads and writes parameters by their own
+			// URLs (cpicli#82)
+			return decision{}, g.refuse(&Refusal{Reason: "below a partner (" + p + ") is not available under a scope: use the parameter's own URL"})
+		}
 		if write(m) {
-			if mm[2] != "" {
-				// below a partner only reads: a write there (POST of a parameter
-				// whose body names another partner, a delete of the whole list)
-				// is not decided by the partner in the URL; cpictl writes
-				// parameters by their own URLs
-				return decision{}, g.refuse(&Refusal{Reason: "a write below a partner (" + p + ") is not accepted under a scope"})
-			}
 			action = ActionPDWrite
 		}
 		// the partner itself; below it (its parameters) only for partners

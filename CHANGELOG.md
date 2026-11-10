@@ -10,9 +10,20 @@ All notable changes to cpictl. Coming from FlashPipe? See
   name partners (`deny: [{partners: ["SAP_*"]}]`). Until now partners took the top-level actions only, so a scope
   with packages and partners could not give them different actions. This is the form the cpictl gateway needs to
   grant Partner Directory access per policy rule. Scopes without partner grants behave as before.
-- **Scope: no writes below a partner.** `POST`, `PUT` and `DELETE` below `Partners('X')/…` are refused under a
-  scope: they were decided by the partner in the URL, while a create there could name another partner in its body.
-  cpictl writes parameters by their own URLs, so no command is affected.
+- **Scope: nothing below a partner.** Every request below `Partners('X')/…` is refused under a scope: it was decided
+  by the partner in the URL, while a key there (`Partners('X')/StringParameters(Pid='Y',…)`) or a create's body could
+  name another partner, and its answers were not filtered. cpictl reads and writes parameters by their own URLs,
+  so no command is affected.
+- **Partner Directory lists behind a scope's filter page correctly.** `pd snapshot`, `pd list` and full sync
+  stepped `$skip` by the entries left after the filter: a page holding only other partners ended the list
+  (`pd snapshot --pids ONE_R` wrote nothing when 1,200 other parameters sorted first) and short pages were read
+  again (`pd list` repeated rows). The guard now adds `__next` while the tenant has more entries, a list without
+  count and `__next` ends, and `pd snapshot --pids` and full sync ask the tenant for each partner's parameters
+  (`$filter=Pid eq …`).
+- **`pd deploy` keeps masked values.** A value that is only `••••` (a secure entry as a snapshot through a masking
+  MCP server or the cpictl gateway writes it) is kept on the tenant: neither written nor, with `--full-sync`,
+  deleted, so a snapshot deploys back as it is. A value with `••••` inside it is still refused.
+- `pd snapshot --pids` and `pd get` warn when a partner has no parameters or no access, instead of finishing silently.
 
 ## 0.38.6
 

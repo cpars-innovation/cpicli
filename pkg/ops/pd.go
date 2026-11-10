@@ -1,6 +1,7 @@
 package ops
 
 import (
+	"encoding/base64"
 	"fmt"
 	"github.com/cpars-innovation/cpicli/pkg/mask"
 	"os"
@@ -214,6 +215,11 @@ func deployStringParameters(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, re
 
 		for _, param := range parameters {
 			key := fmt.Sprintf("%s/%s", param.Pid, param.ID)
+			if maskedWhole(param.Value) {
+				results.Unchanged = append(results.Unchanged, key)
+				log.Info().Msgf("Kept %s: its value is masked (%s) in the local files", key, mask.Dots)
+				continue
+			}
 
 			if dryRun {
 				// Just check if it exists and report what would happen
@@ -298,6 +304,11 @@ func deployBinaryParameters(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.Repo, re
 
 		for _, param := range parameters {
 			key := fmt.Sprintf("%s/%s", param.Pid, param.ID)
+			if data, err := base64.StdEncoding.DecodeString(param.Value); err == nil && maskedWhole(string(data)) {
+				results.Unchanged = append(results.Unchanged, key)
+				log.Info().Msgf("Kept %s: its content is masked (%s) in the local files", key, mask.Dots)
+				continue
+			}
 
 			if dryRun {
 				// Just check if it exists and report what would happen
@@ -398,10 +409,17 @@ func deleteRemoteEntriesNotInLocal(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.R
 		return results, nil
 	}
 
-	// Get all remote string parameters
-	remoteStringParams, err := pdAPI.GetStringParameters("Pid,Id")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get remote string parameters: %w", err)
+	// the remote parameters of the managed partners, each read with a filter
+	// on the tenant (under a scope a list of all partners is filtered page
+	// by page, cpicli#82)
+	var remoteStringParams []cpi.StringParameter
+	var remoteBinaryParams []cpi.BinaryParameter
+	for _, pid := range syncablePIDs {
+		strs, bins, err := pdAPI.ListParametersSelect(pid, "Pid,Id", "Pid,Id")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get the remote parameters of %s: %w", pid, err)
+		}
+		remoteStringParams, remoteBinaryParams = append(remoteStringParams, strs...), append(remoteBinaryParams, bins...)
 	}
 
 	// Delete string parameters not in local for managed PIDs
@@ -421,12 +439,6 @@ func deleteRemoteEntriesNotInLocal(pdAPI *cpi.PartnerDirectory, pdRepo *pdrepo.R
 				log.Debug().Msgf("Deleted string parameter: %s", key)
 			}
 		}
-	}
-
-	// Get all remote binary parameters
-	remoteBinaryParams, err := pdAPI.GetBinaryParameters("Pid,Id")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get remote binary parameters: %w", err)
 	}
 
 	// Delete binary parameters not in local for managed PIDs
@@ -465,9 +477,17 @@ func filterPIDs(pids []string, filter []string) []string {
 	return result
 }
 
-// refuseMaskedPD refuses to deploy local files that carry the masked value:
-// a secure entry's view (PDSecureMarks) written back would replace the real
-// value on the tenant (cpicli#73).
+// maskedWhole: a local value that is only the masked token, as a snapshot
+// through a masking cpictl MCP server or the cpictl gateway writes a secure
+// entry. Deploy keeps the tenant's value: it neither writes nor (full sync,
+// the entry is present locally) deletes it, so a snapshot deploys back as
+// it is (cpicli#82).
+func maskedWhole(v string) bool { return strings.TrimSpace(v) == mask.Dots }
+
+// refuseMaskedPD refuses to deploy local files that carry the masked value
+// inside another value: written back it would replace the real value on
+// the tenant (cpicli#73). A value that is only the token is kept
+// (maskedWhole).
 func refuseMaskedPD(pdRepo *pdrepo.Repo) error {
 	pids, err := pdRepo.GetLocalPIDs()
 	if err != nil {
@@ -476,13 +496,13 @@ func refuseMaskedPD(pdRepo *pdrepo.Repo) error {
 	for _, pid := range pids {
 		strs, _ := pdRepo.ReadStringParameters(pid)
 		for _, p := range strs {
-			if strings.Contains(p.Value, mask.Dots) {
+			if strings.Contains(p.Value, mask.Dots) && !maskedWhole(p.Value) {
 				return output.Usagef("Partner Directory %s/%s holds the masked value %s: a masked view cannot be deployed; set the real value", pid, p.ID, mask.Dots)
 			}
 		}
 		bins, _ := pdRepo.ReadBinaryFiles(pid)
 		for _, b := range bins {
-			if data, err := os.ReadFile(b.File); err == nil && strings.Contains(string(data), mask.Dots) {
+			if data, err := os.ReadFile(b.File); err == nil && strings.Contains(string(data), mask.Dots) && !maskedWhole(string(data)) {
 				return output.Usagef("Partner Directory %s/%s holds the masked value %s: a masked view cannot be deployed; set the real value", pid, b.ID, mask.Dots)
 			}
 		}

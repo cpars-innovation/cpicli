@@ -356,9 +356,22 @@ func pdStatusError(callType string, resp *http.Response) error {
 // ListParameters returns the string and binary parameters of one partner ID
 // (binary values included, base64).
 func (pd *PartnerDirectory) ListParameters(pid string) ([]StringParameter, []BinaryParameter, error) {
-	filter := "$filter=" + url.QueryEscape("Pid eq '"+strings.ReplaceAll(pid, "'", "''")+"'")
+	return pd.ListParametersSelect(pid, "", "")
+}
+
+// ListParametersSelect is ListParameters with $select for each kind (empty:
+// every field). The tenant filters by partner, so a scope's filter never
+// hides a page of other partners in front of it.
+func (pd *PartnerDirectory) ListParametersSelect(pid, stringFields, binaryFields string) ([]StringParameter, []BinaryParameter, error) {
+	pidFilter := "$filter=" + url.QueryEscape("Pid eq '"+strings.ReplaceAll(pid, "'", "''")+"'")
+	withSelect := func(fields string) string {
+		if fields == "" {
+			return pidFilter
+		}
+		return pidFilter + "&" + selectQuery(fields)
+	}
 	var strs []StringParameter
-	if err := pd.listAll("/api/v1/StringParameters", filter, "Get string parameters", func(raw json.RawMessage) (int, error) {
+	if err := pd.listAll("/api/v1/StringParameters", withSelect(stringFields), "Get string parameters", func(raw json.RawMessage) (int, error) {
 		var page []StringParameter
 		err := json.Unmarshal(raw, &page)
 		strs = append(strs, page...)
@@ -367,7 +380,7 @@ func (pd *PartnerDirectory) ListParameters(pid string) ([]StringParameter, []Bin
 		return nil, nil, err
 	}
 	var bins []BinaryParameter
-	if err := pd.listAll("/api/v1/BinaryParameters", filter, "Get binary parameters", func(raw json.RawMessage) (int, error) {
+	if err := pd.listAll("/api/v1/BinaryParameters", withSelect(binaryFields), "Get binary parameters", func(raw json.RawMessage) (int, error) {
 		var page []BinaryParameter
 		err := json.Unmarshal(raw, &page)
 		bins = append(bins, page...)
@@ -455,6 +468,13 @@ func (pd *PartnerDirectory) listAll(basePath, query, callType string, add func(j
 		}
 		if next != "" || n == 0 || (total >= 0 && seen >= total) {
 			return nil // last page of a __next chain, empty page, or all counted
+		}
+		if total < 0 {
+			// no count and no __next: the last page. A scope's guard removes
+			// the count (it would reveal hidden entries) and sends __next
+			// while the tenant has more; stepping on by the entries left after
+			// its filter would read entries again (cpicli#82)
+			return nil
 		}
 		skip += n
 	}

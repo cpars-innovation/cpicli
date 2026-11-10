@@ -14,6 +14,7 @@ import (
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/httpclnt"
 	"github.com/cpars-innovation/cpicli/pkg/pdrepo"
+	"github.com/rs/zerolog/log"
 )
 
 // PDString is a string parameter of the Partner Directory.
@@ -75,6 +76,11 @@ func GetPDParametersWith(api *cpi.PartnerDirectory, pid string, keys []string, o
 	strs, bins, err := api.ListParameters(pid)
 	if err != nil {
 		return nil, err
+	}
+	if len(strs) == 0 && len(bins) == 0 {
+		// under a scope or through the cpictl gateway a partner without
+		// access reads as empty
+		log.Warn().Msgf("PID %s: no parameters found (or no access to this partner)", pid)
 	}
 	want := func(id string) bool { return len(keys) == 0 || slices.Contains(keys, id) }
 	res := &PDParameters{Pid: pid, Strings: []PDString{}, Binaries: []PDBinary{}}

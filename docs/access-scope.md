@@ -75,8 +75,9 @@ deny:
   `$value`), alternative partners and authorized users; `pd-write` covers creating, changing and deleting them.
   Lists are filtered to the partners the scope may read. Every write and delete names its partner (the body's `Pid`
   for a create, the URL key otherwise, an alternative partner's or authorized user's `Pid` read from the tenant),
-  so there is no write across partners: a write to a list URL or below a partner (`Partners('X')/StringParameters`)
-  is refused. `pd deploy --full-sync` lists the remote parameters (filtered) and deletes them one at a time, each
+  so there is no write across partners: a write to a list URL is refused, and so is every request below a partner
+  (`Partners('X')/StringParameters…`): a key there could name another partner, and its answers are not filtered.
+  Parameters are read and written by their own URLs. `pd deploy --full-sync` lists the remote parameters (filtered) and deletes them one at a time, each
   needing `pd-write` on its partner.
 - Tenant areas have their own `:read` and `:write` modes.
 - Message contents (attachments, payloads, traces) and test messages are decided per flow: reading `FI_Shared`'s
@@ -105,7 +106,9 @@ whichever command or MCP tool sends it, including tools added later:
   operation by operation and each one is checked; a batch that cannot be parsed completely is refused as a whole.
 - **Lists** (packages, artifacts of a package, runtime artifacts, service endpoints, message logs, custom header
   search, Partner Directory, the Web UI runtime list) are filtered. Totals (`__count`) are removed, so they don't
-  reveal hidden entries. A list URL can only be read: a write to it (also with a `$filter`) is refused.
+  reveal hidden entries. While the tenant has more entries, a filtered page carries `__next` (the next `$skip`), so
+  a client pages on correctly when a page holds only hidden entries; it shows that more entries follow and how many
+  the tenant put in the page, not the total. A list URL can only be read: a write to it (also with a `$filter`) is refused.
 - **`$expand`** is limited to the expansions cpictl uses (entry points, custom header log, run step properties,
   design guidelines), so an expansion cannot carry entities the filter does not see.
 - **An artifact's package** is found by listing the artifacts of the allowed packages (a few calls per package,

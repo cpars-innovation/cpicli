@@ -1449,7 +1449,6 @@ func TestGuardPartnerGrants(t *testing.T) {
 		"deny":[{"partners":["ONE_SECRET*"]},{"partners":["SAP_TPM*"],"actions":["read"]},{"packages":["ONE_*"]}]}`)
 	allowed := []*httpclnt.GuardRequest{
 		req("GET", "/api/v1/Partners('ONE_ROUTING')", ""),
-		req("GET", "/api/v1/Partners('ONE_ROUTING')/StringParameters", ""),
 		req("GET", "/api/v1/StringParameters(Pid='ONE_ROUTING',Id='x')/$value", ""),
 		req("POST", "/api/v1/StringParameters", `{"Pid":"ONE_ROUTING","Id":"x","Value":"v"}`),
 		req("PUT", "/api/v1/StringParameters(Pid='ONE_ROUTING',Id='x')", `{"Value":"v"}`),
@@ -1470,6 +1469,10 @@ func TestGuardPartnerGrants(t *testing.T) {
 		req("DELETE", "/api/v1/StringParameters(Pid='HR_X',Id='x')", ""), // not granted
 		req("DELETE", "/api/v1/StringParameters", ""),                    // no PID: no delete across partners
 		req("DELETE", "/api/v1/Partners('ONE_ROUTING')/StringParameters", ""),
+		req("GET", "/api/v1/Partners('ONE_ROUTING')/StringParameters", ""),                         // below a partner: nothing
+		req("GET", "/api/v1/Partners('ONE_ROUTING')/StringParameters(Pid='SAP_TPM_X',Id='k')", ""), // a key naming another partner
+		req("GET", "/api/v1/Partners('ONE_ROUTING')/StringParameters(Pid='SAP_TPM_X',Id='k')/$value", ""),
+		req("GET", "/api/v1/Partners('ONE_ROUTING')/BinaryParameters", ""),
 		req("GET", "/api/v1/IntegrationPackages('ONE_Pkg')", ""),                                   // partners grant no packages
 		req("POST", "/api/v1/Partners('ONE_ROUTING')/StringParameters", `{"Pid":"HR_X","Id":"x"}`), // the body names another partner
 	} {
@@ -1506,4 +1509,26 @@ func TestParsePartnerGrants(t *testing.T) {
 		_, err := Parse([]byte(bad))
 		assert.Error(t, err, bad)
 	}
+}
+
+// A filtered list keeps the client paging: __next while the tenant has more
+// entries, none after the last page (cpicli#82).
+func TestGuardFilteredListNext(t *testing.T) {
+	g := testGuard(t, `{"version":1,"grants":[{"partners":["ONE_*"],"actions":["read"]}]}`)
+	page := func(n int, pid string, count int) []byte {
+		rows := make([]string, n)
+		for i := range rows {
+			rows[i] = fmt.Sprintf(`{"Pid":"%s","Id":"p%d"}`, pid, i)
+		}
+		return []byte(fmt.Sprintf(`{"d":{"__count":"%d","results":[%s]}}`, count, strings.Join(rows, ",")))
+	}
+	out, err := g.After(req("GET", "/api/v1/StringParameters?$inlinecount=allpages&$top=1000&$skip=0", ""), 200, nil, page(1000, "HR_X", 1200))
+	require.NoError(t, err)
+	assert.NotContains(t, string(out), "HR_X")
+	assert.NotContains(t, string(out), "__count")
+	assert.Contains(t, string(out), `"__next":"/api/v1/StringParameters?$inlinecount=allpages\u0026$skip=1000\u0026$top=1000"`)
+	out, err = g.After(req("GET", "/api/v1/StringParameters?$inlinecount=allpages&$top=1000&$skip=1000", ""), 200, nil, page(200, "ONE_R", 1200))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "ONE_R")
+	assert.NotContains(t, string(out), "__next", "the last page")
 }
