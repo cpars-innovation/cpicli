@@ -112,7 +112,8 @@ whichever command or MCP tool sends it, including tools added later:
   selection, or a Partner Directory list filtered by a partner the scope reads): with a selection the link would
   tell whether hidden entries match.
 - **Partner Directory lists** take only `$filter=Pid eq '<partner>'`, for a partner the scope may read (as cpictl
-  sends it); any other filter (`startswith(Pid,…)`, `Value eq …`, another partner) is refused, so a list cannot ask
+  sends it), and paging options (`$top`, `$skip`, `$inlinecount`, `$select`, `$orderby`, `$format`, the tenant's
+  `$skiptoken`); any other filter or query key (`startswith(Pid,…)`, `Value eq …`, another partner) is refused, so a list cannot ask
   the tenant about hidden partners or values. A list URL can only be read: a write to it (also with a `$filter`) is refused.
 - **`$expand`** is limited to the expansions cpictl uses (entry points, custom header log, run step properties,
   design guidelines), so an expansion cannot carry entities the filter does not see.

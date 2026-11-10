@@ -501,27 +501,32 @@ var reFilterPid = regexp.MustCompile(`^Pid eq '((?:[^']|'')*)'$`)
 // hides the rows, but a page link or the answer's timing would still tell
 // (cpicli#82). paged reports whether the answer may carry __next.
 func (g *Guard) pdListQuery(q url.Values) (paged bool, reason string) {
-	for k := range q {
-		if k != "$filter" && !slices.Contains(pageOnly, k) {
-			return false, ""
+	// the filter first, whatever else the query holds (round 3: an extra key
+	// skipped it); then only paging and shaping options
+	paged = true
+	if f, ok := q["$filter"]; ok {
+		m := reFilterPid.FindStringSubmatch(f[0])
+		if len(f) != 1 || m == nil {
+			return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>'"
+		}
+		pid := strings.ReplaceAll(m[1], "''", "'")
+		switch {
+		case toolingPartner(pid) && g.Scope.Grants(ActionTest):
+			paged = false // shared by teams: rows of others stay hidden, without a page link
+		case !g.allowsPartner(pid, ActionRead):
+			return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>' for a partner of the scope"
 		}
 	}
-	f, ok := q["$filter"]
-	if !ok {
-		return true, ""
+	for k := range q {
+		switch {
+		case k == "$filter" || slices.Contains(pageOnly, k):
+		case k == "$skiptoken": // the tenant's own __next
+			paged = false
+		default:
+			return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>' and paging options, not " + k
+		}
 	}
-	m := reFilterPid.FindStringSubmatch(f[0])
-	if m == nil {
-		return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>'"
-	}
-	pid := strings.ReplaceAll(m[1], "''", "'")
-	if toolingPartner(pid) && g.Scope.Grants(ActionTest) {
-		return false, "" // shared by teams: rows of others stay hidden, without a page link
-	}
-	if !g.allowsPartner(pid, ActionRead) {
-		return false, "under a scope, a Partner Directory list takes only $filter=Pid eq '<partner>' for a partner of the scope"
-	}
-	return true, ""
+	return paged, ""
 }
 
 // withNext sets d.__next of a filtered list answer.
@@ -2375,12 +2380,17 @@ func batchOperations(header map[string]string, body []byte) ([]batchOp, error) {
 
 func readBatchParts(mr *multipart.Reader, depth int, ops *[]batchOp) error {
 	for {
-		part, err := mr.NextPart()
+		// raw: NextPart decodes quoted-printable silently, and the guard
+		// would decide another request than the tenant reads (cpicli#82)
+		part, err := mr.NextRawPart()
 		if err == io.EOF {
 			return nil
 		}
 		if err != nil {
 			return err
+		}
+		if cte := part.Header.Values("Content-Transfer-Encoding"); len(cte) > 1 || len(cte) == 1 && !strings.EqualFold(strings.TrimSpace(cte[0]), "binary") {
+			return fmt.Errorf("part with Content-Transfer-Encoding %q not accepted (binary only)", cte)
 		}
 		mt, params, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
 		if err != nil {

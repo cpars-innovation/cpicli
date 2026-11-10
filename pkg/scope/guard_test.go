@@ -1552,3 +1552,29 @@ func TestGuardFilteredListNext(t *testing.T) {
 	assert.NotContains(t, string(out), "__next")
 	assert.NotContains(t, string(out), "G2")
 }
+
+// Round 3 of #82: an extra query key does not skip the Partner Directory
+// filter check, and a $batch part is decided as the tenant reads it.
+func TestGuardPDFilterWithExtraKeysAndBatchEncoding(t *testing.T) {
+	g := testGuard(t, `{"version":1,"grants":[{"packages":["SD_*"],"actions":["read","upload","configure"]},{"partners":["ONE_*"],"actions":["read","pd-write"]}]}`)
+	for _, extra := range []string{"&foo=1", "&$skiptoken=x", "&$count=true", "&sap-client=100", "&$top=1&$expand=x"} {
+		for _, f := range []string{"startswith(Pid,'SAP')", "Value%20eq%20'x'", "Pid%20eq%20'ONE_R'%20or%20Pid%20eq%20'SAP_X'", "Pid%20eq%20'SAP_X'"} {
+			refused(t, g.Before(req("GET", "/api/v1/StringParameters?$filter="+f+extra, "")))
+		}
+	}
+	refused(t, g.Before(req("GET", "/api/v1/StringParameters?foo=1", ""))) // unknown keys on a Partner Directory list
+	assert.NoError(t, g.Before(req("GET", "/api/v1/StringParameters?$filter=Pid%20eq%20'ONE_R'&$top=1000&$skip=0&$inlinecount=allpages&$select=Pid,Id", "")))
+	assert.NoError(t, g.Before(req("GET", "/api/v1/BinaryParameters?$skiptoken=30", "")), "the tenant's own __next")
+
+	ok := batchReq("PUT /api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active') HTTP/1.1")
+	assert.NoError(t, g.Before(ok))
+	for _, cte := range []string{"quoted-printable", "base64", "7bit", "binary\r\nContent-Transfer-Encoding: quoted-printable"} {
+		r := batchReq("PUT /api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active') HTTP/1.1")
+		r.Body = []byte(strings.Replace(string(r.Body), "Content-Transfer-Encoding: binary", "Content-Transfer-Encoding: "+cte, 1))
+		refused(t, g.Before(r))
+	}
+	// quoted-printable hides the target: =46I_B is FI_B to a decoder
+	r := batchReq("PUT /api/v1/IntegrationDesigntimeArtifacts(Id='SD_A',Version='active') HTTP/1.1")
+	r.Body = []byte(strings.Replace(strings.Replace(string(r.Body), "Content-Transfer-Encoding: binary", "Content-Transfer-Encoding: quoted-printable", 1), "SD_A", "=46I_B", 1))
+	refused(t, g.Before(r))
+}

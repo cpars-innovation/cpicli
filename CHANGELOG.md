@@ -24,7 +24,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
 - **Scope: Partner Directory lists take only `$filter=Pid eq '<partner>'`** for a partner the scope reads. Another
   filter (`startswith(Pid,…)`, `Value eq …`, a partner outside the scope) is refused: it asked the tenant about
   hidden partners and values. `pd get` and `pd snapshot --pids` on a partner outside the scope are refused (exit 9)
-  instead of returning nothing.
+  instead of returning nothing. Other query keys on these lists are refused too.
+- **Scope: `$batch` parts only in binary transfer encoding.** A part in quoted-printable or another encoding is
+  refused: the guard decoded it and could decide another request than the tenant reads. cpictl sends binary parts.
 - **`pd deploy` keeps masked values.** A value that is only `••••` (a secure entry as a snapshot through a masking
   MCP server or the cpictl gateway writes it) is kept on the tenant: neither written nor, with `--full-sync`,
   deleted, so a snapshot deploys back as it is. A value with `••••` inside it is still refused.
