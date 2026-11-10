@@ -5,6 +5,11 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.39.0
+
+Partner Directory access under a scope, for the cpictl gateway's partner grants (#82). Verified together with the
+gateway's change by its independent verifier before the tag (four rounds).
+
 - **Scope: partner grants with their own actions.** A scope grant can name Partner Directory partners
   (`grants: [{partners: ["ONE_*"], actions: [read, pd-write]}]`) besides or instead of packages, and `deny` can
   name partners (`deny: [{partners: ["SAP_*"]}]`). Until now partners took the top-level actions only, so a scope
