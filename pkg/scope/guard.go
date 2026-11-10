@@ -490,6 +490,11 @@ func nextPage(path string, body []byte) string {
 // entries a page held, never whether entries matching a condition exist.
 var pageOnly = []string{"$top", "$skip", "$inlinecount", "$select", "$orderby", "$format"}
 
+// pdFields are the plain properties of the Partner Directory entities a
+// scope's $select may name (no navigation into other entities).
+var pdFields = []string{"Pid", "Id", "Value", "ContentType", "CreatedBy", "CreatedTime", "LastModifiedBy", "LastModifiedTime",
+	"Agency", "Scheme", "Hexagency", "Hexscheme", "Hexid", "User"}
+
 // reFilterPid is the one $filter a Partner Directory list takes under a
 // scope, as cpictl sends it.
 var reFilterPid = regexp.MustCompile(`^Pid eq '((?:[^']|'')*)'$`)
@@ -519,6 +524,16 @@ func (g *Guard) pdListQuery(q url.Values) (paged bool, reason string) {
 	}
 	for k := range q {
 		switch {
+		case k == "$orderby":
+			// the order of hidden rows among visible ones (by Value: next to
+			// a value the caller wrote) would tell about hidden values
+			return false, "under a scope, a Partner Directory list takes no $orderby"
+		case k == "$select":
+			for _, f := range strings.Split(q.Get(k), ",") {
+				if !slices.Contains(pdFields, strings.TrimSpace(f)) {
+					return false, "under a scope, a Partner Directory list selects only " + strings.Join(pdFields, ", ")
+				}
+			}
 		case k == "$filter" || slices.Contains(pageOnly, k):
 		case k == "$skiptoken": // the tenant's own __next
 			paged = false

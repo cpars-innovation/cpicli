@@ -1578,3 +1578,17 @@ func TestGuardPDFilterWithExtraKeysAndBatchEncoding(t *testing.T) {
 	r.Body = []byte(strings.Replace(strings.Replace(string(r.Body), "Content-Transfer-Encoding: binary", "Content-Transfer-Encoding: quoted-printable", 1), "SD_A", "=46I_B", 1))
 	refused(t, g.Before(r))
 }
+
+// Round 4 of #82: no sort order and no navigation on Partner Directory
+// lists under a scope.
+func TestGuardPDOrderbyAndSelect(t *testing.T) {
+	g := testGuard(t, `{"version":1,"grants":[{"partners":["ONE_*"],"actions":["read","pd-write"]}]}`)
+	for _, q := range []string{"$orderby=Value", "$orderby=Pid", "$orderby=Value%20desc&$filter=Pid%20eq%20'ONE_R'", "$select=Pid,Partner/Pid", "$select=*", "$select=Pid,Value,Foo"} {
+		for _, list := range []string{"StringParameters", "BinaryParameters", "Partners", "AlternativePartners", "AuthorizedUsers"} {
+			refused(t, g.Before(req("GET", "/api/v1/"+list+"?"+q, "")))
+		}
+	}
+	for _, q := range []string{"$select=Pid,Id", "$select=Pid,Id,Value", "$select=Pid,Id,ContentType", "$select=Pid%2CId%2CValue"} {
+		assert.NoError(t, g.Before(req("GET", "/api/v1/StringParameters?$inlinecount=allpages&$top=1000&$skip=0&"+q, "")), q)
+	}
+}
