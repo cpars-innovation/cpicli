@@ -495,6 +495,10 @@ var pageOnly = []string{"$top", "$skip", "$inlinecount", "$select", "$orderby", 
 var pdFields = []string{"Pid", "Id", "Value", "ContentType", "CreatedBy", "CreatedTime", "LastModifiedBy", "LastModifiedTime",
 	"Agency", "Scheme", "Hexagency", "Hexscheme", "Hexid", "User"}
 
+// pdPageOnly are pageOnly without $orderby, which a Partner Directory list
+// never takes under a scope (cpicli#83).
+var pdPageOnly = []string{"$top", "$skip", "$inlinecount", "$format"}
+
 // reFilterPid is the one $filter a Partner Directory list takes under a
 // scope, as cpictl sends it.
 var reFilterPid = regexp.MustCompile(`^Pid eq '((?:[^']|'')*)'$`)
@@ -529,12 +533,18 @@ func (g *Guard) pdListQuery(q url.Values) (paged bool, reason string) {
 			// a value the caller wrote) would tell about hidden values
 			return false, "under a scope, a Partner Directory list takes no $orderby"
 		case k == "$select":
-			for _, f := range strings.Split(q.Get(k), ",") {
-				if !slices.Contains(pdFields, strings.TrimSpace(f)) {
+			fields := strings.Split(q.Get(k), ",")
+			for i := range fields {
+				fields[i] = strings.TrimSpace(fields[i])
+				if !slices.Contains(pdFields, fields[i]) {
 					return false, "under a scope, a Partner Directory list selects only " + strings.Join(pdFields, ", ")
 				}
 			}
-		case k == "$filter" || slices.Contains(pageOnly, k):
+			if !slices.Contains(fields, "Pid") {
+				// the rows are decided by Pid: without it every row is hidden
+				return false, "under a scope, a Partner Directory list's $select must include Pid"
+			}
+		case k == "$filter" || slices.Contains(pdPageOnly, k):
 		case k == "$skiptoken": // the tenant's own __next
 			paged = false
 		default:

@@ -5,6 +5,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- Scope: a Partner Directory list's `$select` must include `Pid` (the rows are decided by it; without it the answer
+  was empty), and the list's paging options no longer name `$orderby`, which these lists refuse (#83).
+
 ## 0.39.0
 
 Partner Directory access under a scope, for the cpictl gateway's partner grants (#82). Verified together with the

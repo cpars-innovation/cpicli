@@ -1583,7 +1583,7 @@ func TestGuardPDFilterWithExtraKeysAndBatchEncoding(t *testing.T) {
 // lists under a scope.
 func TestGuardPDOrderbyAndSelect(t *testing.T) {
 	g := testGuard(t, `{"version":1,"grants":[{"partners":["ONE_*"],"actions":["read","pd-write"]}]}`)
-	for _, q := range []string{"$orderby=Value", "$orderby=Pid", "$orderby=Value%20desc&$filter=Pid%20eq%20'ONE_R'", "$select=Pid,Partner/Pid", "$select=*", "$select=Pid,Value,Foo"} {
+	for _, q := range []string{"$orderby=Value", "$orderby=Pid", "$orderby=Value%20desc&$filter=Pid%20eq%20'ONE_R'", "$select=Pid,Partner/Pid", "$select=*", "$select=Pid,Value,Foo", "$select=Id,Value", "$select=Value"} {
 		for _, list := range []string{"StringParameters", "BinaryParameters", "Partners", "AlternativePartners", "AuthorizedUsers"} {
 			refused(t, g.Before(req("GET", "/api/v1/"+list+"?"+q, "")))
 		}
