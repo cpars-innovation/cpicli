@@ -5,12 +5,15 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.39.1
+
+Verified by the cpictl gateway's independent verifier before the tag.
+
 - **`pd deploy` stays inside your grant.** Under a scope, or through the cpictl gateway (with the scope its `/whoami`
   reports for the SAP tenant), `pd deploy` without `--pids` deploys only the local partners you may change and
   warns about the skipped ones, so a full sync of a whole local tree no longer collects a refusal per foreign
   partner. A `--pids` entry outside the grant is refused (exit 9) before any request. A dry run needs `read` only.
   When the gateway's `/whoami` cannot be read, the deploy runs as before and the gateway decides each request.
-
 - Scope: a Partner Directory list's `$select` must include `Pid` (the rows are decided by it; without it the answer
   was empty), and the list's paging options no longer name `$orderby`, which these lists refuse (#83).
 
