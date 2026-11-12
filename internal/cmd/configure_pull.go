@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cpars-innovation/cpicli/pkg/content"
 	"github.com/cpars-innovation/cpicli/pkg/cpi"
 	"github.com/cpars-innovation/cpicli/pkg/models"
 	"github.com/rs/zerolog/log"
@@ -35,10 +36,31 @@ func NewConfigurePullCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&outputDir, "output-dir", "o", ".", "Directory for one YAML file per package")
 	cmd.Flags().StringSliceVar(&packageIDs, "package-ids", nil, "Package IDs to pull (default: all packages)")
 	cmd.Flags().Int("parallel", 8, "Tenant reads at the same time (config: configure.pull.parallel)")
+	cmd.Flags().Bool("declared-only", false, "Write only the parameters each flow declares (its parameters.propdef; one download per flow): leaves out values the tenant keeps for parameters a newer flow version no longer has (config: configure.pull.declaredOnly)")
 	return cmd
 }
 
+// ConfigurePullResult lists the files written and the parameters left out.
+type ConfigurePullResult struct {
+	Files []string `json:"files"`
+	// LeftOut are parameters the tenant returned that the files do not get:
+	// SAP's own (SAP_ProfileId), and with --declared-only those the flow no
+	// longer declares.
+	LeftOut []PulledLeftOut `json:"leftOut"`
+}
+
+// PulledLeftOut is one artifact's parameters left out of a pull.
+type PulledLeftOut struct {
+	Package  string   `json:"package"`
+	Artifact string   `json:"artifact"`
+	Keys     []string `json:"keys"`
+	// Reason: "sap" (SAP's own SAP_* parameter, not declared by the flow) or
+	// "undeclared" (the flow's parameters.propdef does not have it).
+	Reason string `json:"reason"`
+}
+
 func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string) error {
+	declaredOnly := config.GetBoolWithFallback(cmd, "declared-only", "configure.pull.declaredOnly")
 	exe := cpi.InitHTTPExecuter(serviceDetails(cmd))
 	packages := cpi.NewIntegrationPackage(exe)
 	configuration := cpi.NewConfiguration(exe)
@@ -80,6 +102,7 @@ func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string)
 		f()
 	}
 	outputs := make([]pulledFile, len(packageIDs))
+	leftOut := make([][]PulledLeftOut, len(packageIDs))
 	errs := make([]error, len(packageIDs))
 	var wg sync.WaitGroup
 	for i, packageID := range packageIDs {
@@ -94,6 +117,7 @@ func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string)
 				return
 			}
 			params := make(map[string]*cpi.ParametersData, len(artifacts))
+			declared := make(map[string]map[string]bool, len(artifacts))
 			paramErrs := make(map[string]error)
 			var mu sync.Mutex
 			var awg sync.WaitGroup
@@ -104,15 +128,29 @@ func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string)
 					var p *cpi.ParametersData
 					var err error
 					call(func() { p, err = configuration.Get(a.Id, "active") })
+					var names map[string]bool
+					if err == nil && declaredOnly {
+						var data []byte
+						call(func() { data, err = cpi.GetContent(exe, "Integration", a.Id, "active") })
+						if err == nil {
+							var ok bool
+							if names, ok, err = content.PropdefNamesFromZip(data); err == nil && !ok {
+								names = map[string]bool{} // no propdef: the flow declares nothing
+							}
+						}
+						if err != nil {
+							err = fmt.Errorf("read the declared parameters of %s: %w", a.Id, err)
+						}
+					}
 					mu.Lock()
-					params[a.Id], paramErrs[a.Id] = p, err
+					params[a.Id], paramErrs[a.Id], declared[a.Id] = p, err, names
 					mu.Unlock()
 				}()
 			}
 			awg.Wait()
-			cfg, err := pulledConfigureConfig(packageID, artifacts, func(id, _ string) (*cpi.ParametersData, error) {
+			cfg, left, err := pulledConfigureConfig(packageID, artifacts, func(id, _ string) (*cpi.ParametersData, error) {
 				return params[id], paramErrs[id]
-			})
+			}, func(id string) map[string]bool { return declared[id] })
 			if err != nil {
 				errs[i] = err
 				return
@@ -123,6 +161,7 @@ func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string)
 				return
 			}
 			outputs[i] = pulledFile{filepath.Join(outputDir, packageID+".yml"), data}
+			leftOut[i] = left
 		}()
 	}
 	wg.Wait()
@@ -133,12 +172,23 @@ func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string)
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return err
 	}
-	for _, f := range outputs {
+	res := ConfigurePullResult{Files: []string{}, LeftOut: []PulledLeftOut{}}
+	for i, f := range outputs {
 		if err := os.WriteFile(f.path, f.data, 0644); err != nil {
 			return err
 		}
+		res.Files = append(res.Files, f.path)
 		log.Info().Msgf("Configuration written to %s", f.path)
+		for _, l := range leftOut[i] {
+			res.LeftOut = append(res.LeftOut, l)
+			what := "SAP's own"
+			if l.Reason == "undeclared" {
+				what = "not declared by the flow"
+			}
+			log.Info().Msgf("Left out of %s: %s (%s)", l.Artifact, strings.Join(l.Keys, ", "), what)
+		}
 	}
+	output.SetResult(cmd.Context(), res)
 	return nil
 }
 
@@ -157,13 +207,42 @@ func filterExistingPackages(requested, available []string) (existing, missing []
 	return
 }
 
-func pulledConfigureConfig(packageID string, artifacts []*cpi.ArtifactDetails, getConfiguration func(string, string) (*cpi.ParametersData, error)) (*models.ConfigureConfig, error) {
+// pulledConfigureConfig builds a package's configure file. SAP's own
+// SAP_* parameters (SAP_ProfileId) are left out unless the flow declares
+// them: they are not the flow's configuration, and configure would refuse
+// them (cpicli#87). declared gives an artifact's declared parameters (nil:
+// not read, everything else is kept); a parameter it lacks is left out.
+func pulledConfigureConfig(packageID string, artifacts []*cpi.ArtifactDetails, getConfiguration func(string, string) (*cpi.ParametersData, error),
+	declared func(string) map[string]bool) (*models.ConfigureConfig, []PulledLeftOut, error) {
 	sort.Slice(artifacts, func(i, j int) bool { return artifacts[i].Id < artifacts[j].Id })
 	pkg := models.ConfigurePackage{ID: packageID}
+	var left []PulledLeftOut
 	for _, artifact := range artifacts {
 		parameters, err := getConfiguration(artifact.Id, "active")
 		if err != nil {
-			return nil, fmt.Errorf("get configuration for artifact %s: %w", artifact.Id, err)
+			return nil, nil, fmt.Errorf("get configuration for artifact %s: %w", artifact.Id, err)
+		}
+		names := declared(artifact.Id)
+		var sap, undeclared []string
+		kept := parameters.Root.Results[:0:0]
+		for _, p := range parameters.Root.Results {
+			switch {
+			case names != nil && names[p.ParameterKey]:
+				kept = append(kept, p)
+			case strings.HasPrefix(p.ParameterKey, "SAP_"):
+				sap = append(sap, p.ParameterKey)
+			case names != nil:
+				undeclared = append(undeclared, p.ParameterKey)
+			default:
+				kept = append(kept, p)
+			}
+		}
+		parameters.Root.Results = kept
+		for reason, keys := range map[string][]string{"sap": sap, "undeclared": undeclared} {
+			if len(keys) > 0 {
+				sort.Strings(keys)
+				left = append(left, PulledLeftOut{Package: packageID, Artifact: artifact.Id, Keys: keys, Reason: reason})
+			}
 		}
 		sort.Slice(parameters.Root.Results, func(i, j int) bool {
 			return parameters.Root.Results[i].ParameterKey < parameters.Root.Results[j].ParameterKey
@@ -176,5 +255,8 @@ func pulledConfigureConfig(packageID string, artifacts []*cpi.ArtifactDetails, g
 		}
 		pkg.Artifacts = append(pkg.Artifacts, pulled)
 	}
-	return &models.ConfigureConfig{Packages: []models.ConfigurePackage{pkg}}, nil
+	sort.Slice(left, func(i, j int) bool {
+		return left[i].Artifact < left[j].Artifact || left[i].Artifact == left[j].Artifact && left[i].Reason < left[j].Reason
+	})
+	return &models.ConfigureConfig{Packages: []models.ConfigurePackage{pkg}}, left, nil
 }

@@ -272,6 +272,11 @@ func getData(id string, version string, artifactType string, exe *httpclnt.HTTPE
 	return jsonData, true, nil
 }
 
+// GetContent downloads a designtime artifact's archive (the zip).
+func GetContent(exe *httpclnt.HTTPExecuter, artifactType, id, version string) ([]byte, error) {
+	return getContent(id, version, artifactType, exe)
+}
+
 func getContent(id string, version string, artifactType string, exe *httpclnt.HTTPExecuter) ([]byte, error) {
 	log.Info().Msgf("Getting content of %v designtime artifact %v", artifactType, id)
 	urlPath := fmt.Sprintf("/api/v1/%vDesigntimeArtifacts(Id=%s,Version=%s)/$value", artifactType, pathKey(id), pathKey(version))

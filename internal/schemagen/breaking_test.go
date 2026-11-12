@@ -30,3 +30,16 @@ func TestBreakingRecursive(t *testing.T) {
 	f := Files{"t.json": []byte(`{"$ref":"#/$defs/N","$defs":{"N":{"type":"object","properties":{"children":{"type":"array","items":{"$ref":"#/$defs/N"}}}}}}`)}
 	assert.Empty(t, Breaking(f, f))
 }
+
+// A command without a result that gets one is not a breaking change; the
+// reverse is.
+func TestBreakingResultAdded(t *testing.T) {
+	none := []byte(`{"type":"null","description":"The command has no result."}`)
+	obj := []byte(`{"type":"object","properties":{"files":{"type":"array","items":{"type":"string"}}},"required":["files"]}`)
+	if got := Breaking(Files{"c.json": none}, Files{"c.json": obj}); len(got) != 0 {
+		t.Errorf("result added: %v", got)
+	}
+	if got := Breaking(Files{"c.json": obj}, Files{"c.json": none}); len(got) == 0 {
+		t.Errorf("result removed must be breaking")
+	}
+}

@@ -882,6 +882,7 @@ Write current tenant parameter values into configure YAML files
 **Flags:**
 
 ```
+      --declared-only         Write only the parameters each flow declares (its parameters.propdef; one download per flow): leaves out values the tenant keeps for parameters a newer flow version no longer has (config: configure.pull.declaredOnly)
   -o, --output-dir string     Directory for one YAML file per package (default ".")
       --package-ids strings   Package IDs to pull (default: all packages)
       --parallel int          Tenant reads at the same time (config: configure.pull.parallel) (default 8)

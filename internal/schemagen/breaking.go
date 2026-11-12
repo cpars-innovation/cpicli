@@ -10,7 +10,7 @@ import (
 // Breaking lists the changes from old to new schema files that can break a
 // consumer: a removed command or property, a changed type, a property that
 // is no longer always present. Added properties and commands are not
-// breaking.
+// breaking, nor is a result for a command that had none.
 func Breaking(old, new Files) []string {
 	var out []string
 	names := make([]string, 0, len(old))
@@ -31,6 +31,9 @@ func Breaking(old, new Files) []string {
 		if json.Unmarshal(old[name], &o) != nil || json.Unmarshal(nd, &n) != nil {
 			out = append(out, name+": not readable")
 			continue
+		}
+		if o["type"] == "null" {
+			continue // a command that had no result gets one: nothing read before can break
 		}
 		c := &comparer{oldRoot: o, newRoot: n, seen: map[string]bool{}}
 		c.compare(o, n, strings.TrimSuffix(name, ".json"))

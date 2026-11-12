@@ -1,9 +1,11 @@
 package content
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -168,19 +170,54 @@ func PropdefNames(dir string) (names map[string]bool, ok bool, err error) {
 	if err != nil {
 		return nil, false, err
 	}
+	names, err = propdefNames(data)
+	if err != nil {
+		return nil, false, err
+	}
+	return names, true, nil
+}
+
+func propdefNames(data []byte) (map[string]bool, error) {
 	var doc struct {
 		Parameters []struct {
 			Name string `xml:"name"`
 		} `xml:"parameter"`
 	}
 	if err := xml.Unmarshal(data, &doc); err != nil {
-		return nil, false, fmt.Errorf("%s: %w", PropdefFile, err)
+		return nil, fmt.Errorf("%s: %w", PropdefFile, err)
 	}
-	names = map[string]bool{}
+	names := map[string]bool{}
 	for _, p := range doc.Parameters {
 		names[strings.TrimSpace(p.Name)] = true
 	}
-	return names, true, nil
+	return names, nil
+}
+
+// PropdefNamesFromZip is PropdefNames for an artifact archive: the
+// parameter names its parameters.propdef declares; ok is false when the
+// archive has none.
+func PropdefNamesFromZip(data []byte) (names map[string]bool, ok bool, err error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, false, err
+	}
+	for _, f := range zr.File {
+		if strings.TrimPrefix(f.Name, "/") != PropdefFile {
+			continue
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return nil, false, err
+		}
+		body, err := io.ReadAll(io.LimitReader(rc, 16<<20))
+		rc.Close()
+		if err != nil {
+			return nil, false, err
+		}
+		names, err := propdefNames(body)
+		return names, err == nil, err
+	}
+	return nil, false, nil
 }
 
 // unescapeKey resolves the escapes of a properties key ("a\ b" -> "a b").

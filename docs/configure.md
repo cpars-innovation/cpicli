@@ -140,8 +140,21 @@ content look new.
 ```bash
 cpictl configure pull --output-dir ./config/dev                        # all packages
 cpictl configure pull --output-dir ./config/dev --package-ids PkgA,PkgB
+cpictl configure pull --output-dir ./config/dev --declared-only        # only what each flow declares
 ```
 
 Writes one `<PackageID>.yml` per package in the `configure` format above, with the current
 parameter values of all integration flows. Packages that do not exist are skipped with a
-warning. Config keys: `configure.pull.outputDir`, `configure.pull.packageIds`.
+warning. Config keys: `configure.pull.outputDir`, `configure.pull.packageIds`,
+`configure.pull.declaredOnly`.
+
+Left out, so that `configure pull` followed by `cpictl lint` passes:
+
+- **SAP's own parameters** (`SAP_*`, such as `SAP_ProfileId`, the runtime profile), which SAP's Configurations
+  API returns for almost every flow. They are not the flow's configuration, and the Web UI's *Configure* dialog does
+  not show them either. A `SAP_*` parameter the flow declares itself is kept with `--declared-only`.
+- **With `--declared-only`**, the values the tenant still keeps for parameters the flow no longer declares (after a
+  parameter was removed or renamed). This reads each flow's `parameters.propdef`, one download per flow.
+
+The JSON result lists the files and, under `leftOut`, each artifact's left-out keys with the reason (`sap` or
+`undeclared`).

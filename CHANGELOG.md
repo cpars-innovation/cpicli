@@ -5,6 +5,13 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **`configure pull` leaves out SAP's own parameters (#87).** `SAP_ProfileId` (the runtime profile), which SAP's
+  Configurations API returns for almost every flow, landed in the configure files, and `cpictl lint` then failed on
+  each (`configure-unknown-parameter`). `SAP_*` parameters are left out unless the flow declares them. New
+  `--declared-only` (config `configure.pull.declaredOnly`) also leaves out values the tenant keeps for parameters
+  the flow no longer declares, by reading each flow's `parameters.propdef`. The JSON result lists the files and
+  what was left out (`leftOut`, with the reason).
+
 - **Every command works through the cpictl gateway (#86).** `orchestrator` refused gateway mode ("CPI host (tmn-host) is
   required"), so a release pipeline with a team client and no SAP key could not deploy artifacts. Fixed in one place for
   every command: the tenant is named by `cpi.TenantID` of the gateway URL (`gw.example.com/t/dev`) or the host, so

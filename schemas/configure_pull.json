@@ -1,8 +1,78 @@
 {
+  "$defs": {
+    "cmd.ConfigurePullResult": {
+      "properties": {
+        "files": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "leftOut": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/cmd.PulledLeftOut"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "files",
+        "leftOut"
+      ],
+      "type": "object"
+    },
+    "cmd.PulledLeftOut": {
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "keys": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "package": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact",
+        "keys",
+        "package",
+        "reason"
+      ],
+      "type": "object"
+    }
+  },
   "$id": "https://github.com/cpars-innovation/cpicli/schemas/configure_pull.json",
+  "$ref": "#/$defs/cmd.ConfigurePullResult",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "The command has no result.",
+  "description": "The result field of the --output json envelope (envelope.json) of cpictl configure pull.",
   "title": "cpictl configure pull result",
-  "type": "null",
   "x-schemaVersion": 1
 }
