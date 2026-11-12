@@ -5,6 +5,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.40.0
+
+Gateway support for every command, and cleaner configure files. The security-relevant changes (connection and
+profile handling, tokens of gateway profiles) were checked by the cpictl gateway's independent verifier before the
+tag.
+
 - **`configure pull` leaves out SAP's own parameters (#87).** `SAP_ProfileId` (the runtime profile), which SAP's
   Configurations API returns for almost every flow, landed in the configure files, and `cpictl lint` then failed on
   each (`configure-unknown-parameter`). SAP's own parameters (`SAP_ProfileId`) are left out unless the flow declares
