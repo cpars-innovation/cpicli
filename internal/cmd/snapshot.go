@@ -162,7 +162,7 @@ func runSnapshot(cmd *cobra.Command) error {
 	failOnLocal := config.GetBoolWithFallback(cmd, "fail-on-local-modified", "snapshot.failOnLocalModified")
 
 	serviceDetails := serviceDetails(cmd)
-	o.Tenant = cpi.TenantID(serviceDetails.Host)
+	o.Tenant = cpi.TenantID(serviceDetails.Target())
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()

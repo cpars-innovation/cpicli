@@ -154,7 +154,11 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 		output.SetResult(cmd.Context(), artifactResults{Results: []ops.Result{}})
 		return nil
 	}
-	if tenant := cpi.TenantID(serviceDetails.Host); p.Tenant != tenant {
+	tenant := cpi.TenantID(serviceDetails.Target())
+	if p.Tenant == "" && serviceDetails.Gateway != "" {
+		// written through a cpictl gateway before 0.39.2, which stored no tenant
+		log.Warn().Msgf("%s names no tenant (written through a gateway by an older cpictl): deploying to %s", path, tenant)
+	} else if p.Tenant != tenant {
 		return output.Usagef("%s holds pending deployments for tenant %s, not %s", path, p.Tenant, tenant)
 	}
 	tasks := p.tasks()

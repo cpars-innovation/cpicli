@@ -40,7 +40,7 @@ and which systems they call. --graph=false skips it.`,
 			if dir := config.GetString(cmd, "dir"); dir != "" {
 				d, err = ops.DiscoverDir(cmd.Context(), dir)
 			} else {
-				d, err = ops.DiscoverTenant(cmd.Context(), tenantExecuter(cmd), config.GetString(cmd, "tmn-host"), ops.DiscoverOptions{
+				d, err = ops.DiscoverTenant(cmd.Context(), tenantExecuter(cmd), tenantTarget(cmd), ops.DiscoverOptions{
 					PackageIDs: config.GetStringSlice(cmd, "package-ids"), MaxIFlows: config.GetInt(cmd, "max-iflows"),
 				})
 			}
@@ -67,7 +67,7 @@ and which systems they call. --graph=false skips it.`,
 			if components != "-" {
 				tenant := ""
 				if config.GetString(cmd, "dir") == "" {
-					tenant = config.GetString(cmd, "tmn-host")
+					tenant = tenantTarget(cmd)
 				}
 				cat, err := ops.LearnComponents(d, components, tenant)
 				if err != nil {

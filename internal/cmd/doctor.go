@@ -48,8 +48,8 @@ forbidden (see the result).`,
 			res := doctorResult{Version: cmd.Root().Version, Local: localChecks(cmd)}
 			details := serviceDetails(cmd)
 			var err error
-			if details.Host == "" {
-				err = output.Usagef("no tenant host: set --tmn-host, CPICTL_TMN_HOST, a profile (cpictl profile use) or cpictl.yaml")
+			if details.Target() == "" {
+				err = output.Usagef("no tenant host: set --tmn-host, CPICTL_TMN_HOST, --gateway, a profile (cpictl profile use) or cpictl.yaml")
 			} else {
 				res.Tenant = ops.Doctor(cmd.Context(), cpi.InitHTTPExecuter(details))
 				err = res.Tenant.Err
@@ -57,7 +57,7 @@ forbidden (see the result).`,
 			output.SetResult(cmd.Context(), res)
 			logChecks("local", res.Local)
 			if res.Tenant != nil {
-				logChecks("tenant "+cpi.TenantID(details.Host), res.Tenant.Checks)
+				logChecks("tenant "+cpi.TenantID(details.Target()), res.Tenant.Checks)
 			}
 			return err
 		},
@@ -96,12 +96,16 @@ func localChecks(cmd *cobra.Command) []ops.Check {
 	}
 	d := serviceDetails(cmd)
 	switch {
-	case d.Host == "":
+	case d.Target() == "":
 		add("tenant host", ops.CheckFailed, "not set", "every tenant command")
 	default:
-		add("tenant host", ops.CheckOK, cpi.TenantID(d.Host), "")
+		add("tenant host", ops.CheckOK, cpi.TenantID(d.Target()), "")
 	}
 	switch {
+	case d.Gateway != "" && (d.GatewayToken != "" || d.GatewayTokenSource != nil):
+		add("authentication", ops.CheckOK, "cpictl gateway token (the gateway holds the SAP key)", "")
+	case d.Gateway != "":
+		add("authentication", ops.CheckFailed, "gateway mode without a token: cpictl auth login, or "+gatewayTokenEnv, "every tenant command")
 	case d.OauthHost != "" && d.OauthClientId != "" && d.OauthClientSecret != "":
 		add("authentication", ops.CheckOK, "OAuth client credentials ("+d.OauthHost+")", "")
 	case d.OauthHost == "" && d.Userid != "" && d.Password != "":
@@ -109,7 +113,9 @@ func localChecks(cmd *cobra.Command) []ops.Check {
 	default:
 		add("authentication", ops.CheckFailed, "incomplete: OAuth host, client ID and secret, or user and password", "every tenant command")
 	}
-	if viper.GetString("runtime-oauth-clientid") != "" || viper.GetString("runtime-userid") != "" {
+	if d.Gateway != "" {
+		add("runtime credentials", ops.CheckOK, "through the gateway", "")
+	} else if viper.GetString("runtime-oauth-clientid") != "" || viper.GetString("runtime-userid") != "" {
 		add("runtime credentials", ops.CheckOK, "set", "")
 	} else {
 		add("runtime credentials", ops.CheckWarn, "not set", "send / send_test_message")
@@ -124,7 +130,7 @@ func localChecks(cmd *cobra.Command) []ops.Check {
 		add("snapshot state", ops.CheckWarn, fmt.Sprintf("%s unreadable: %v", statePath, err), "orchestrator comparison without downloads")
 	} else if len(st.Artifacts) == 0 {
 		add("snapshot state", ops.CheckWarn, "none in .cpi (orchestrator downloads every artifact for the comparison)", "")
-	} else if d.Host != "" && st.Tenant != cpi.TenantID(d.Host) {
+	} else if d.Target() != "" && st.Tenant != cpi.TenantID(d.Target()) {
 		add("snapshot state", ops.CheckWarn, fmt.Sprintf("%d artifacts of tenant %q, not this one", len(st.Artifacts), st.Tenant), "")
 	} else {
 		add("snapshot state", ops.CheckOK, fmt.Sprintf("%d artifacts", len(st.Artifacts)), "")

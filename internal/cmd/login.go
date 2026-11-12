@@ -20,19 +20,23 @@ import (
 //	  scope: api://<gateway app>/access   # string or list
 //
 // ok is false when no login is configured (then the env token is used).
-func loginConfig() (auth.Config, bool) {
-	tenant := viper.GetString("login.tenantId")
-	client := viper.GetString("login.clientId")
+func loginConfig() (auth.Config, bool) { return loginConfigOf(viper.GetViper()) }
+
+// loginConfigOf reads the gateway sign-in settings of a configuration (the
+// active one, or another profile's).
+func loginConfigOf(v *viper.Viper) (auth.Config, bool) {
+	tenant := v.GetString("login.tenantId")
+	client := v.GetString("login.clientId")
 	if tenant == "" || client == "" {
 		return auth.Config{}, false
 	}
-	scopes := viper.GetStringSlice("login.scope")
+	scopes := v.GetStringSlice("login.scope")
 	if len(scopes) == 0 {
-		if s := viper.GetString("login.scope"); s != "" {
+		if s := v.GetString("login.scope"); s != "" {
 			scopes = []string{s}
 		}
 	}
-	return auth.Config{TenantID: tenant, ClientID: client, Scopes: scopes, Authority: viper.GetString("login.authority")}, true
+	return auth.Config{TenantID: tenant, ClientID: client, Scopes: scopes, Authority: v.GetString("login.authority")}, true
 }
 
 // NewAuthCommand groups signing in to a cpictl gateway. SAP credentials are

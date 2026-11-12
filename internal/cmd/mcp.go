@@ -153,7 +153,7 @@ CPICTL_* environment variables.`,
 				Root:         config.GetString(cmd, "root"),
 				PollInterval: time.Duration(config.GetInt(cmd, "poll-interval")) * time.Second,
 				MaxChecks:    config.GetInt(cmd, "max-checks"),
-				TenantHost:   config.GetString(cmd, "tmn-host"),
+				TenantHost:   tenantTarget(cmd),
 
 				NewEndpointExecuter: endpointExecuter(cmd),
 				DenyFullSync:        mode == "develop",

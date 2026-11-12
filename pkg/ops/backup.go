@@ -762,6 +762,9 @@ func writeTarGz(dir, out string) error {
 // BackupFileName is the archive name of a backup taken at t.
 func BackupFileName(host string, t time.Time) string {
 	tenant, _, _ := strings.Cut(cpi.TenantID(host), ".")
+	if _, name, ok := strings.Cut(cpi.TenantID(host), "/t/"); ok {
+		tenant = name // through a cpictl gateway: the SAP tenant's name
+	}
 	return "cpi-backup_" + safeName(tenant) + "_" + t.UTC().Format("2006-01-02T15-04-05Z") + ".tar.gz"
 }
 

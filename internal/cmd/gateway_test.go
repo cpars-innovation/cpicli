@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cpars-innovation/cpicli/internal/cpitest"
 	"github.com/cpars-innovation/cpicli/internal/exitcode"
@@ -289,4 +290,58 @@ func TestGatewayRefusesRuntimeCredentials(t *testing.T) {
 		assert.Contains(t, stderr, "--gateway and runtime credentials")
 		assert.NotContains(t, stderr, "made-up-")
 	}
+}
+
+// The orchestrator in gateway mode (cpicli#86): a release pipeline with a
+// team client and no SAP key runs orchestrator --defer-deploy, then deploy
+// --pending, all through the gateway. The pending file names the gateway's
+// SAP tenant, so another tenant's file is still refused.
+func TestGatewayOrchestratorDeferDeploy(t *testing.T) {
+	t.Setenv("CPICTL_TOKEN_STORE", "file")
+	for _, k := range append(credentialConfigKeys, hostConfigKeys...) {
+		t.Setenv(envKey(k), "")
+	}
+	t.Setenv("CPICTL_GATEWAY", "")
+	t.Setenv(gatewayTokenEnv, "user-token")
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{"Flow": {TaskStatuses: []string{"SUCCESS"},
+		AfterDeploy: []*cpitest.Runtime{{Version: "1.0.16", Status: "STARTED", DeployedOn: time.Now().Add(time.Minute)}}}})
+	gw, seen := fakeGateway(t, mock)
+	root := t.TempDir()
+	flow := filepath.Join(root, "packages", "EDM", "Flow")
+	for name, content := range map[string]string{
+		"META-INF/MANIFEST.MF": "Manifest-Version: 1.0\r\nBundle-SymbolicName: Flow; singleton:=true\r\nBundle-Name: Flow\r\nBundle-Version: 1.0.16\r\nSAP-BundleType: IntegrationFlow\r\n\r\n",
+		"src/main/resources/scenarioflows/integrationflow/Flow.iflw": "<bpmn2:definitions/>",
+		"src/main/resources/parameters.prop":                         "Host=h\n",
+	} {
+		p := filepath.Join(flow, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
+	}
+	cfg := filepath.Join(root, "deploy.yml")
+	require.NoError(t, os.WriteFile(cfg, []byte("packages:\n  - integrationSuiteId: EDM\n    packageDir: EDM\n    artifacts:\n      - {artifactId: Flow, artifactDir: Flow, type: IntegrationFlow}\n"), 0o644))
+	pending := filepath.Join(root, "pending.json")
+	home := t.TempDir()
+
+	code, stderr := projectRun(t, home, root, "--gateway", gw.URL+"/t/dev", "orchestrator", "--packages-dir", filepath.Join(root, "packages"),
+		"--deploy-config", cfg, "--versioning", "manifest", "--defer-deploy", "--pending-file", pending, "--snapshot-state", "off")
+	require.Equal(t, 0, code, stderr)
+	assert.Equal(t, 0, mock.Count("POST /api/v1/DeployIntegrationDesigntimeArtifact"), "deferred")
+	data, err := os.ReadFile(pending)
+	require.NoError(t, err)
+	host := strings.TrimPrefix(gw.URL, "http://")
+	assert.Contains(t, string(data), `"tenant": "`+host+`/t/dev"`)
+
+	code, stderr = projectRun(t, home, root, "--gateway", gw.URL+"/t/dev", "deploy", "--pending", "--pending-file", pending,
+		"--delay-length", "0", "--max-check-limit", "3")
+	require.Equal(t, 0, code, stderr)
+	assert.Equal(t, 1, mock.Count("POST /api/v1/DeployIntegrationDesigntimeArtifact"))
+	for _, s := range seen() {
+		assert.True(t, strings.Contains(s, " /t/dev/") || strings.HasSuffix(s, " /whoami"), s)
+	}
+
+	// another SAP tenant behind the same gateway: the pending file is refused
+	require.NoError(t, os.WriteFile(pending, data, 0o644))
+	code, stderr = projectRun(t, home, root, "--gateway", gw.URL+"/t/prod", "deploy", "--pending", "--pending-file", pending)
+	assert.Equal(t, exitcode.Usage, code, stderr)
+	assert.Contains(t, stderr, "not "+host+"/t/prod")
 }

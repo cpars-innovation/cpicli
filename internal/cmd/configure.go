@@ -289,7 +289,7 @@ func runConfigure(cmd *cobra.Command, configPath, deploymentPrefix, packageFilte
 	deferDeploy, _ := cmd.Flags().GetBool("defer-deploy")
 	if deferDeploy && !dryRun {
 		if len(deploymentTasks) > 0 {
-			err := deferDeployments(pendingFile(cmd), serviceDetails.Host, deploymentTasks, func(t DeploymentTask) string {
+			err := deferDeployments(pendingFile(cmd), serviceDetails.Target(), deploymentTasks, func(t DeploymentTask) string {
 				if t.Force {
 					return "configure: configuration changed"
 				}

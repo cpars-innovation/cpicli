@@ -64,7 +64,7 @@ when no archive could be written.`,
 				if sched, _ := cmd.Flags().GetBool("schedule-folders"); sched {
 					dir = filepath.Join(dir, ops.BackupScheduleFolder(now))
 				}
-				out = filepath.Join(dir, ops.BackupFileName(sd.Host, now))
+				out = filepath.Join(dir, ops.BackupFileName(sd.Target(), now))
 			}
 			if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 				return err
@@ -72,7 +72,7 @@ when no archive could be written.`,
 			packages, _ := cmd.Flags().GetStringSlice("packages")
 			cells, _ := cmd.Flags().GetBool("cells")
 			parallel, _ := cmd.Flags().GetInt("parallel")
-			res, err := ops.CreateBackup(cmd.Context(), tenantExecuter(cmd), sd.Host, ops.BackupOptions{Output: out, Packages: packages,
+			res, err := ops.CreateBackup(cmd.Context(), tenantExecuter(cmd), sd.Target(), ops.BackupOptions{Output: out, Packages: packages,
 				Cells: cells, Parallel: parallel, CpictlVersion: cmd.Root().Version, Progress: progressLogger(cmd)})
 			if err != nil {
 				return err
@@ -259,7 +259,7 @@ without --confirm.`,
 			}
 			sd := serviceDetails(cmd)
 			res, err := ops.RestoreBackup(cmd.Context(), tenantExecuter(cmd), args[0], ops.RestoreOptions{DryRun: dryRun, Areas: only,
-				Packages: packages, Parallel: parallel, TargetHost: sd.Host,
+				Packages: packages, Parallel: parallel, TargetHost: sd.Target(),
 				Deploy: ops.Options{Interval: wait.Interval, MaxChecks: wait.MaxChecks, Timeout: wait.Timeout, CompareVersions: false}})
 			if res != nil {
 				output.SetResult(cmd.Context(), res)

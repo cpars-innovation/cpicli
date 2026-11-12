@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/cpars-innovation/cpicli/internal/auth"
 	"github.com/cpars-innovation/cpicli/internal/config"
 	"github.com/cpars-innovation/cpicli/internal/output"
 	"github.com/cpars-innovation/cpicli/internal/str"
@@ -105,13 +107,13 @@ func compareSide(cmd *cobra.Command, spec, gitDir string) (ops.CompareSide, erro
 	switch {
 	case spec == "tenant":
 		sd := serviceDetails(cmd)
-		if sd.Host == "" {
-			return ops.CompareSide{}, output.Usagef("side tenant: no tenant configured (tmn-host); use tenant:<profile> or configure one")
+		if sd.Target() == "" {
+			return ops.CompareSide{}, output.Usagef("side tenant: no tenant configured (tmn-host or gateway); use tenant:<profile> or configure one")
 		}
 		return ops.CompareSide{Label: cmp.Or(activeProfileLabel(cmd), "tenant"), Exe: cpi.InitHTTPExecuter(sd)}, nil
 	case strings.HasPrefix(spec, "tenant:"):
 		name := strings.TrimPrefix(spec, "tenant:")
-		sd, err := profileServiceDetails(name)
+		sd, err := profileServiceDetailsCtx(cmd.Context(), name)
 		if err != nil {
 			return ops.CompareSide{}, output.Usage(err)
 		}
@@ -140,6 +142,13 @@ func activeProfileLabel(cmd *cobra.Command) string {
 // profileServiceDetails reads the tenant connection of a profile without
 // touching the active configuration.
 func profileServiceDetails(name string) (*cpi.ServiceDetails, error) {
+	return profileServiceDetailsCtx(context.Background(), name)
+}
+
+// profileServiceDetailsCtx is profileServiceDetails; a gateway profile uses
+// its own sign-in (cpictl --profile <name> auth login), never the
+// environment's token, which belongs to the active gateway (cpicli#86).
+func profileServiceDetailsCtx(ctx context.Context, name string) (*cpi.ServiceDetails, error) {
 	p, err := profilePath(name)
 	if err != nil {
 		return nil, err
@@ -152,6 +161,21 @@ func profileServiceDetails(name string) (*cpi.ServiceDetails, error) {
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("profile %s: %w", name, err)
 	}
+	if gw := v.GetString("gateway"); gw != "" {
+		c, ok := loginConfigOf(v)
+		if !ok {
+			return nil, fmt.Errorf("profile %s is a gateway profile without a sign-in (login.tenantId, login.clientId)", name)
+		}
+		store, err := auth.DefaultStore()
+		if err != nil {
+			return nil, err
+		}
+		src, err := store.TokenSource(ctx, c, name)
+		if err != nil {
+			return nil, fmt.Errorf("profile %s: not signed in to its gateway: run cpictl --profile %s auth login", name, name)
+		}
+		return &cpi.ServiceDetails{Gateway: gw, GatewayTokenSource: src}, nil
+	}
 	sd := &cpi.ServiceDetails{
 		Host:              v.GetString("tmn-host"),
 		Userid:            v.GetString("tmn-userid"),
@@ -162,7 +186,7 @@ func profileServiceDetails(name string) (*cpi.ServiceDetails, error) {
 		OauthPath:         cmp.Or(v.GetString("oauth-path"), "/oauth/token"), // the default of --oauth-path
 	}
 	if sd.Host == "" {
-		return nil, fmt.Errorf("profile %s has no tmn-host", name)
+		return nil, fmt.Errorf("profile %s has no tmn-host and no gateway", name)
 	}
 	if sd.OauthHost != "" {
 		sd.Userid, sd.Password = "", ""

@@ -83,7 +83,7 @@ Entries from the editor metadata win over learned ones.`,
 			if dir := config.GetString(cmd, "dir"); dir != "" {
 				d, err = ops.DiscoverDir(cmd.Context(), dir)
 			} else {
-				tenant = config.GetString(cmd, "tmn-host")
+				tenant = tenantTarget(cmd)
 				d, err = ops.DiscoverTenant(cmd.Context(), tenantExecuter(cmd), tenant, ops.DiscoverOptions{PackageIDs: config.GetStringSlice(cmd, "package-ids")})
 			}
 			if err != nil {

@@ -66,13 +66,25 @@ func InitHTTPExecuter(serviceDetails *ServiceDetails) *httpclnt.HTTPExecuter {
 }
 
 // TenantID identifies a tenant by its host (and port when not 443), e.g. in
-// state files.
-func TenantID(hostFlag string) string {
-	_, host, port := ParseHost(hostFlag)
+// state files. For a cpictl gateway URL it is the gateway's host and the SAP
+// tenant path (gw.example.com/t/dev): one SAP tenant per gateway path
+// (cpicli#86).
+func TenantID(target string) string {
+	_, host, port, path := ParseGateway(target)
+	id := host
 	if port != 443 {
-		return host + ":" + strconv.Itoa(port)
+		id += ":" + strconv.Itoa(port)
 	}
-	return host
+	return id + path
+}
+
+// Target is what the requests go to: the gateway URL in gateway mode, else
+// the tenant host. TenantID(Target()) identifies the tenant in both modes.
+func (sd *ServiceDetails) Target() string {
+	if sd.Gateway != "" {
+		return sd.Gateway
+	}
+	return sd.Host
 }
 
 // ParseHost splits a host flag value into scheme, host and port. The value is

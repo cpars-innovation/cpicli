@@ -293,12 +293,12 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 	// Get service details once (shared across all operations). Values from the
 	// config file and environment are already bound to the flags.
 	serviceDetails := serviceDetails(cmd)
-	if serviceDetails.Host == "" {
-		return output.Usagef("CPI host (tmn-host) is required but not provided")
+	if serviceDetails.Target() == "" {
+		return output.Usagef("CPI host (tmn-host) or a cpictl gateway (gateway) is required but not provided")
 	}
 
 	log.Debug().Msg("CPI credentials successfully loaded:")
-	log.Debug().Msgf("  Host: %s", serviceDetails.Host)
+	log.Debug().Msgf("  Target: %s", serviceDetails.Target())
 	if serviceDetails.OauthHost != "" {
 		log.Debug().Msgf("  OAuth Host: %s", serviceDetails.OauthHost)
 		log.Debug().Msg("  Auth Method: OAuth")
@@ -319,7 +319,7 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 	}
 	exe := cpi.InitHTTPExecuter(serviceDetails)
 	opts := ops.OrchestratorOptions{Mode: mode, PackageFilter: packageFilter, ArtifactFilter: artifactFilter,
-		Versioning: versionMode, Host: serviceDetails.Host, DraftHandling: draftHandling, Parallel: parallel, WorkDir: workDir}
+		Versioning: versionMode, Host: serviceDetails.Target(), DraftHandling: draftHandling, Parallel: parallel, WorkDir: workDir}
 	if output.EventsActive(cmd.Context()) {
 		opts.Progress = func(a ops.OrchestratorArtifact) { output.Emit(cmd.Context(), output.EventItem, a) }
 	}
@@ -386,7 +386,7 @@ func runOrchestrator(cmd *cobra.Command, mode OperationMode, packagesDir, deploy
 	if deferDeploy, _ := cmd.Flags().GetBool("defer-deploy"); deferDeploy && !opts.Plan && mode != ModeUpdateOnly {
 		printSummary(stats)
 		output.SetResult(cmd.Context(), newOrchestratorResult(mode, stats, []ops.Result{}, nil))
-		err := deferDeployments(pendingFile(cmd), serviceDetails.Host, deploymentTasks, func(t DeploymentTask) string {
+		err := deferDeployments(pendingFile(cmd), serviceDetails.Target(), deploymentTasks, func(t DeploymentTask) string {
 			switch {
 			case stats.Redeploy(t.ArtifactID):
 				return "orchestrator: content changed, same version as running"

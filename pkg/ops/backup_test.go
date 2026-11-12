@@ -113,6 +113,7 @@ func readBackupEntriesTo(file, dir string) error {
 func TestBackupNames(t *testing.T) {
 	at := time.Date(2026, 10, 18, 2, 0, 0, 0, time.UTC) // a Sunday
 	assert.Equal(t, "cpi-backup_mytenant_2026-10-18T02-00-00Z.tar.gz", BackupFileName("mytenant.it-cpi018.cfapps.eu10.hana.ondemand.com", at))
+	assert.Equal(t, "cpi-backup_dev_2026-10-18T02-00-00Z.tar.gz", BackupFileName("https://gw.example.com/t/dev", at), "through a gateway: the SAP tenant")
 	assert.Equal(t, "weekly", BackupScheduleFolder(at))
 	assert.Equal(t, "monthly", BackupScheduleFolder(time.Date(2026, 11, 1, 2, 0, 0, 0, time.UTC)))
 	assert.Equal(t, "daily", BackupScheduleFolder(time.Date(2026, 10, 19, 2, 0, 0, 0, time.UTC)))

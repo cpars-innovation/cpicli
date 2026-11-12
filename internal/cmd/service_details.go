@@ -11,6 +11,18 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// tenantTarget is what this process works on: the cpictl gateway URL (with
+// its SAP tenant) in gateway mode, else the tenant host. cpi.TenantID of it
+// names the tenant in both modes (state files, pending deployments, sources
+// of discovery): read it here, never "tmn-host" directly, so every command
+// works through a gateway too (cpicli#86).
+func tenantTarget(cmd *cobra.Command) string {
+	if gw := config.GetString(cmd, "gateway"); gw != "" {
+		return gw
+	}
+	return config.GetString(cmd, "tmn-host")
+}
+
 // serviceDetails reads the tenant connection settings from the (config/env
 // bound) persistent flags.
 func serviceDetails(cmd *cobra.Command) *cpi.ServiceDetails {

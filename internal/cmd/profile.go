@@ -86,7 +86,18 @@ func resolveConfigSource(configFlag, profileFlag string) (file, profile string, 
 type ProfileInfo struct {
 	Name    string `json:"name"`
 	TmnHost string `json:"tmnHost,omitempty"`
+	// Gateway is the cpictl gateway URL of a gateway profile (with its SAP
+	// tenant); such a profile has no tmn-host.
+	Gateway string `json:"gateway,omitempty"`
 	Active  bool   `json:"active"`
+}
+
+// target is what the profile connects to: its gateway or its tenant host.
+func (p ProfileInfo) target() string {
+	if p.Gateway != "" {
+		return p.Gateway
+	}
+	return p.TmnHost
 }
 
 func profileInfo(name, active string) ProfileInfo {
@@ -96,6 +107,7 @@ func profileInfo(name, active string) ProfileInfo {
 		v.SetConfigFile(p)
 		if v.ReadInConfig() == nil {
 			info.TmnHost = v.GetString("tmn-host")
+			info.Gateway = v.GetString("gateway")
 		}
 	}
 	return info
@@ -139,7 +151,7 @@ match the profile's.`,
 				if p.Active {
 					mark = "*"
 				}
-				log.Info().Msgf("%s %-15s %s", mark, p.Name, p.TmnHost)
+				log.Info().Msgf("%s %-15s %s", mark, p.Name, p.target())
 			}
 			return nil
 		},
@@ -176,7 +188,7 @@ match the profile's.`,
 			}
 			info := profileInfo(args[0], args[0])
 			output.SetResult(cmd.Context(), info)
-			log.Info().Msgf("Active profile: %s (%s)", info.Name, info.TmnHost)
+			log.Info().Msgf("Active profile: %s (%s)", info.Name, info.target())
 			if env := os.Getenv(envPrefix + "_PROFILE"); env != "" && env != args[0] {
 				log.Warn().Msgf("CPICTL_PROFILE=%s is set in this shell and takes precedence", env)
 			}
@@ -197,7 +209,7 @@ match the profile's.`,
 			case profile != "":
 				info := profileInfo(profile, profile)
 				output.SetResult(cmd.Context(), info)
-				log.Info().Msgf("%s (%s)", info.Name, info.TmnHost)
+				log.Info().Msgf("%s (%s)", info.Name, info.target())
 			case file != "":
 				output.SetResult(cmd.Context(), map[string]any{"config": file})
 				log.Info().Msgf("No profile, CPICTL_CONFIG=%s", file)

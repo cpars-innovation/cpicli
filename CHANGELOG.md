@@ -5,6 +5,16 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- **Every command works through the cpictl gateway (#86).** `orchestrator` refused gateway mode ("CPI host (tmn-host) is
+  required"), so a release pipeline with a team client and no SAP key could not deploy artifacts. Fixed in one place for
+  every command: the tenant is named by `cpi.TenantID` of the gateway URL (`gw.example.com/t/dev`) or the host, so
+  snapshot states, pending deployments (`--defer-deploy`, `deploy --pending`), backups, `doctor`, `discover`,
+  `components learn` and the MCP server name the gateway's SAP tenant, and a file of another SAP tenant is still
+  refused. `compare tenant:<profile>` takes a gateway profile (with its own sign-in), `profile list` shows a
+  profile's gateway, and `doctor` checks the gateway token instead of SAP credentials. A test runs every command
+  through a gateway, and another refuses new code that reads the tenant host directly. A pending file written
+  through a gateway by an older cpictl (no tenant) is accepted once with a warning.
+
 ## 0.39.1
 
 Verified by the cpictl gateway's independent verifier before the tag.
