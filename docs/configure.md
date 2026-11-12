@@ -150,11 +150,12 @@ warning. Config keys: `configure.pull.outputDir`, `configure.pull.packageIds`,
 
 Left out, so that `configure pull` followed by `cpictl lint` passes:
 
-- **SAP's own parameters** (`SAP_*`, such as `SAP_ProfileId`, the runtime profile), which SAP's Configurations
-  API returns for almost every flow. They are not the flow's configuration, and the Web UI's *Configure* dialog does
-  not show them either. A `SAP_*` parameter the flow declares itself is kept with `--declared-only`.
+- **SAP's own parameters** (`SAP_ProfileId`, the runtime profile), which SAP's Configurations API returns for almost
+  every flow. They are not the flow's configuration, and the Web UI's *Configure* dialog does not show them either.
+  Other `SAP_*` names are kept: a flow may declare one.
 - **With `--declared-only`**, the values the tenant still keeps for parameters the flow no longer declares (after a
-  parameter was removed or renamed). This reads each flow's `parameters.propdef`, one download per flow.
+  parameter was removed or renamed). This reads each flow's `parameters.propdef`, one download per flow. A flow
+  without one is written as the tenant has it, with a warning.
 
 The JSON result lists the files and, under `leftOut`, each artifact's left-out keys with the reason (`sap` or
 `undeclared`).

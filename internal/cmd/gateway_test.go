@@ -345,3 +345,37 @@ func TestGatewayOrchestratorDeferDeploy(t *testing.T) {
 	assert.Equal(t, exitcode.Usage, code, stderr)
 	assert.Contains(t, stderr, "not "+host+"/t/prod")
 }
+
+// A pending file without a tenant (written through a gateway by an older
+// cpictl) is claimed by the first deploy: a later run against another SAP
+// tenant is refused (cpicli#88).
+func TestGatewayLegacyPendingFileIsStamped(t *testing.T) {
+	t.Setenv("CPICTL_TOKEN_STORE", "file")
+	for _, k := range append(credentialConfigKeys, hostConfigKeys...) {
+		t.Setenv(envKey(k), "")
+	}
+	t.Setenv("CPICTL_GATEWAY", "")
+	t.Setenv(gatewayTokenEnv, "user-token")
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{}) // the flow is missing: its deploy fails and it stays
+	gw, _ := fakeGateway(t, mock)
+	root, home := t.TempDir(), t.TempDir()
+	pending := filepath.Join(root, "pending.json")
+	require.NoError(t, os.WriteFile(pending, []byte(`{"format":1,"tenant":"","artifacts":{"Flow":{"type":"Integration","package":"EDM","reasons":["changed"],"seq":0}}}`), 0o644))
+
+	code, stderr := projectRun(t, home, root, "--gateway", gw.URL+"/t/dev", "deploy", "--pending", "--pending-file", pending,
+		"--delay-length", "0", "--max-check-limit", "1")
+	assert.NotEqual(t, exitcode.Usage, code, stderr)
+	assert.Contains(t, stderr, "names no tenant")
+	data, err := os.ReadFile(pending)
+	require.NoError(t, err)
+	host := strings.TrimPrefix(gw.URL, "http://")
+	assert.Contains(t, string(data), `"tenant": "`+host+`/t/dev"`, "stamped with the tenant it went to")
+	assert.Contains(t, string(data), `"Flow"`, "the failed deployment stays")
+
+	code, stderr = projectRun(t, home, root, "--gateway", gw.URL+"/t/prod", "deploy", "--pending", "--pending-file", pending)
+	assert.Equal(t, exitcode.Usage, code, stderr)
+	assert.Contains(t, stderr, "not "+host+"/t/prod")
+	code, stderr = projectRun(t, home, root, "--gateway", gw.URL+"/t/dev", "deploy", "--pending", "--pending-file", pending, "--plan")
+	assert.NotEqual(t, exitcode.Usage, code, stderr)
+	assert.NotContains(t, stderr, "names no tenant", "the file is no longer legacy")
+}

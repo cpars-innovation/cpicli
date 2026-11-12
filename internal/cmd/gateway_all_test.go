@@ -103,7 +103,7 @@ func firstErrorLine(s string) string {
 // would fail through a gateway again; the run above cannot see it when the
 // command needs arguments first. The places listed here handle both modes.
 func TestNoCommandReadsTheTenantHostDirectly(t *testing.T) {
-	re := regexp.MustCompile(`"tmn-host"\)|\b(sd|serviceDetails|details|d|o|opts)\.Host\b`)
+	re := regexp.MustCompile(`"tmn-host"\)|(\b(sd|serviceDetails|details|d|o|opts)|\))\.Host\b`)
 	allowed := map[string]int{
 		"service_details.go": 3, // builds the connection; tenantTarget
 		"root.go":            3, // checks the connection settings, after gateway mode

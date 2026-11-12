@@ -202,7 +202,7 @@ func PropdefNamesFromZip(data []byte) (names map[string]bool, ok bool, err error
 		return nil, false, err
 	}
 	for _, f := range zr.File {
-		if strings.TrimPrefix(f.Name, "/") != PropdefFile {
+		if name := strings.TrimLeft(strings.ReplaceAll(f.Name, "\\", "/"), "./"); name != PropdefFile {
 			continue
 		}
 		rc, err := f.Open()

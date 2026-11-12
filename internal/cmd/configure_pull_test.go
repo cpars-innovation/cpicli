@@ -81,11 +81,11 @@ func TestPulledConfigureConfigLeavesOut(t *testing.T) {
 	require.NoError(t, err)
 	data, _ := yaml.Marshal(cfg)
 	assert.NotContains(t, string(data), "SAP_ProfileId")
-	assert.NotContains(t, string(data), "SAP_Custom")
+	assert.Equal(t, 2, strings.Count(string(data), "SAP_Custom"), "another SAP_* name may be the flow's own: kept (cpicli#89)")
 	assert.Contains(t, string(data), "Removed_Param")
 	assert.Equal(t, []PulledLeftOut{
-		{Package: "P", Artifact: "Declares", Keys: []string{"SAP_Custom", "SAP_ProfileId"}, Reason: "sap"},
-		{Package: "P", Artifact: "OrderIntake", Keys: []string{"SAP_Custom", "SAP_ProfileId"}, Reason: "sap"},
+		{Package: "P", Artifact: "Declares", Keys: []string{"SAP_ProfileId"}, Reason: "sap"},
+		{Package: "P", Artifact: "OrderIntake", Keys: []string{"SAP_ProfileId"}, Reason: "sap"},
 	}, left)
 
 	// --declared-only: what the flow declares stays, also an SAP_* name it declares
@@ -102,8 +102,8 @@ func TestPulledConfigureConfigLeavesOut(t *testing.T) {
 	assert.Equal(t, []PulledLeftOut{
 		{Package: "P", Artifact: "Declares", Keys: []string{"SAP_ProfileId"}, Reason: "sap"},
 		{Package: "P", Artifact: "Declares", Keys: []string{"Removed_Param"}, Reason: "undeclared"},
-		{Package: "P", Artifact: "OrderIntake", Keys: []string{"SAP_Custom", "SAP_ProfileId"}, Reason: "sap"},
-		{Package: "P", Artifact: "OrderIntake", Keys: []string{"Removed_Param"}, Reason: "undeclared"},
+		{Package: "P", Artifact: "OrderIntake", Keys: []string{"SAP_ProfileId"}, Reason: "sap"},
+		{Package: "P", Artifact: "OrderIntake", Keys: []string{"Removed_Param", "SAP_Custom"}, Reason: "undeclared"},
 	}, left)
 }
 
@@ -141,4 +141,30 @@ func TestConfigurePullLeavesOutAgainstTheTenant(t *testing.T) {
 		assert.Equal(t, want, doc.Result.LeftOut)
 		assert.Equal(t, []string{filepath.Join(dir, "P.yml")}, doc.Result.Files)
 	}
+}
+
+// --declared-only on a flow without a parameters.propdef keeps what the
+// tenant has (minus SAP's own) instead of leaving everything out, and finds
+// a propdef stored with ./ or backslashes (cpicli#89).
+func TestConfigurePullDeclaredOnlyWithoutPropdef(t *testing.T) {
+	propdef := `<parameters><parameter><name>Host</name></parameter></parameters>`
+	mock := cpitest.NewTenant(t, map[string]*cpitest.Artifact{
+		"NoPropdef": {Type: "Integration", DesignVersion: "1.0.0", Package: "P", Name: "NoPropdef",
+			Parameters: map[string]string{"Host": "h", "SAP_ProfileId": "iflmap"},
+			Zip:        zipOf(t, map[string]string{"src/main/resources/parameters.prop": "Host=h\n"})},
+		"Dotted": {Type: "Integration", DesignVersion: "1.0.0", Package: "P", Name: "Dotted",
+			Parameters: map[string]string{"Host": "d", "Old": "o"},
+			Zip:        zipOf(t, map[string]string{"./src/main/resources/parameters.propdef": propdef})},
+	})
+	mock.Packages = []cpitest.Package{{ID: "P"}}
+	dir := t.TempDir()
+	r := runMain(t, append([]string{"configure", "pull", "--output-dir", dir, "--declared-only"}, basicAuth(mock)...)...)
+	require.Equal(t, 0, r.code, r.stderr)
+	data, err := os.ReadFile(filepath.Join(dir, "P.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "value: h", "kept: the flow has no propdef to go by")
+	assert.NotContains(t, string(data), "SAP_ProfileId")
+	assert.Contains(t, r.stderr, "NoPropdef: no parameters.propdef")
+	assert.Contains(t, string(data), "value: d")
+	assert.NotContains(t, string(data), "Old", "the dotted propdef path was read")
 }

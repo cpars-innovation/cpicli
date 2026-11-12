@@ -155,8 +155,9 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 		return nil
 	}
 	tenant := cpi.TenantID(serviceDetails.Target())
-	if p.Tenant == "" && serviceDetails.Gateway != "" {
-		// written through a cpictl gateway before 0.39.2, which stored no tenant
+	legacy := p.Tenant == "" && serviceDetails.Gateway != ""
+	if legacy {
+		// written through a cpictl gateway before 0.40, which stored no tenant
 		log.Warn().Msgf("%s names no tenant (written through a gateway by an older cpictl): deploying to %s", path, tenant)
 	} else if p.Tenant != tenant {
 		return output.Usagef("%s holds pending deployments for tenant %s, not %s", path, p.Tenant, tenant)
@@ -170,6 +171,14 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 		items := ops.PlanDeployments(exe, tasks)
 		output.SetResult(cmd.Context(), planResult{Plan: items})
 		return logPlan(items)
+	}
+	if legacy {
+		// the file now belongs to this tenant: a later run against another
+		// SAP tenant is refused like any other file (cpicli#88)
+		p.Tenant = tenant
+		if err := p.save(path); err != nil {
+			return err
+		}
 	}
 	results := deployTasks(cmd.Context(), exe, tasks, true, wait, parallel)
 	emitResults(cmd.Context(), results)

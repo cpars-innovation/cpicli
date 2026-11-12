@@ -135,7 +135,10 @@ func runConfigurePull(cmd *cobra.Command, outputDir string, packageIDs []string)
 						if err == nil {
 							var ok bool
 							if names, ok, err = content.PropdefNamesFromZip(data); err == nil && !ok {
-								names = map[string]bool{} // no propdef: the flow declares nothing
+								// no propdef to go by: keep what the tenant has rather
+								// than drop every value (cpicli#89)
+								log.Warn().Msgf("%s: no parameters.propdef in the flow, its parameters are written as the tenant has them", a.Id)
+								names = nil
 							}
 						}
 						if err != nil {
@@ -207,11 +210,17 @@ func filterExistingPackages(requested, available []string) (existing, missing []
 	return
 }
 
+// sapOwnParameters are the parameters SAP's Configurations API returns for
+// a flow that are SAP's, not the flow's (SAP_ProfileId: the runtime
+// profile). Only these are left out without reading the flow: another
+// SAP_* name may be one the flow declares (cpicli#89).
+var sapOwnParameters = map[string]bool{"SAP_ProfileId": true}
+
 // pulledConfigureConfig builds a package's configure file. SAP's own
-// SAP_* parameters (SAP_ProfileId) are left out unless the flow declares
-// them: they are not the flow's configuration, and configure would refuse
-// them (cpicli#87). declared gives an artifact's declared parameters (nil:
-// not read, everything else is kept); a parameter it lacks is left out.
+// parameters (sapOwnParameters) are left out unless the flow declares them:
+// they are not the flow's configuration, and configure would refuse them
+// (cpicli#87). declared gives an artifact's declared parameters (nil: not
+// read, everything else is kept); a parameter it lacks is left out.
 func pulledConfigureConfig(packageID string, artifacts []*cpi.ArtifactDetails, getConfiguration func(string, string) (*cpi.ParametersData, error),
 	declared func(string) map[string]bool) (*models.ConfigureConfig, []PulledLeftOut, error) {
 	sort.Slice(artifacts, func(i, j int) bool { return artifacts[i].Id < artifacts[j].Id })
@@ -229,7 +238,7 @@ func pulledConfigureConfig(packageID string, artifacts []*cpi.ArtifactDetails, g
 			switch {
 			case names != nil && names[p.ParameterKey]:
 				kept = append(kept, p)
-			case strings.HasPrefix(p.ParameterKey, "SAP_"):
+			case sapOwnParameters[p.ParameterKey]:
 				sap = append(sap, p.ParameterKey)
 			case names != nil:
 				undeclared = append(undeclared, p.ParameterKey)

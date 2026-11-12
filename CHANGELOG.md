@@ -7,9 +7,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 - **`configure pull` leaves out SAP's own parameters (#87).** `SAP_ProfileId` (the runtime profile), which SAP's
   Configurations API returns for almost every flow, landed in the configure files, and `cpictl lint` then failed on
-  each (`configure-unknown-parameter`). `SAP_*` parameters are left out unless the flow declares them. New
-  `--declared-only` (config `configure.pull.declaredOnly`) also leaves out values the tenant keeps for parameters
-  the flow no longer declares, by reading each flow's `parameters.propdef`. The JSON result lists the files and
+  each (`configure-unknown-parameter`). SAP's own parameters (`SAP_ProfileId`) are left out unless the flow declares
+  them; another `SAP_*` name may be the flow's own and is kept. New `--declared-only` (config
+  `configure.pull.declaredOnly`) also leaves out values the tenant keeps for parameters the flow no longer declares,
+  by reading each flow's `parameters.propdef`; a flow without one is written as the tenant has it, with a warning. The JSON result lists the files and
   what was left out (`leftOut`, with the reason).
 
 - **Every command works through the cpictl gateway (#86).** `orchestrator` refused gateway mode ("CPI host (tmn-host) is
@@ -20,7 +21,9 @@ All notable changes to cpictl. Coming from FlashPipe? See
   refused. `compare tenant:<profile>` takes a gateway profile (with its own sign-in), `profile list` shows a
   profile's gateway, and `doctor` checks the gateway token instead of SAP credentials. A test runs every command
   through a gateway, and another refuses new code that reads the tenant host directly. A pending file written
-  through a gateway by an older cpictl (no tenant) is accepted once with a warning.
+  through a gateway by an older cpictl (no tenant) is deployed once with a warning and then names that SAP tenant,
+  so a later run against another tenant is refused (#88). `backup diff` against the tenant names it through a
+  gateway too.
 
 ## 0.39.1
 

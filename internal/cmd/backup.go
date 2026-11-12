@@ -158,7 +158,7 @@ Directory parameters, number ranges, variables, data stores, JMS queues.`,
 			} else {
 				cells, _ := cmd.Flags().GetBool("cells")
 				var warnings []string
-				b, warnings, err = ops.BuildTenantIndex(cmd.Context(), tenantExecuter(cmd), serviceDetails(cmd).Host, ops.BackupOptions{Cells: cells})
+				b, warnings, err = ops.BuildTenantIndex(cmd.Context(), tenantExecuter(cmd), tenantTarget(cmd), ops.BackupOptions{Cells: cells})
 				if err != nil {
 					return err
 				}
