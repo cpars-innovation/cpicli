@@ -5,6 +5,12 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `configure pull --declared-only` reads the flow's `parameters.propdef` only at its path in the archive: an entry
+  outside it (`../src/…`) is not taken for it, and an archive with two entries for it is refused (#91).
+- `deploy --pending --plan` on a pending file without a tenant says it plans, not that it deploys (#91).
+- SECURITY.md: a fix for an S1 or S2 finding of the independent verification is verified again before the tag,
+  whatever files it touches.
+
 ## 0.40.0
 
 Gateway support for every command, and cleaner configure files. The security-relevant changes (connection and

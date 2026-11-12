@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -201,10 +202,22 @@ func PropdefNamesFromZip(data []byte) (names map[string]bool, ok bool, err error
 	if err != nil {
 		return nil, false, err
 	}
+	var found *zip.File
 	for _, f := range zr.File {
-		if name := strings.TrimLeft(strings.ReplaceAll(f.Name, "\\", "/"), "./"); name != PropdefFile {
+		// as an archive is unpacked: backslashes are separators, "./" and
+		// "a/../" resolve; "../…" lies outside the archive and is never the
+		// flow's propdef (cpicli#91)
+		name := path.Clean(strings.ReplaceAll(f.Name, "\\", "/"))
+		if name != PropdefFile {
 			continue
 		}
+		if found != nil {
+			return nil, false, fmt.Errorf("the archive has more than one %s (%s, %s)", PropdefFile, found.Name, f.Name)
+		}
+		found = f
+	}
+	if found != nil {
+		f := found
 		rc, err := f.Open()
 		if err != nil {
 			return nil, false, err

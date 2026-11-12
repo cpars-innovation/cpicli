@@ -1,6 +1,9 @@
 package content
 
 import (
+	"archive/zip"
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,4 +55,40 @@ func TestPropLinesUnescape(t *testing.T) {
 	assert.Equal(t, propLines(tenant), propLines(local))
 	assert.NotEqual(t, propLines(local), propLines([]byte("description=other\n")))
 	assert.Equal(t, propLines([]byte("a = one \\\n    two\n")), propLines([]byte("a=one two\n")))
+}
+
+// The flow's propdef is the one entry at its path (cpicli#91): "./" and
+// backslashes resolve, "../…" is outside the archive, and two entries for
+// it are refused rather than one chosen.
+func TestPropdefNamesFromZip(t *testing.T) {
+	real := `<parameters><parameter><name>Host</name></parameter><parameter><name>SAP_Custom</name></parameter></parameters>`
+	crafted := `<parameters><parameter><name>Host</name></parameter></parameters>`
+	zipOf := func(entries ...[2]string) []byte {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		for _, e := range entries {
+			w, _ := zw.Create(e[0])
+			_, _ = w.Write([]byte(e[1]))
+		}
+		_ = zw.Close()
+		return buf.Bytes()
+	}
+	for _, name := range []string{PropdefFile, "./" + PropdefFile, strings.ReplaceAll(PropdefFile, "/", "\\"), "x/../" + PropdefFile} {
+		names, ok, err := PropdefNamesFromZip(zipOf([2]string{name, real}))
+		if err != nil || !ok || !names["SAP_Custom"] {
+			t.Errorf("%s: %v %v %v", name, names, ok, err)
+		}
+	}
+	// a crafted entry outside the archive is not the propdef
+	names, ok, err := PropdefNamesFromZip(zipOf([2]string{"../" + PropdefFile, crafted}, [2]string{PropdefFile, real}))
+	if err != nil || !ok || !names["SAP_Custom"] {
+		t.Errorf("../ entry chosen: %v %v %v", names, ok, err)
+	}
+	// two entries for the propdef: refused
+	if _, _, err := PropdefNamesFromZip(zipOf([2]string{"./" + PropdefFile, crafted}, [2]string{PropdefFile, real})); err == nil {
+		t.Error("two propdef entries accepted")
+	}
+	if _, ok, err := PropdefNamesFromZip(zipOf([2]string{"src/main/resources/parameters.prop", "a=b"})); ok || err != nil {
+		t.Errorf("no propdef: ok=%v err=%v", ok, err)
+	}
 }

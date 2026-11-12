@@ -103,13 +103,17 @@ func firstErrorLine(s string) string {
 // would fail through a gateway again; the run above cannot see it when the
 // command needs arguments first. The places listed here handle both modes.
 func TestNoCommandReadsTheTenantHostDirectly(t *testing.T) {
-	re := regexp.MustCompile(`"tmn-host"\)|(\b(sd|serviceDetails|details|d|o|opts)|\))\.Host\b`)
+	// any .Host and any read of "tmn-host" (also indexed or spaced);
+	// comments do not count (cpicli#91)
+	re := regexp.MustCompile(`"tmn-host"\s*[)\]]|\.Host\b`)
+	comment := regexp.MustCompile(`(?m)//.*$`)
 	allowed := map[string]int{
 		"service_details.go": 3, // builds the connection; tenantTarget
 		"root.go":            3, // checks the connection settings, after gateway mode
 		"compare.go":         2, // another profile without a gateway
 		"profile.go":         1, // shows a profile
-		"doctor.go":          0,
+		"profileadd.go":      3, // url.URL.Host of an address the user gives
+		"runtimeswatch.go":   1, // url.URL.Host of a webhook
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {
@@ -123,6 +127,7 @@ func TestNoCommandReadsTheTenantHostDirectly(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		data = comment.ReplaceAll(data, nil)
 		n := len(re.FindAll(data, -1))
 		if n > allowed[f] {
 			for _, m := range re.FindAllIndex(data, -1) {

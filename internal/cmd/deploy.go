@@ -158,7 +158,11 @@ func runPendingDeploy(cmd *cobra.Command, exe *httpclnt.HTTPExecuter, serviceDet
 	legacy := p.Tenant == "" && serviceDetails.Gateway != ""
 	if legacy {
 		// written through a cpictl gateway before 0.40, which stored no tenant
-		log.Warn().Msgf("%s names no tenant (written through a gateway by an older cpictl): deploying to %s", path, tenant)
+		verb := "deploying to"
+		if planOnly {
+			verb = "planning for"
+		}
+		log.Warn().Msgf("%s names no tenant (written through a gateway by an older cpictl): %s %s", path, verb, tenant)
 	} else if p.Tenant != tenant {
 		return output.Usagef("%s holds pending deployments for tenant %s, not %s", path, p.Tenant, tenant)
 	}
