@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+## 0.40.1
+
+Verified by the cpictl gateway's independent verifier before the tag.
+
 - `configure pull --declared-only` reads the flow's `parameters.propdef` only at its path in the archive: an entry
   outside it (`../src/…`) is not taken for it, and an archive with two entries for it is refused (#91).
 - `deploy --pending --plan` on a pending file without a tenant says it plans, not that it deploys (#91).
