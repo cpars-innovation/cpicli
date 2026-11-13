@@ -28,6 +28,7 @@ Only the latest release gets security fixes. Pin a release; update when an advis
    - `internal/auth`, `internal/mcp`
    - credential handling: `internal/cmd/root.go`, `internal/cmd/service_details.go`, `internal/cmd/profile*.go`,
      `pkg/ops/security*.go`, `pkg/ops/keymaterial.go`
+   - which tenant a deployment goes to: `internal/cmd/deploy.go`, `internal/cmd/pending.go`
    - `pkg/testrun/refpath.go`
 
    A fix for a finding of such a verification (severity S1 or S2) needs it too, whatever files it touches: set

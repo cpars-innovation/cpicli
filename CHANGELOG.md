@@ -5,6 +5,10 @@ All notable changes to cpictl. Coming from FlashPipe? See
 
 ## Unreleased
 
+- `configure pull --declared-only` also finds a propdef stored with a leading `/` (#92).
+- Release: `internal/cmd/deploy.go` and `internal/cmd/pending.go` (which tenant a deployment goes to) need the
+  independent verification before a tag (#92).
+
 ## 0.40.1
 
 Verified by the cpictl gateway's independent verifier before the tag.

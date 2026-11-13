@@ -83,6 +83,7 @@ jobs:
           changed="$(git diff --name-only "${last}" HEAD -- \
             pkg/scope pkg/httpclnt pkg/pdaddress pkg/mask pkg/secretscan internal/auth internal/mcp internal/cmd/redact.go \
             internal/cmd/root.go internal/cmd/service_details.go 'internal/cmd/profile*.go' \
+            internal/cmd/deploy.go internal/cmd/pending.go \
             'pkg/ops/security*.go' pkg/ops/keymaterial.go pkg/testrun/refpath.go \
             | grep -v '_test\.go$' || true)"
           [ -n "${changed}" ] || exit 0

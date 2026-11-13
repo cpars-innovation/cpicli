@@ -73,7 +73,7 @@ func TestPropdefNamesFromZip(t *testing.T) {
 		_ = zw.Close()
 		return buf.Bytes()
 	}
-	for _, name := range []string{PropdefFile, "./" + PropdefFile, strings.ReplaceAll(PropdefFile, "/", "\\"), "x/../" + PropdefFile} {
+	for _, name := range []string{PropdefFile, "./" + PropdefFile, strings.ReplaceAll(PropdefFile, "/", "\\"), "x/../" + PropdefFile, "/" + PropdefFile} {
 		names, ok, err := PropdefNamesFromZip(zipOf([2]string{name, real}))
 		if err != nil || !ok || !names["SAP_Custom"] {
 			t.Errorf("%s: %v %v %v", name, names, ok, err)

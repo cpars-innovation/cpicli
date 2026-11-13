@@ -207,7 +207,8 @@ func PropdefNamesFromZip(data []byte) (names map[string]bool, ok bool, err error
 		// as an archive is unpacked: backslashes are separators, "./" and
 		// "a/../" resolve; "../…" lies outside the archive and is never the
 		// flow's propdef (cpicli#91)
-		name := path.Clean(strings.ReplaceAll(f.Name, "\\", "/"))
+		// one leading "/" is the archive's root (cpicli#92)
+		name := path.Clean(strings.TrimPrefix(strings.ReplaceAll(f.Name, "\\", "/"), "/"))
 		if name != PropdefFile {
 			continue
 		}
